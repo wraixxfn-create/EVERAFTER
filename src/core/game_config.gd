@@ -1,0 +1,120 @@
+class_name GameConfig
+extends Resource
+## Data-only tuning values for the whole project.
+##
+## A single, inspectable resource keeps magic numbers out of the code and lets
+## a designer change the pace of the simulation or the size of the world from
+## the editor (or from a text diff) without touching scripts.
+##
+## The instance used at runtime is loaded from [constant DEFAULT_CONFIG_PATH];
+## if that file is missing or corrupt, [method load_or_default] falls back to
+## the code defaults below so that the game always boots.
+##
+## NOTE: `persistence` is not implemented yet. [member save_format_version] is
+## already reserved here so that future save files can be versioned from day
+## one instead of being retrofitted later.
+
+const DEFAULT_CONFIG_PATH := "res://config/game_config.tres"
+const DEFAULT_TIME_SCALE_PRESETS := [1.0, 3.0, 10.0]
+const DEFAULT_LOGIC_TICK_SECONDS := 0.05
+
+@export_group("Project")
+@export var project_title: String = "EVERAFTER"
+@export var build_label: String = "0.1.0-foundation"
+
+@export_group("Simulated time")
+## Real seconds per logical tick at speed x1. With the default value the
+## simulation runs 20 ticks per real second, so one simulated day
+## (1440 ticks) lasts 72 real seconds at x1.
+@export_range(0.005, 1.0, 0.005) var logic_tick_seconds: float = DEFAULT_LOGIC_TICK_SECONDS
+## Speed multipliers selectable at runtime. First entry is the default speed.
+@export var time_scale_presets: PackedFloat32Array = PackedFloat32Array([1.0, 3.0, 10.0])
+@export var default_time_scale_index: int = 0
+## Minute of day 1 the world starts on. 420 = 07:00, so the player begins at
+## sunrise instead of in the dark.
+@export_range(0, 1439) var start_minute_of_day: int = 420
+## Safety valve: upper bound of ticks executed in a single frame, so that a
+## long frame (alt-tab, breakpoint, loading spike) cannot freeze the game in a
+## catch-up loop. Extra backlog is dropped instead of simulated.
+@export_range(1, 120) var max_steps_per_frame: int = 12
+
+@export_group("Persistence")
+## Version written into future save files. Bump it whenever the serialised
+## shape of the world changes.
+@export var save_format_version: int = 1
+
+@export_group("World")
+## Number of grid points per side of the terrain height field. The terrain is
+## (terrain_size_cells - 1) world units across. 128 -> 127x127 units, about
+## 16k vertices / 32k triangles: comfortable on a GTX 1060 class GPU.
+@export_range(16, 512) var terrain_size_cells: int = 128
+@export_range(0.0, 40.0) var terrain_height_scale: float = 5.0
+## Every procedural element of the world derives from this seed, so the same
+## seed always rebuilds the identical village.
+@export var terrain_seed: int = 20261016
+
+@export_group("Player")
+@export_range(0.5, 20.0) var player_walk_speed: float = 5.0
+@export_range(0.5, 40.0) var player_sprint_speed: float = 9.0
+@export_range(0.0, 20.0) var player_jump_velocity: float = 6.0
+@export_range(0.0002, 0.02) var mouse_sensitivity: float = 0.0022
+
+
+## Loads the project configuration, or a default instance when the resource is
+## unavailable. Never returns null.
+static func load_or_default(path: String = DEFAULT_CONFIG_PATH) -> GameConfig:
+	if ResourceLoader.exists(path):
+		var loaded := ResourceLoader.load(path) as GameConfig
+		if loaded != null:
+			return loaded
+		push_warning("GameConfig: cannot read '%s' as a GameConfig, using code defaults." % path)
+	else:
+		push_warning("GameConfig: '%s' not found, using code defaults." % path)
+	return GameConfig.new()
+
+
+## Speed presets guaranteed to be usable, even if the resource was edited badly.
+func validated_time_scale_presets() -> PackedFloat32Array:
+	if time_scale_presets.is_empty():
+		return PackedFloat32Array(DEFAULT_TIME_SCALE_PRESETS)
+	return time_scale_presets
+
+
+## Clamps a preset index into the valid range.
+func clamped_time_scale_index(index: int) -> int:
+	return clampi(index, 0, validated_time_scale_presets().size() - 1)
+
+
+## Speed multiplier used when the game starts.
+func initial_time_scale() -> float:
+	return validated_time_scale_presets()[clamped_time_scale_index(default_time_scale_index)]
+
+
+## Returns a list of human readable problems. Empty means "consistent".
+## Called once at boot by the `Game` autoload; problems are logged, not fatal.
+func validate() -> PackedStringArray:
+	var problems: PackedStringArray = []
+	var presets := validated_time_scale_presets()
+	if project_title.is_empty():
+		problems.append("project_title is empty")
+	if logic_tick_seconds <= 0.0:
+		problems.append("logic_tick_seconds must be > 0 (got %s)" % logic_tick_seconds)
+	if time_scale_presets.is_empty():
+		problems.append("time_scale_presets is empty, falling back to code defaults")
+	for preset in time_scale_presets:
+		if preset <= 0.0:
+			problems.append("time_scale_presets must contain only values > 0 (got %s)" % preset)
+			break
+	if default_time_scale_index < 0 or default_time_scale_index >= presets.size():
+		problems.append("default_time_scale_index out of range (got %d)" % default_time_scale_index)
+	if terrain_size_cells < 4:
+		problems.append("terrain_size_cells must be >= 4 (got %d)" % terrain_size_cells)
+	if terrain_height_scale < 0.0:
+		problems.append("terrain_height_scale must be >= 0 (got %s)" % terrain_height_scale)
+	if player_walk_speed <= 0.0:
+		problems.append("player_walk_speed must be > 0 (got %s)" % player_walk_speed)
+	if start_minute_of_day < 0 or start_minute_of_day >= SimulationClock.MINUTES_PER_DAY:
+		problems.append("start_minute_of_day out of range (got %d)" % start_minute_of_day)
+	if save_format_version < 1:
+		problems.append("save_format_version must be >= 1 (got %d)" % save_format_version)
+	return problems

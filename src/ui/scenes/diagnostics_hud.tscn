@@ -1,0 +1,82 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/diagnostics_hud.gd" id="1_hud"]
+
+[node name="DiagnosticsHud" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_hud")
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 400.0
+offset_bottom = 286.0
+mouse_filter = 2
+
+[node name="Margins" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Lines" type="VBoxContainer" parent="Panel/Margins"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="TitleLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 24
+text = "EVERAFTER"
+
+[node name="DayLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.93, 0.87, 0.66, 1)
+text = "Giorno simulato: 1"
+
+[node name="TimeLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 16
+text = "Ora del mondo: 00:00"
+
+[node name="SimLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "Tick: 0  ·  Velocità: x1"
+
+[node name="PhaseLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "Fase: Notte"
+
+[node name="PerfLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "FPS: 0"
+
+[node name="StatusLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.66, 0.82, 0.72, 1)
+text = "Avvio in corso…"
+
+[node name="HelpLabel" type="Label" parent="Panel/Margins/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.72, 0.75, 0.8, 1)
+autowrap_mode = 2
+text = "WASD / frecce: muoversi · Shift: correre · Spazio: saltare
+Mouse: guardarsi · Clic: cattura il mouse · Esc: libera il mouse
+P: pausa · + / -: velocità simulazione · F1: nascondi questo pannello"

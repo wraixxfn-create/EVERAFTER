@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  EVERAFTER project icon.
+  Placeholder emblem drawn with plain vector shapes only (no filters, no CSS,
+  no external references) so that Godot's built-in SVG importer can rasterise
+  it everywhere. Replace later with the final art direction.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect x="0" y="0" width="128" height="128" rx="24" ry="24" fill="#16212c"/>
+  <circle cx="92" cy="34" r="12" fill="#e8d9a8"/>
+  <path d="M0 92 H128 V104 Q64 120 0 104 Z" fill="#2f4a3c"/>
+  <rect x="60" y="70" width="8" height="26" fill="#5a4132"/>
+  <path d="M64 22 L92 62 L36 62 Z" fill="#4e8c63"/>
+  <path d="M64 40 L86 76 L42 76 Z" fill="#5ea875"/>
+  <path d="M64 56 L78 84 L50 84 Z" fill="#79c18d"/>
+</svg>
