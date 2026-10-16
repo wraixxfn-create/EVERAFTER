@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="GameConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/core/game_config.gd" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")
+project_title = "EVERAFTER"
+build_label = "0.1.0-foundation"
+logic_tick_seconds = 0.05
+time_scale_presets = PackedFloat32Array(1, 3, 10)
+default_time_scale_index = 0
+start_minute_of_day = 420
+max_steps_per_frame = 12
+save_format_version = 1
+terrain_size_cells = 128
+terrain_height_scale = 5.0
+terrain_seed = 20261016
+player_walk_speed = 5.0
+player_sprint_speed = 9.0
+player_jump_velocity = 6.0
+mouse_sensitivity = 0.0022

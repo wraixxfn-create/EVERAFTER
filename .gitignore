@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# EVERAFTER .gitignore  (Godot 4 + Windows + tooling)
+# Only generated / local / secret material is ignored. Anything the game needs
+# to run (scenes, scripts, project.godot, docs, tools) stays tracked.
+# ---------------------------------------------------------------------------
+
+# --- Godot 4 editor cache, imports and generated data (never commit) -------
+.godot/
+*.translation
+export_credentials.cfg
+
+# NOTE: *.import files are intentionally NOT ignored. Godot writes one next to
+# every imported asset and they must be committed so that a fresh clone imports
+# assets identically. This repo currently has no imported assets yet.
+
+# --- Exported builds / packaged output -------------------------------------
+/build/
+/export/
+/dist/
+*.pck
+*.apk
+*.aab
+*.exe.tmp
+
+# --- Windows ---------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# --- Editors / IDE ---------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- macOS leftovers (developers on other platforms) ------------------------
+.DS_Store
+
+# --- Local data, credentials, secrets (never commit) ------------------------
+.env
+.env.*
+*.pem
+*.key
+*.p12
+secrets.*
+credentials.*
+user_data/
+
+# --- Python tooling used by tools/ (validation scripts) ---------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
