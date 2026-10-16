@@ -42,7 +42,11 @@ static func run_tests(harness: TestHarness) -> void:
 	var second := SimulationClock.new()
 	first.advance(4321)
 	second.advance(4321)
-	harness.check_equals(first.to_string(), second.to_string(), "same ticks give the same reading")
+	# The expected value is written out on purpose: it proves that the
+	# `_to_string()` virtual really is dispatched. If the override ever stops
+	# being applied, both sides collapse to `<RefCounted#...>` and this fails.
+	harness.check_equals(str(first), "day 4 00:01 (tick 4321)", "_to_string formats the reading")
+	harness.check_equals(str(first), str(second), "same ticks give the same reading")
 
 	var restored := SimulationClock.new()
 	restored.from_dict(first.to_dict())

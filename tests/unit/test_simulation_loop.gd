@@ -63,9 +63,35 @@ static func run_tests(harness: TestHarness) -> void:
 	loop.set_time_scale(0.0)
 	harness.check_equals(loop.update(1.0), 0, "speed x0 behaves like a pause")
 
+	# Speed multiplies the tick rate. Two details make this test exact instead
+	# of approximate, both found by actually running the suite:
+	# * `tick_seconds` is a power of two, so the accumulator stays exact in
+	#   binary floating point. With the default 0.05 the 20th tick is skipped
+	#   because 1.0 - 19 * 0.05 is a hair below 0.05.
+	# * `max_steps_per_frame` is raised, otherwise the spiral-of-death guard
+	#   (default 12) caps the burst and the multiplier is never observable.
+	var slow_loop := SimulationLoop.new()
+	slow_loop.tick_seconds = 0.25
+	slow_loop.max_steps_per_frame = 64
+	var ticks_x1 := slow_loop.update(1.0)
+	loop = SimulationLoop.new()
+	loop.tick_seconds = 0.25
+	loop.max_steps_per_frame = 64
+	loop.set_time_scale(4.0)
+	var ticks_x4 := loop.update(1.0)
+	harness.check_equals(ticks_x1, 4, "1 real second at x1 is 4 ticks of 0.25s")
+	harness.check_equals(ticks_x4, 16, "speed x4 produces four times the ticks")
+	harness.check_equals(ticks_x4, ticks_x1 * 4, "the speed multiplier is linear")
+
+	# The guard deliberately wins over the multiplier: a single frame is never
+	# allowed to simulate more than `max_steps_per_frame` ticks.
 	loop = SimulationLoop.new()
 	loop.set_time_scale(4.0)
-	harness.check_equals(loop.update(0.25), 20, "speed x4 produces four times the ticks")
+	harness.check_equals(
+		loop.update(0.25),
+		loop.max_steps_per_frame,
+		"a fast frame is still capped by max_steps_per_frame"
+	)
 
 	# --- spiral of death guard ----------------------------------------------
 	loop = SimulationLoop.new()

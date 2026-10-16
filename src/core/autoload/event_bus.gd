@@ -25,3 +25,12 @@ signal simulation_paused_changed(is_paused: bool)
 
 ## Emitted when a 3D world scene finished assembling itself.
 signal world_ready(world_name: String)
+
+## Emitted by the world when the player crosses into a differently named region
+## (`AreaRegistry`). Low frequency by construction: it fires only on change, so
+## the HUD can show "where am I" without polling the world every frame.
+signal area_changed(area_name: String)
+
+## Emitted by `PlayerExplorer` when the mouse is captured or released, so the
+## HUD can show how to get the controls back.
+signal mouse_capture_changed(is_captured: bool)

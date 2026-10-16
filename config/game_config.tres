@@ -5,14 +5,14 @@
 [resource]
 script = ExtResource("1_config")
 project_title = "EVERAFTER"
-build_label = "0.1.0-foundation"
+build_label = "0.2.0-village"
 logic_tick_seconds = 0.05
 time_scale_presets = PackedFloat32Array(1, 3, 10)
 default_time_scale_index = 0
 start_minute_of_day = 420
 max_steps_per_frame = 12
 save_format_version = 1
-terrain_size_cells = 128
+terrain_size_cells = 160
 terrain_height_scale = 5.0
 terrain_seed = 20261016
 player_walk_speed = 5.0

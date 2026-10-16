@@ -20,7 +20,7 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 
 @export_group("Project")
 @export var project_title: String = "EVERAFTER"
-@export var build_label: String = "0.1.0-foundation"
+@export var build_label: String = "0.2.0-village"
 
 @export_group("Simulated time")
 ## Real seconds per logical tick at speed x1. With the default value the
@@ -45,9 +45,11 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 
 @export_group("World")
 ## Number of grid points per side of the terrain height field. The terrain is
-## (terrain_size_cells - 1) world units across. 128 -> 127x127 units, about
-## 16k vertices / 32k triangles: comfortable on a GTX 1060 class GPU.
-@export_range(16, 512) var terrain_size_cells: int = 128
+## (terrain_size_cells - 1) world units across. 160 -> 159x159 units, about
+## 25k vertices / 50k triangles for the whole ground: comfortable on a
+## GTX 1060 class GPU, and big enough that the village has fields, a road out
+## of town and a tree line instead of ending at the last house.
+@export_range(16, 512) var terrain_size_cells: int = 160
 @export_range(0.0, 40.0) var terrain_height_scale: float = 5.0
 ## Every procedural element of the world derives from this seed, so the same
 ## seed always rebuilds the identical village.
