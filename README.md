@@ -6,20 +6,30 @@ Il mondo è abitato da personaggi con identità, bisogni, professioni, obiettivi
 Gli abitanti agiranno autonomamente, la società evolverà e gli eventi lasceranno conseguenze nel tempo.
 Il gioco deve funzionare **offline**, senza servizi a pagamento e senza server obbligatori.
 
-Questo repository contiene oggi la **fase Relazioni e memoria (`0.5.0-social`)**, costruita sopra il
-villaggio esplorabile, gli abitanti autonomi e l'economia locale delle fasi precedenti: un ambiente
-fantasy medievale a codice, camminabile in prima persona, con terreno procedurale e ciclo
-giorno/notte, abitato da **10 persone** (numero configurabile) che hanno un nome, un mestiere,
-bisogni, una casa, un posto di lavoro, una routine giornaliera, un **ciclo economico delle
-risorse** (`Cibo`, `Legno`, `Pietra`, `Moneta`) e da ora **relazioni personali, interazioni sociali
-e una memoria individuale limitata**. La simulazione gira anche quando nessuno li guarda.
+Questo repository contiene oggi la **fase Persistenza, cronache e avanzamento offline
+(`0.6.0-persistence`)**, la prima versione verificabile in cui il mondo sopravvive alla chiusura
+del gioco:
 
-> Stato onesto del progetto: **esistono il villaggio 3D, gli NPC autonomi, l'economia locale e un
-> primo sistema sociale (relazioni, cinque interazioni, memoria individuale con limiti e
-> conseguenze); non esistono ancora mercati dinamici complessi, finanza avanzata, famiglie,
-> fazioni, politica, cronache giocabili o salvataggi.** Le relazioni sono regolate da regole
-> numeriche verificabili: **nessun modello linguistico e nessun servizio online**. Politica e
-> dialoghi generativi restano progettati in [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementati.
+* villaggio 3D generato a codice, camminabile in prima persona, con terreno procedurale e ciclo
+  giorno/notte;
+* **10 abitanti** (numero configurabile) con nome, mestiere, bisogni, casa, posto di lavoro,
+  routine giornaliera, **ciclo economico delle risorse** (`Cibo`, `Legno`, `Pietra`, `Moneta`),
+  relazioni personali, cinque tipi di interazione sociale e memoria individuale limitata;
+* **salvataggio versionato in JSON** su `user://`, scrittura atomica con backup, caricamento
+  robusto contro file mancanti, corrotti o di versione non supportata;
+* **cronaca del villaggio** (`ChronicleBook`) con voci strutturate, filtri per categoria e
+  giorno, e politica di conservazione per importanza;
+* **avanzamento offline** basato sul tempo reale trascorso, con limite configurabile,
+  avanzamento a intervalli, protezione da orologio di sistema spostato e voce in cronaca.
+
+> Stato onesto del progetto: **questa è la prima versione persistente e verificabile sulla quale
+> costruiremo le fasi successive** (società e politica, dialoghi, contenuti). Esiste un
+> salvataggio funzionante che conserva abitanti, risorse, relazioni, memoria e cronaca; non
+> esiste ancora una simulazione aggregata per i periodi offline molto lunghi (oggi il catch-up
+> avanza i tick della simulazione uno a uno, entro un tetto di sicurezza) e non c'è ancora una
+> simulazione completa di civiltà con politica, fazioni, eventi narrativi. **Nessun modello
+> linguistico e nessun servizio online**; il progetto funziona interamente offline. Prossime
+> tappe in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
@@ -93,6 +103,7 @@ Su Windows l'output su console è visibile solo con l'eseguibile `_console.exe`.
 | `P` | Pausa / ripresa della simulazione |
 | `+` / `-` | Velocità della simulazione (x1, x3, x10) |
 | `F1` | Mostra / nasconde il pannello diagnostico (nascosto all'avvio) |
+| `C` | Apre il pannello **Cronache e salvataggio** (salva, carica, consulta la cronaca) |
 | **Clic sinistro** (mouse catturato) | Seleziona l'abitante sotto il mirino e apre la sua scheda |
 | **Clic sinistro** (mouse libero) | Seleziona l'abitante sotto il puntatore e cattura di nuovo il mouse |
 | **Elenco "Abitanti"** | Sceglie un abitante dal pannello, anche se è lontano e non è disegnato |
@@ -103,6 +114,25 @@ giocare. Perdendo il fuoco della finestra il mouse viene liberato automaticament
 
 Tutti gli input sono mappati come **azioni** in `project.godot` (sezione `[input]`), quindi sono
 rimappabili dall'editor senza toccare il codice.
+
+### Salvataggio, caricamento e cronache
+
+* Il gioco salva automaticamente ogni **12 ore simulate** e quando la finestra viene chiusa.
+* Il pannello aperto con `C` permette di salvare e caricare manualmente. Prima di sovrascrivere
+  un salvataggio esistente viene chiesta conferma.
+* Il formato è **JSON leggibile** (`user://everafter_save.json`). Su Windows `user://` corrisponde
+  a `%APPDATA%/Godot/app_userdata/EVERAFTER/` (o alla cartella dell'exe in caso di export
+  self-contained).
+* Quando si avvia il gioco e un salvataggio è presente, il mondo viene ricaricato al punto in
+  cui era stato lasciato. Se è passato tempo reale dall'ultimo salvataggio, la simulazione
+  avanza in modo controllato (default: massimo **10 giorni simulati** di catch-up per avvio) e
+  l'esito viene annotato nella cronaca.
+* La cronaca registra carestie, riprese dell'economia, aiuti tra abitanti, progetti comunitari
+  completati, traguardi del giorno ed eventi di sistema. Le voci sotto l'importanza minima
+  non sono conservate; quelle più importanti sono protette dalla cancellazione.
+* I file corrotti o di versione non supportata vengono rifiutati con un messaggio invece di
+  corrompere lo stato del mondo; il file `.bak` (`everafter_save.json.bak`) è una copia del
+  salvataggio precedente come rete di sicurezza aggiuntiva.
 
 ## 4. Che cosa si vede avviando il gioco
 
@@ -599,9 +629,10 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
   invece di uscire con codice 1. Va aggiunto un watchdog nel runner.
 * **Nessun interno**: le case sono volumi chiusi con una scatola di collisione. Porte e finestre
   sono dettagli di superficie, non aperture.
-* **Nessuna serializzazione**: `to_dict()` / `from_dict()` esistono su clock, loop e sistemi, ma
-  non c'è ancora un modulo `persistence`.
-* **La resa visiva non è stata vista su GPU.** Geometria, materiali e illuminazione sono costruiti
+* **Persistenza v1**: esiste un modulo `persistence/` che salva/carica tutto lo stato in JSON su
+  `user://` con scrittura atomica; c'è anche l'avanzamento offline con tetto e la cronaca
+  accessibile dal pannello (`C`). Non esistono ancora slot multipli o un migratore di formato.
+* **La resa visiva non è stata vista su GPU in questa iterazione.** Geometria, materiali e illuminazione sono costruiti
   con criterio e verificati strutturalmente, ma l'aspetto finale va giudicato a schermo.
 * Il terreno è un'unica mesh generata all'avvio (25.600 vertici). Oltre queste dimensioni serviranno
   chunk e streaming (in roadmap).
@@ -609,6 +640,32 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
 * L'IA generativa non è integrata e non è richiesta per giocare.
 * Nessun preset di export: l'esportazione Windows verrà configurata quando ci saranno contenuti
   sufficienti da impacchettare.
+
+## Verificare il salvataggio su Windows
+
+Una sequenza consigliata per provare che il salvataggio funzioni davvero con l'eseguibile
+Godot per Windows (`Godot_v4.x-stable_win64.exe`):
+
+1. Avvia il gioco con `Godot_v4.x-stable_win64_console.exe --path .` e lascia avanzare la
+   simulazione per almeno un minuto (simulato) — puoi accelerare con `+`/`-`.
+2. Premi `C` per aprire il pannello Cronache e salvataggio; verifica che compaia "Nessun
+   salvataggio presente". Premi "Salva adesso" e conferma.
+3. Chiudi la finestra: all'uscita il gioco salva di nuovo (l'autosave sovrascrive
+   tranquillamente il file).
+4. Riapri il gioco. All'avvio il salvataggio deve venir caricato automaticamente; il giorno
+   e l'ora nel corner in alto a sinistra devono essere quelli del salvataggio, non il giorno 1
+   alle 07:00 di un mondo nuovo. Premi `C` per verificare la data/orario nel pannello.
+5. Prova l'avanzamento offline: salva, chiudi il gioco, aspetta alcuni minuti reali (o cambia
+   temporaneamente l'orologio di sistema **in avanti** di un'ora), riapri: il mondo deve essere
+   andato avanti e la cronaca deve contenere una voce "Sei tornato dopo …".
+6. Prova la gestione dei file corrotti: apri `%APPDATA%/Godot/app_userdata/EVERAFTER/`, apri
+   `everafter_save.json` con un editor di testo, corrompi una riga a caso, salva e riavvia. Il
+   gioco deve avvisare che il file è illeggibile e partire con un mondo nuovo invece di
+   bloccarsi.
+7. Premi "Nuovo mondo" per eliminare il salvataggio e ricominciare da capo.
+
+Il file `everafter_save.json.bak` nella stessa cartella dev'essere una copia leggibile del
+salvataggio precedente.
 
 ## 9. Come contribuire / proseguire
 
