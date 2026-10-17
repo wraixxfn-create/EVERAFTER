@@ -1,0 +1,217 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/economy_panel.gd" id="1_ecopanel"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ecopanel"]
+bg_color = Color(0.04, 0.05, 0.07, 0.82)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.35, 0.32, 0.24, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="EconomyPanel" type="CanvasLayer"]
+layer = 6
+script = ExtResource("1_ecopanel")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Root"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 132.0
+offset_right = 412.0
+offset_bottom = 562.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_ecopanel")
+
+[node name="Margin" type="MarginContainer" parent="Root/Panel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Lines" type="VBoxContainer" parent="Root/Panel/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 5
+
+[node name="HeaderLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 15
+text = "ECONOMIA DEL VILLAGGIO"
+
+[node name="SubtitleLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.68, 0.72, 0.74, 1)
+theme_override_font_sizes/font_size = 11
+text = "Scorte collettive  ·  Periodo (+prod / -cons)"
+
+[node name="ResourceGrid" type="GridContainer" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 3
+columns = 3
+
+[node name="FoodName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.9, 0.88, 0.82, 1)
+theme_override_font_sizes/font_size = 13
+text = "Cibo"
+
+[node name="FoodAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.94, 0.86, 1)
+theme_override_font_sizes/font_size = 13
+text = "0"
+horizontal_alignment = 2
+
+[node name="FoodFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.74, 0.82, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+text = "+0 / -0"
+horizontal_alignment = 2
+
+[node name="WoodName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.9, 0.88, 0.82, 1)
+theme_override_font_sizes/font_size = 13
+text = "Legno"
+
+[node name="WoodAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.94, 0.86, 1)
+theme_override_font_sizes/font_size = 13
+text = "0"
+horizontal_alignment = 2
+
+[node name="WoodFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.74, 0.82, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+text = "+0 / -0"
+horizontal_alignment = 2
+
+[node name="StoneName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.9, 0.88, 0.82, 1)
+theme_override_font_sizes/font_size = 13
+text = "Pietra"
+
+[node name="StoneAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.94, 0.86, 1)
+theme_override_font_sizes/font_size = 13
+text = "0"
+horizontal_alignment = 2
+
+[node name="StoneFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.74, 0.82, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+text = "+0 / -0"
+horizontal_alignment = 2
+
+[node name="CoinName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.84, 0.56, 1)
+theme_override_font_sizes/font_size = 13
+text = "Moneta"
+
+[node name="CoinAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.88, 0.62, 1)
+theme_override_font_sizes/font_size = 13
+text = "0"
+horizontal_alignment = 2
+
+[node name="CoinFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.84, 0.8, 0.68, 1)
+theme_override_font_sizes/font_size = 12
+text = "Mercato: 0"
+horizontal_alignment = 2
+
+[node name="Separator1" type="HSeparator" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 4)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ProjectsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+mouse_filter = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.82, 0.86, 1)
+theme_override_font_sizes/font_size = 12
+text = "Progetti: —"
+
+[node name="ShortagesLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+mouse_filter = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.78, 0.58, 1)
+theme_override_font_sizes/font_size = 12
+text = "Carenze: Nessuna carenza attiva"
+
+[node name="Separator2" type="HSeparator" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 4)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="TransactionsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 12
+text = "TRANSAZIONI RECENTI"
+
+[node name="TransactionsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 96)
+layout_mode = 2
+mouse_filter = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.82, 0.84, 1)
+theme_override_font_sizes/font_size = 11
+text = "Nessuna transazione registrata."

@@ -69,6 +69,7 @@ var _records: Array[NpcRecord] = []
 var _by_id: Dictionary = {}
 var _places: NpcPlaceRegistry = null
 var _route_graph: NpcRouteGraph = null
+var _economy: EconomySystem = null
 var _start_tick: int = 0
 var _last_tick: int = -1
 var _initialized: bool = false
@@ -109,6 +110,14 @@ func get_place_registry() -> NpcPlaceRegistry:
 
 func get_route_graph() -> NpcRouteGraph:
 	return _route_graph
+
+
+func set_economy_system(economy: EconomySystem) -> void:
+	_economy = economy
+
+
+func get_economy_system() -> EconomySystem:
+	return _economy
 
 
 func get_last_tick() -> int:
@@ -325,8 +334,9 @@ func _choose_urgent_need(record: NpcRecord, tick: int, minute: int) -> bool:
 ## reach their workplace falls through to ordinary life instead of freezing.
 func _choose_work(record: NpcRecord, tick: int, minute: int) -> bool:
 	if record.needs.hunger >= HUNGER_EAT_THRESHOLD:
-		_seek_food(record, tick, minute)
-		return true
+		if _economy == null or EconomyRules.has_available_food_for(_economy, record.id):
+			_seek_food(record, tick, minute)
+			return true
 	if not _can_work(record):
 		return false
 	_go_to_work(record, tick, minute)
@@ -402,8 +412,15 @@ func _start_eating(record: NpcRecord, place: NpcPlace, tick: int, minute: int) -
 	if not place.is_food_available(minute) and place.kind != NpcPlace.Kind.HOME:
 		_choose_goal(record, tick, minute)
 		return
+	var fed := true
+	if _economy != null:
+		fed = _economy.request_meal_for_npc(record, tick)
+	record.last_meal_satisfied = fed
 	_set_current_place(record, place)
-	record.set_goal(NpcRecord.Goal.EAT, "fame")
+	record.set_goal(
+		NpcRecord.Goal.EAT,
+		"fame" if fed else "carenza di cibo nel villaggio"
+	)
 	record.set_activity(NpcRecord.Activity.EATING, tick)
 	record.action_ticks_left = EAT_DURATION_TICKS
 	_clear_destination(record)
@@ -617,7 +634,12 @@ func _advance_needs(record: NpcRecord) -> void:
 			needs.energy += REST_ENERGY_RATE
 			needs.hunger += REST_HUNGER_RATE
 		NpcRecord.Activity.EATING:
-			needs.hunger += EAT_HUNGER_RATE
+			if record.last_meal_satisfied:
+				needs.hunger += EAT_HUNGER_RATE
+			else:
+				needs.hunger = maxf(
+					needs.hunger - 0.4, EconomyRules.SHORTAGE_HUNGER_FLOOR
+				)
 		NpcRecord.Activity.SOCIALIZING:
 			needs.energy += SOCIAL_ENERGY_RATE
 			needs.hunger += SOCIAL_HUNGER_RATE
@@ -634,7 +656,12 @@ func _advance_wellbeing(record: NpcRecord) -> void:
 		needs.wellbeing -= 0.09
 		return
 	match record.activity:
-		NpcRecord.Activity.EATING, NpcRecord.Activity.SOCIALIZING:
+		NpcRecord.Activity.EATING:
+			if record.last_meal_satisfied:
+				needs.wellbeing += 0.14
+			else:
+				needs.wellbeing += EconomyRules.SHORTAGE_DAILY_WELLBEING_DRIFT
+		NpcRecord.Activity.SOCIALIZING:
 			needs.wellbeing += 0.14
 		NpcRecord.Activity.SLEEPING:
 			needs.wellbeing += 0.05

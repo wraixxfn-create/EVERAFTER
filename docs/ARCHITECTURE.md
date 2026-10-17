@@ -36,29 +36,32 @@ sostenere una simulazione di popolazione persistente, deterministica e offline, 
 | `core/` | orologio simulato (`SimulationClock`), `GameConfig` e `game_log`, singleton `EventBus` e `Game` |
 | `simulation/` | contratto `SimulationSystem`, `SimulationLoop` a fixed timestep, `DayCycleSystem` |
 | `npcs/` | dati e simulazione degli abitanti: personalità, bisogni, luoghi, record, roster, rete di percorso, macchina a stati |
+| `economy/` | economia locale e ciclo delle risorse: tipi di risorsa (`food`, `wood`, `stone`, `coin`), inventari non negativi con operazioni atomiche, registro transazioni, regole di produzione/consumo/scambio/progetti ed `EconomySystem` |
 | `world/` | scena principale, generatore di terreno, esploratore in prima persona, costruzione del villaggio, registro delle aree, ponte verso i luoghi degli NPC |
 | `world/npcs/` | presentazione degli abitanti: capsule, nomi, selezione, culling; nessuna scrittura sui record |
-| `ui/` | HUD del mondo (titolo, giorno, area), pannello diagnostico e scheda dell'abitante |
+| `ui/` | HUD del mondo (titolo, giorno, area), pannello economico (`EconomyPanel`), pannello diagnostico e scheda dell'abitante (`NpcPanel`) |
 | `tests/` | harness di asserzioni, runner di unità, runner di integrazione, suite di unità e di integrazione |
 | `tools/` | verifiche statiche di coerenza del progetto, script che esegue tutti i controlli |
 | `config/` | `game_config.tres`, i valori di tuning modificabili senza toccare il codice |
 
 ### Moduli previsti, non ancora presenti
 
-`social/`, `economy/`, `governance/`, `history/`, `memory/`, `events/`, `persistence/`, `ai/`
+`social/`, `governance/`, `history/`, `memory/`, `events/`, `persistence/`, `ai/`
 sono descritti in `ROADMAP.md`. **Nessuno di questi esiste nel codice.** Questo documento non li
 elenca tra i moduli attivi, perché un'architettura che dichiara moduli inesistenti è più
-pericolosa di un'architettura incompleta. `npcs/` invece esiste ed è la fase NPC di questo progetto.
+pericolosa di un'architettura incompleta. `npcs/` ed `economy/` invece esistono e costituiscono le
+fasi completate della simulazione locale.
 
 ## Dipendenze consentite
 
 ```
 core  ->  niente
 simulation  ->  core
-npcs  ->  core, simulation
-world  ->  core, simulation, npcs
+npcs  ->  core, simulation, economy (opzionale, iniettato)
+economy  ->  core, simulation, npcs
+world  ->  core, simulation, npcs, economy
 world/npcs  ->  core, npcs, world
-ui  ->  core, simulation, npcs, world
+ui  ->  core, simulation, npcs, economy, world
 tests  ->  tutto (ma senza dipendere da una GPU)
 ```
 
@@ -217,10 +220,142 @@ Target dichiarato: **1080p a 60 fps su GPU classe GTX 1060**. Il budget è difes
   script, quindi sono rimappabili senza toccare il codice.
 * Il mouse si libera con `Esc` e si riprende con clic sinistro o `F`; lo stato è pubblicato su
   `EventBus.mouse_capture_changed` così l'interfaccia lo comunica invece di lasciarlo indovinare.
-* Il pannello degli abitanti è un `CanvasLayer` con un `OptionButton` e barre dei bisogni. Legge
-  `Game.get_npc_system()` e ascolta `EventBus.npc_system_ready` / `EventBus.npc_selected`; non
-  possiede stato di simulazione. Se l'abitante selezionato non ha una capsula 3D, il pannello
-  continua a mostrarne i dati live: è la prova visibile della separazione simulazione/rendering.
+* Il pannello degli abitanti (`NpcPanel`) è un `CanvasLayer` con un `OptionButton` e barre dei
+  bisogni. Legge `Game.get_npc_system()` e ascolta `EventBus.npc_system_ready` /
+  `EventBus.npc_selected`; non possiede stato di simulazione. Se l'abitante selezionato non ha una
+  capsula 3D, il pannello continua a mostrarne i dati live: è la prova visibile della separazione
+  simulazione/rendering.
+* Il pannello economico (`EconomyPanel`) è anch'esso un `CanvasLayer` in sola lettura, ancorato a
+  sinistra sotto `WorldHud`. Legge direttamente `Game.get_economy_system()` senza mantenere
+  contatori indipendenti che possano divergere dallo stato reale.
+
+---
+
+## Sistema economico locale (`src/economy/`)
+
+`src/economy/` è un modulo puro (`RefCounted`, nessun `Node`, nessuna dipendenza dal rendering)
+registrato nel `SimulationLoop` immediatamente dopo `NpcSimulationSystem`.
+
+### 1. Risorse, prezzi base e soglie di carenza (`ResourceType`)
+
+Tutte le quantità sono **interi non negativi (`int >= 0`)** conservati in `ResourceInventory`:
+
+| ID | Etichetta | Prezzo base (`Moneta`) | Soglia carenza villaggio | Ruolo |
+| --- | --- | --- | --- | --- |
+| `food` | Cibo | `2` | `< 8` | Consumato dagli abitanti durante i pasti |
+| `wood` | Legno | `3` | `< 4` | Materiale per progetti comunitari e scambi |
+| `stone` | Pietra | `4` | `< 4` | Materiale per progetti comunitari e scambi |
+| `coin` | Moneta | `1` | `< 6` | Mezzo di scambio per compensi, pasti, acquisti e progetti |
+
+### 2. Inventari e atomicità delle transazioni (`ResourceInventory`, `EconomySystem`)
+
+* **Magazzino del villaggio (`village`)**: scorte iniziali da `GameConfig` (`24 Cibo`, `12 Legno`,
+  `10 Pietra`, `60 Moneta`).
+* **Sacche individuali (`npc_001` … `npc_016`)**: usate per i compensi di lavoro, l'acquisto dei
+  pasti e piccole scorte personali (`0` materiali iniziali, `4 Moneta` ciascuno).
+* **Emporio del mercato (`market`)**: inventario finito di controparte per il commerciante
+  (`12 Cibo`, `10 Legno`, `8 Pietra`, `50 Moneta`).
+* **Validazione rigorosa**: `set_amount`, `add`, `remove`, `add_bundle`, `remove_bundle`,
+  `transfer_resource`, `execute_trade`, `execute_barter` e `fund_project` convalidano tutti i
+  parametri prima di toccare lo stato. Qualsiasi operazione non valida (quantità `<= 0`, risorsa
+  sconosciuta, fondi/scorte insufficienti, proprietario inesistente) viene **rifiutata senza
+  effetti collaterali**, incrementando `rejected_transaction_count` e registrando una transazione
+  `KIND_REJECTED`. Non vengono mai assegnate risorse casuali o gratuite per mascherare una
+  produzione insufficiente.
+
+### 3. Formule di produzione e prerequisiti (`EconomyRules`)
+
+Ad ogni tick (`1` minuto simulato), un abitante accumula `+1` minuto di lavoro (`_work_progress`)
+**solo se tutte** le condizioni seguenti sono vere (`can_worker_produce_now`):
+
+1. `record.activity == NpcRecord.Activity.WORKING` e `record.current_place_id == record.workplace_id`;
+2. il prerequisito della postazione (`_workplace_prerequisites[workplace_id].ready`) è `true`;
+3. `record.needs.hunger < 92.0` (`MAX_WORKER_HUNGER_FOR_PRODUCTION`) e
+   `record.needs.energy > 5.0` (`MIN_WORKER_ENERGY_FOR_PRODUCTION`).
+
+Se un lavoratore dorme, cammina, riposa per stanchezza, cerca cibo o ha la postazione non pronta,
+**non accumula progresso e non produce**.
+
+Quando `_work_progress[npc_id] >= minutes_per_batch`, viene sottratto `minutes_per_batch` e il
+magazzino del villaggio riceve `batch_amount + bonus_progetti`:
+
+| Professione (`profession_id`) | Luogo (`workplace_id`) | Prerequisito documentato | `minutes_per_batch` | Lotto base | Compenso per lotto |
+| --- | --- | --- | --- | --- | --- |
+| `farmer` (Agricoltore) | `work_field` | Campi arati e attrezzi agricoli | `60` min | `+3 Cibo` | `2 Moneta` |
+| `forager` (Raccoglitrice) | `work_garden` | Orto recintato ed essiccatoio | `60` min | `+2 Cibo` | `1 Moneta` |
+| `fisher` (Pescatore) | `work_pond` | Pontile dello stagno e reti | `60` min | `+2 Cibo` | `1 Moneta` |
+| `baker` (Panettiera) | `work_inn` | Forno e dispensa della locanda | `60` min | `+2 Cibo` | `1 Moneta` |
+| `innkeeper` (Locandiera) | `work_inn` | Forno e dispensa della locanda | `75` min | `+2 Cibo` | `1 Moneta` |
+| `woodcutter` (Boscaiolo) | `work_workshop` | Cavalletto da taglio e asce | `60` min | `+2 Legno` | `2 Moneta` |
+| `quarry_worker` (Cavatore) | `work_forge` | Banco d'estrazione, cunei e picconi | `60` min | `+2 Pietra` | `2 Moneta` |
+| `merchant` (Commerciante) | `work_market` | Banco dei pesi e registro | `60` min | *Scambio* | — |
+
+Il compenso viene trasferito dalla cassa comune (`village`) alla sacca dell'abitante solo se il
+villaggio dispone delle monete necessarie (nessuna creazione di moneta dal nulla).
+
+### 4. Formule di consumo alimentare e carenze
+
+* **Razione per pasto**: `FOOD_UNITS_PER_MEAL = 1 Cibo`, costo `MEAL_PRICE_COIN = 2 Moneta`.
+* **Quando avviene**:
+  1. all'ingresso in `Activity.EATING` presso un luogo con `provides_food == true` (es. locanda o
+     casa), tramite `EconomySystem.request_meal_for_npc(record, tick)`;
+  2. alle `19:00` (`DAILY_RATION_MINUTE = 1140`), se l'abitante non ha ancora consumato una razione
+     nella giornata corrente (`_ate_today`).
+* **Ordine di prelievo**: prima dalla sacca personale dell'abitante (`>= 1 Cibo`), altrimenti dal
+  magazzino del villaggio (`>= 1 Cibo`), versando fino a `2 Moneta` dalla sacca dell'abitante alla
+  cassa del villaggio.
+* **Effetto della scarsità di cibo (`0 Cibo` disponibile)**:
+  * il pasto viene rifiutato (`last_meal_satisfied = false`), `unfed_meal_attempts_period` e
+    `unfed_meal_attempts_total` aumentano di `1`, e le scorte restano a `0`;
+  * il benessere cala immediatamente di `-4,5` (`UNFED_WELLBEING_PENALTY`);
+  * durante i tick di `Activity.EATING` senza razione, la fame non può scendere sotto `76,0`
+    (`UNFED_HUNGER_FLOOR`, solo lieve sollievo con acqua/riposo a `-0,25/min` invece di
+    `-2,8/min`) e il benessere subisce una deriva negativa aggiuntiva di `-0,08/min`;
+  * **nessun abitante muore** e i bisogni restano sempre nell'intervallo `[0, 100]`.
+
+### 5. Formule di scambio e ruolo del commerciante
+
+* **Acquisto a prezzo base fisso (`execute_trade`)**:
+  `costo_totale = quantità * ResourceType.base_price(resource_id)`. Richiede che il venditore
+  possieda `>= quantità` della risorsa e il compratore `>= costo_totale` in `Moneta`.
+* **Baratto (`execute_barter`)**: scambia `give_amount` di `give_resource` contro `receive_amount`
+  di `receive_resource` tra due inventari distinti dopo aver verificato entrambe le disponibilità.
+* **Intermediazione del commerciante (`_run_merchant_brokerage`)**: ogni `60` minuti lavorati al
+  mercato (`work_market`), il commerciante:
+  1. trasferisce o acquista eventuali materiali presenti nelle sacche degli abitanti verso il
+     magazzino del villaggio;
+  2. se il villaggio ha `< 16 Cibo` e l'emporio (`market`) ha `>= 2 Cibo`, acquista `2 Cibo` per
+     `4 Moneta` (o baratta `1 Pietra` per `2 Cibo` se il villaggio ha `>= 6 Pietra`);
+  3. se il villaggio ha eccedenze (`> 16 Legno` o `> 14 Pietra`) e l'emporio ha moneta, vende `2`
+     unità all'emporio al prezzo base (`6` o `8 Moneta`).
+  In ogni caso la somma totale di `Cibo`, `Legno`, `Pietra` e `Moneta` nel sistema (`village +
+  market + sacche NPC`) **resta invariata** (legge di conservazione verificata dai test).
+
+### 6. Progetti comunitari (`CommunityProject`)
+
+Alle `18:00` (`PROJECT_CHECK_MINUTE = 1080`) o tramite `fund_project(project_id, tick)`, il
+villaggio può finanziare in ordine i progetti comunitari (mantenendo in automatico una riserva di
+sicurezza di `4 Legno`, `4 Pietra`, `12 Moneta`):
+
+1. **Rinforzo del Granaio Comune** (`granary_repair`): costo `6 Legno, 4 Pietra, 8 Moneta` →
+   `+1 Cibo` per ogni lotto agricolo/alimentare e `+2,0` benessere a tutti gli abitanti.
+2. **Cavalletto e Tettoia della Segheria** (`logging_trestle`): costo `4 Legno, 4 Pietra, 6 Moneta`
+   → `+1 Legno` per ogni lotto del boscaiolo e `+1,5` benessere.
+3. **Armatura del Banco di Pietra** (`quarry_shoring`): costo `6 Legno, 2 Pietra, 8 Moneta` →
+   `+1 Pietra` per ogni lotto di estrazione e `+1,5` benessere.
+4. **Manutenzione del Pozzo e della Piazza** (`well_maintenance`, ripetibile): costo
+   `4 Legno, 4 Pietra, 4 Moneta` → `+3,0` benessere a tutti gli abitanti.
+
+### 7. Regole implementate vs funzionalità future
+
+| Aspetto | Già implementato (`0.4.0-economy`) | Futuro (non ancora implementato) |
+| --- | --- | --- |
+| Risorse e inventari | `Cibo`, `Legno`, `Pietra`, `Moneta` intere non negative; magazzino villaggio, emporio e sacche NPC | Materie prime secondarie, utensili usurabili, logistica di trasporto fisico |
+| Produzione | Lotti orari legati a `Activity.WORKING`, luogo effettivo, prerequisiti postazione e bisogni | Stagionalità dei raccolti, catene multi-stadio (grano → farina → pane), qualità |
+| Consumo e scarsità | `1 Cibo` a pasto; carenze che riducono benessere e lasciano gli abitanti affamati senza mortalità | Malattie, emigrazione o mortalità opzionale in fasi avanzate |
+| Prezzi e mercato | Prezzi base fissi (`2, 3, 4`), baratto convalidato e intermediazione conservativa del mercante | Prezzi dinamici guidati da domanda/offerta, aste, rotte commerciali esterne |
+| Progetti comunitari | 4 progetti con costi in `Legno`, `Pietra`, `Moneta` e bonus di resa/benessere | Costruzione fisica di nuovi edifici 3D tramite cantieri multi-giorno |
+| Relazioni e politica | Strutture dati iniziali in `NpcRecord` | Evoluzione delle relazioni, fazioni, tasse, leggi e cronache (`Fase 3+`) |
 
 ## Dati e persistenza
 
@@ -269,11 +404,24 @@ ostacoli e luoghi irraggiungibili, simulazione di 240+ tick con bisogni che evol
 rispondono a orario e fame, sonno notturno, assenza di teletrasporti, determinismo e raggiungibilità
 di ogni luogo reale del villaggio.
 
+La suite economica (`TestEconomyInventory` + `TestEconomySimulation` + sezione `EconomyAndPanel` in
+`test_world_scene.gd`) verifica inoltre che:
+
+* nessuna risorsa diventi mai negativa;
+* le transazioni non valide siano rifiutate senza effetti collaterali né modifiche parziali;
+* la produzione dipenda dal lavoro effettivamente svolto e dai prerequisiti delle postazioni;
+* il commerciante faciliti gli scambi senza creare ricchezza dal nulla;
+* il consumo di cibo dipenda dal numero di abitanti e la scarsità incida sui bisogni senza
+  mortalità;
+* i riepiloghi di `EconomyPanel` corrispondano esattamente ai dati di `EconomySystem`;
+* l'avanzamento di più giorni produca risultati identici e ripetibili a parità di condizioni
+  iniziali.
+
 Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
 giocatore o presentazione degli NPC. È il livello che ha trovato i tre bug reali della fase
 precedente e i cinque di questa (inferenza da `Variant`, steccato sulla strada dei campi,
 precedenza degli operatori in una stringa di log, autoload nominati troppo presto dal runner,
 `null` in `ARRAY_INDEX`).
 
-Ultima esecuzione completa: **811 asserzioni di unità e 79 di integrazione, 0 fallite, 0 saltate**
+Ultima esecuzione completa: **918 asserzioni di unità e 96 di integrazione, 0 fallite, 0 saltate**
 (`bash tools/run_checks.sh` con Godot 4.7.2 headless compilato dai sorgenti).

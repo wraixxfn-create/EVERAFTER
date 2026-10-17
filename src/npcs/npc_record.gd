@@ -74,6 +74,8 @@ var last_activity_change_tick: int = 0
 var blocked_ticks: int = 0
 ## Used to rotate between free-time destinations without randomness.
 var leisure_cursor: int = 0
+## True when the last meal consumed a real food ration from the economy.
+var last_meal_satisfied: bool = true
 
 # Prepared for the future social and memory systems. Nothing here is simulated
 # beyond the seeded contents; the shapes are stable so later phases can grow
@@ -220,6 +222,7 @@ func to_dict() -> Dictionary:
 		"last_activity_change_tick": last_activity_change_tick,
 		"blocked_ticks": blocked_ticks,
 		"leisure_cursor": leisure_cursor,
+		"last_meal_satisfied": last_meal_satisfied,
 		"relationships": relationships.duplicate(true),
 		"memories": memories.duplicate(true),
 	}
@@ -254,6 +257,7 @@ func from_dict(data: Dictionary) -> void:
 	last_activity_change_tick = int(data.get("last_activity_change_tick", last_activity_change_tick))
 	blocked_ticks = int(data.get("blocked_ticks", blocked_ticks))
 	leisure_cursor = int(data.get("leisure_cursor", leisure_cursor))
+	last_meal_satisfied = bool(data.get("last_meal_satisfied", last_meal_satisfied))
 	relationships = data.get("relationships", {}).duplicate(true)
 	memories.clear()
 	for memory in data.get("memories", []):

@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://src/world/main_world.gd" id="1_world"]
 [ext_resource type="Script" path="res://src/world/environment/sky_rig.gd" id="2_sky"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://src/ui/scenes/diagnostics_hud.tscn" id="5_diaghud"]
 [ext_resource type="Script" path="res://src/world/npcs/npc_presenter.gd" id="6_npcpresenter"]
 [ext_resource type="PackedScene" path="res://src/ui/scenes/npc_panel.tscn" id="7_npcpanel"]
+[ext_resource type="PackedScene" path="res://src/ui/scenes/economy_panel.tscn" id="8_ecopanel"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.24, 0.44, 0.74, 1)
@@ -84,6 +85,8 @@ fov = 75.0
 far = 420.0
 
 [node name="WorldHud" parent="." instance=ExtResource("4_worldhud")]
+
+[node name="EconomyPanel" parent="." instance=ExtResource("8_ecopanel")]
 
 [node name="NpcPanel" parent="." instance=ExtResource("7_npcpanel")]
 

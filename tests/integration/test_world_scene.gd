@@ -40,7 +40,10 @@ static func check_structure(harness: TestHarness, world: Node3D) -> void:
 	harness.check(world != null, "main_world.tscn instantiated")
 	if world == null:
 		return
-	for node_name in ["Sky", "Terrain", "Village", "Player", "WorldHud", "DiagnosticsHud"]:
+	for node_name in [
+		"Sky", "Terrain", "Village", "Player", "WorldHud", "EconomyPanel",
+		"NpcPanel", "DiagnosticsHud"
+	]:
 		harness.check(world.get_node_or_null(node_name) != null, "world has a %s node" % node_name)
 	var village := world.get_node_or_null("Village") as Node3D
 	if village == null:
@@ -337,6 +340,81 @@ static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> 
 	)
 	if event_bus != null:
 		event_bus.emit_signal("npc_selected", "")
+
+
+## Economy and UI panel: verifies that the economy is registered with `Game`,
+## advances deterministically in the live world, and `EconomyPanel` displays
+## exact live data without independent counters.
+static func check_economy(harness: TestHarness, world: Node3D, tree: SceneTree) -> void:
+	harness.suite("EconomyAndPanel")
+	var economy: EconomySystem = world.get_economy_system()
+	var panel := world.get_node_or_null("EconomyPanel") as EconomyPanel
+	var game := _autoload(tree, "Game")
+	harness.check(economy != null, "the world exposes its economy system")
+	harness.check(panel != null, "the world contains the EconomyPanel")
+	if economy == null or panel == null:
+		return
+	harness.check(
+		game != null and game.call("get_economy_system") == economy,
+		"the economy system is registered with Game"
+	)
+
+	# Advance simulated time through daytime work shifts so production and
+	# consumption occur in the real village.
+	if game != null:
+		game.call("advance_simulation", 300)
+	await tree.process_frame
+	await tree.process_frame
+
+	for res_id in ResourceType.ALL_IDS:
+		harness.check_equals(
+			panel.get_displayed_amount(res_id),
+			economy.get_village_resource(res_id),
+			"EconomyPanel displays exact %s amount" % res_id
+		)
+	for mat_id in ResourceType.MATERIAL_IDS:
+		var expected_flow := "+%d / -%d" % [
+			economy.get_production(mat_id, true),
+			economy.get_consumption(mat_id, true),
+		]
+		harness.check_equals(
+			panel.get_displayed_flow_text(mat_id),
+			expected_flow,
+			"EconomyPanel displays exact %s flow (+prod / -cons)" % mat_id
+		)
+	harness.check_equals(
+		panel.get_displayed_shortages(),
+		"Carenze: %s" % EconomyRules.format_shortages(economy),
+		"EconomyPanel displays exact shortages summary"
+	)
+	harness.check_equals(
+		panel.get_displayed_projects(),
+		EconomyRules.format_projects(economy),
+		"EconomyPanel displays exact community project summary"
+	)
+	var recent := EconomyRules.recent_transactions(economy, 1, true)
+	if not recent.is_empty():
+		harness.check(
+			panel.get_displayed_transactions().contains(recent[0].reason),
+			"EconomyPanel displays recent important transactions"
+		)
+
+	# Mutate the underlying economy (e.g. a validated transfer) and verify the
+	# UI reflects the change on the very next refresh with no separate counter.
+	var food_before := economy.get_village_resource(ResourceType.FOOD)
+	if food_before >= 2:
+		harness.check(
+			economy.transfer_resource("village", "npc_001", ResourceType.FOOD, 2),
+			"transferring 2 Food to npc_001 succeeds"
+		)
+		panel.refresh_view()
+		harness.check_equals(
+			panel.get_displayed_amount(ResourceType.FOOD),
+			food_before - 2,
+			"EconomyPanel immediately reflects the updated village Food stock"
+		)
+		economy.transfer_resource("npc_001", "village", ResourceType.FOOD, 2)
+		panel.refresh_view()
 
 
 ## The village has to stay cheap enough for a GTX 1060 class GPU.
