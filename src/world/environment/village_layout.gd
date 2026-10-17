@@ -55,6 +55,9 @@ const ROAD_CLEARING_KINDS := [
 const PLAZA_RADIUS := 11.0
 const PLAZA_FALLOFF := 4.5
 const ROAD_WIDTH := 3.6
+## Half a fence is 1.5 m long; the extra margin keeps the gate wider than the
+## fence module so a 0.4 m player capsule and a 0.42 m NPC never clip a post.
+const FENCE_GATE_MARGIN := 1.6
 const ROAD_FALLOFF := 2.4
 const ROAD_STEP := 17.0
 const PLOT_FALLOFF := 2.6
@@ -375,10 +378,17 @@ func _build_pond() -> void:
 
 func _build_field_fence() -> void:
 	# A fenced paddock south-east of the plaza: reads as "farmland" at a glance.
+	# The road to the fields runs through the paddock, so the posts that would
+	# barricade the carriageway are skipped: the gap is the gate the farmers
+	# (and the player) walk through. Without it a 3 m fence box would cut the
+	# only road to `work_field` and the fields would be unreachable.
 	var corner := Vector2(-28.0, 22.0)
 	var direction := Vector2(1.0, 0.16).normalized()
+	var gate_clearance := ROAD_WIDTH * 0.5 + FENCE_GATE_MARGIN
 	for index in 9:
 		var position := corner + direction * float(index) * 3.0
+		if distance_to_roads(position) < gate_clearance:
+			continue
 		_add_placement(
 			KIND_FENCE, position, rad_to_deg(atan2(direction.x, direction.y)), 0, 1.0, 1.5
 		)

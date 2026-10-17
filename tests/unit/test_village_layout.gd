@@ -81,6 +81,18 @@ static func run_tests(harness: TestHarness) -> void:
 				on_road += 1
 	harness.check_equals(outside, 0, "nothing is placed outside the terrain")
 	harness.check_equals(on_road, 0, "no structure stands on a road")
+	# A fence is 3 m long and excluded from ROAD_CLEARING_KINDS because it may
+	# stand at the kerb. The paddock fence used to cut the road to the fields,
+	# which made the fields unreachable for the NPC route graph (and for the
+	# player): the layout now leaves a gate, so no fence may overlap a road.
+	var fence_on_road := 0
+	for fence in layout.get_placements_of_kind(VillageLayout.KIND_FENCE):
+		var clearance: float = layout.distance_to_roads(fence.position)
+		if clearance < VillageLayout.ROAD_WIDTH * 0.5 + 1.5:
+			fence_on_road += 1
+	harness.check_equals(
+		fence_on_road, 0, "the paddock fence leaves the road to the fields open"
+	)
 
 	var overlapping := _count_overlaps(layout)
 	harness.check_equals(overlapping, 0, "no two props overlap")

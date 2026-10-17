@@ -27,12 +27,14 @@ var _terrain: TerrainGenerator = null
 var _layout: VillageLayout = null
 var _materials: VillageMaterials = null
 var _areas: AreaRegistry = null
+var _npc_system: NpcSimulationSystem = null
 var _current_area := ""
 
 @onready var _sky_rig: Node = $Sky
 @onready var _terrain_mesh: MeshInstance3D = $Terrain/Mesh
 @onready var _terrain_collision: CollisionShape3D = $Terrain/Collision
 @onready var _village_root: Node3D = $Village
+@onready var _npc_presenter: NpcPresenter = $NPCs
 @onready var _player: PlayerExplorer = $Player
 
 
@@ -49,6 +51,7 @@ func _ready() -> void:
 	_build_terrain()
 	_build_village()
 	_configure_player(config)
+	_build_inhabitants(config)
 	GameLog.info(TAG, _build_summary())
 	EventBus.world_ready.emit("MainWorld")
 
@@ -76,6 +79,14 @@ func get_player() -> PlayerExplorer:
 	return _player
 
 
+func get_npc_system() -> NpcSimulationSystem:
+	return _npc_system
+
+
+func get_npc_presenter() -> NpcPresenter:
+	return _npc_presenter
+
+
 # --- construction ------------------------------------------------------------
 
 
@@ -91,6 +102,26 @@ func _build_village() -> void:
 	# The rig drives the window and lantern glow, so it needs the shared palette.
 	_sky_rig.set("village_materials", _materials)
 	GameLog.info(TAG, "village — %s" % builder.summary())
+
+
+func _build_inhabitants(config: GameConfig) -> void:
+	var records := NpcRoster.build(config.npc_population_size)
+	var places := VillageNpcPlaces.build(_layout, records)
+	var obstacles := VillageNpcPlaces.build_obstacles(_layout)
+	var route_graph := NpcRouteGraph.new(places, _layout.roads, obstacles)
+	_npc_system = NpcSimulationSystem.new(records, places, route_graph)
+	_npc_system.initialize(Game.get_tick())
+	if not Game.set_npc_system(_npc_system):
+		push_error("MainWorld: the NPC system could not be registered with Game.")
+	for problem in _npc_system.validate():
+		GameLog.warning(TAG, "inhabitants — %s" % problem)
+	_npc_presenter.configure(
+		_npc_system, _terrain, _player, config.npc_view_distance
+	)
+	GameLog.info(
+		TAG,
+		"inhabitants — %s; %s" % [_npc_system.summary(), _npc_system.validate()]
+	)
 
 
 func _configure_player(config: GameConfig) -> void:
@@ -122,15 +153,18 @@ func _publish_area() -> void:
 
 
 func _build_summary() -> String:
-	return (
-		"MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), %d named areas, spawn %s"
-		% [
-			_terrain.size_cells,
-			_terrain.size_cells,
-			_terrain.get_extent(),
-			_terrain.get_extent(),
-			_terrain.get_triangle_count(),
-			_areas.get_area_count(),
-			_player.global_position,
-		]
-	)
+	# Built as two pieces and formatted at the end: `%` binds tighter than `+`,
+	# so formatting an expression of concatenated strings silently feeds the
+	# argument array to the second half only.
+	var message := "MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), "
+	message += "%d named areas, %d inhabitants, spawn %s"
+	return message % [
+		_terrain.size_cells,
+		_terrain.size_cells,
+		_terrain.get_extent(),
+		_terrain.get_extent(),
+		_terrain.get_triangle_count(),
+		_areas.get_area_count(),
+		_npc_system.get_record_count() if _npc_system != null else 0,
+		_player.global_position,
+	]
