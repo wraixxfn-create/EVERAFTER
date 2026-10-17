@@ -28,6 +28,7 @@ var _layout: VillageLayout = null
 var _materials: VillageMaterials = null
 var _areas: AreaRegistry = null
 var _npc_system: NpcSimulationSystem = null
+var _economy_system: EconomySystem = null
 var _current_area := ""
 
 @onready var _sky_rig: Node = $Sky
@@ -83,6 +84,10 @@ func get_npc_system() -> NpcSimulationSystem:
 	return _npc_system
 
 
+func get_economy_system() -> EconomySystem:
+	return _economy_system
+
+
 func get_npc_presenter() -> NpcPresenter:
 	return _npc_presenter
 
@@ -115,6 +120,18 @@ func _build_inhabitants(config: GameConfig) -> void:
 		push_error("MainWorld: the NPC system could not be registered with Game.")
 	for problem in _npc_system.validate():
 		GameLog.warning(TAG, "inhabitants — %s" % problem)
+	_economy_system = EconomySystem.new(
+		_npc_system,
+		config.starting_village_food,
+		config.starting_village_wood,
+		config.starting_village_stone,
+		config.starting_village_coin
+	)
+	_economy_system.initialize(Game.get_tick())
+	if not Game.set_economy_system(_economy_system):
+		push_error("MainWorld: the economy system could not be registered with Game.")
+	for problem in _economy_system.validate():
+		GameLog.warning(TAG, "economy — %s" % problem)
 	_npc_presenter.configure(
 		_npc_system, _terrain, _player, config.npc_view_distance
 	)
@@ -122,6 +139,7 @@ func _build_inhabitants(config: GameConfig) -> void:
 		TAG,
 		"inhabitants — %s; %s" % [_npc_system.summary(), _npc_system.validate()]
 	)
+	GameLog.info(TAG, "economy — %s" % _economy_system.summary())
 
 
 func _configure_player(config: GameConfig) -> void:

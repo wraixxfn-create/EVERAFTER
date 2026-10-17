@@ -20,7 +20,7 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 
 @export_group("Project")
 @export var project_title: String = "EVERAFTER"
-@export var build_label: String = "0.3.0-npcs"
+@export var build_label: String = "0.4.0-economy"
 
 @export_group("Simulated time")
 ## Real seconds per logical tick at speed x1. With the default value the
@@ -63,6 +63,12 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 ## Distance at which an inhabitant gets a 3D view. This only affects
 ## representation: simulation updates every NPC regardless of this value.
 @export_range(10.0, 200.0) var npc_view_distance: float = 70.0
+
+@export_group("Economy")
+@export_range(0, 500) var starting_village_food: int = 24
+@export_range(0, 500) var starting_village_wood: int = 12
+@export_range(0, 500) var starting_village_stone: int = 10
+@export_range(0, 1000) var starting_village_coin: int = 60
 
 @export_group("Player")
 @export_range(0.5, 20.0) var player_walk_speed: float = 5.0
@@ -128,6 +134,14 @@ func validate() -> PackedStringArray:
 		problems.append("npc_population_size must be >= 0 (got %d)" % npc_population_size)
 	if npc_view_distance <= 0.0:
 		problems.append("npc_view_distance must be > 0 (got %s)" % npc_view_distance)
+	if starting_village_food < 0:
+		problems.append("starting_village_food must be >= 0 (got %d)" % starting_village_food)
+	if starting_village_wood < 0:
+		problems.append("starting_village_wood must be >= 0 (got %d)" % starting_village_wood)
+	if starting_village_stone < 0:
+		problems.append("starting_village_stone must be >= 0 (got %d)" % starting_village_stone)
+	if starting_village_coin < 0:
+		problems.append("starting_village_coin must be >= 0 (got %d)" % starting_village_coin)
 	if start_minute_of_day < 0 or start_minute_of_day >= SimulationClock.MINUTES_PER_DAY:
 		problems.append("start_minute_of_day out of range (got %d)" % start_minute_of_day)
 	if save_format_version < 1:

@@ -17,6 +17,7 @@ var loop: SimulationLoop = SimulationLoop.new()
 var _time_scale_index: int = 0
 var _day_cycle: DayCycleSystem = null
 var _npc_system: NpcSimulationSystem = null
+var _economy_system: EconomySystem = null
 
 
 func _ready() -> void:
@@ -123,6 +124,10 @@ func get_npc_system() -> NpcSimulationSystem:
 	return _npc_system
 
 
+func get_economy_system() -> EconomySystem:
+	return _economy_system
+
+
 # --- commands ---------------------------------------------------------------
 
 
@@ -140,6 +145,21 @@ func set_npc_system(system: NpcSimulationSystem) -> bool:
 	_npc_system = system
 	loop.register_system(system)
 	EventBus.npc_system_ready.emit()
+	return true
+
+
+## Registers the local economy system once the inhabitants have been created.
+func set_economy_system(system: EconomySystem) -> bool:
+	if system == null:
+		return false
+	if _economy_system == system:
+		return true
+	if _economy_system != null:
+		push_warning("Game: an economy system is already registered.")
+		return false
+	_economy_system = system
+	loop.register_system(system)
+	EventBus.economy_system_ready.emit()
 	return true
 
 

@@ -44,6 +44,8 @@ func _initialize() -> void:
 	TestNpcRouteGraph.run_tests(harness)
 	TestNpcSimulation.run_tests(harness)
 	TestVillageNpcPlaces.run_tests(harness)
+	TestEconomyInventory.run_tests(harness)
+	TestEconomySimulation.run_tests(harness)
 	harness.print_summary()
 
 	quit(1 if harness.failed_count() > 0 else 0)

@@ -6,17 +6,18 @@ Il mondo è abitato da personaggi con identità, bisogni, professioni, obiettivi
 Gli abitanti agiranno autonomamente, la società evolverà e gli eventi lasceranno conseguenze nel tempo.
 Il gioco deve funzionare **offline**, senza servizi a pagamento e senza server obbligatori.
 
-Questo repository contiene oggi la **fase NPC — primi abitanti autonomi**, costruita sopra il
-villaggio esplorabile della Fase 1: un ambiente fantasy medievale a codice, camminabile in prima
-persona, con terreno procedurale e ciclo giorno/notte, abitato da **10 persone** (numero
-configurabile) che hanno un nome, un mestiere, bisogni, una casa, un posto di lavoro e una routine
-giornaliera. La loro simulazione gira anche quando nessuno li guarda.
+Questo repository contiene oggi la **fase Economia locale (`0.4.0-economy`)**, costruita sopra il
+villaggio esplorabile e gli abitanti autonomi delle fasi precedenti: un ambiente fantasy medievale
+a codice, camminabile in prima persona, con terreno procedurale e ciclo giorno/notte, abitato da
+**10 persone** (numero configurabile) che hanno un nome, un mestiere, bisogni, una casa, un posto
+di lavoro, una routine giornaliera e un **ciclo economico delle risorse** (`Cibo`, `Legno`,
+`Pietra`, `Moneta`). La simulazione gira anche quando nessuno li guarda.
 
-> Stato onesto del progetto: **esistono gli NPC e la loro routine; non esistono ancora economia,
-> relazioni simulate, politica, cronache o salvataggi.** Le strutture dati per relazioni e ricordi
-> sono seminate, ma non c'è ancora un sistema sociale. Sono progettate in
-> [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementate. La fase successiva (economia,
-> `src/economy/`) non è iniziata.
+> Stato onesto del progetto: **esistono il villaggio 3D, gli NPC autonomi e il primo sistema
+> economico locale; non esistono ancora mercati dinamici complessi, finanza avanzata, relazioni
+> simulate, politica, cronache o salvataggi.** Le strutture dati per relazioni e ricordi sono
+> seminate, ma non c'è ancora un sistema sociale o politico. Sono progettati in
+> [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementati.
 
 ---
 
@@ -134,8 +135,8 @@ Nel villaggio vivono **10 abitanti iniziali**, configurabili in un solo punto
 (`npc_population_size` in `config/game_config.tres`, da 0 a 16). Ognuno ha:
 
 * un **ID stabile** (`npc_001` … `npc_016`), un nome e un'età adulta;
-* una **professione** (agricoltore, locandiera, mercante, cancelliera, fabbro, guaritrice,
-  pescatore, tessitrice, falegname, fornaia, …) e un **posto di lavoro** con un orario;
+* **professione** (agricoltore, raccoglitrice, pescatore, panettiera, locandiera, boscaiolo,
+  cavatore, mercante, cancelliera, tessitrice, …) e un **posto di lavoro** con un orario;
 * una **personalità** numerica (diligenza, socievolezza, curiosità, calma);
 * tre **bisogni** (energia, fame, benessere) che cambiano a ogni minuto simulato;
 * una **casa** e una posizione sul terreno;
@@ -156,7 +157,48 @@ tre barre dei bisogni, riepilogo). Si può selezionare cliccando la capsula oppu
 nome dall'elenco: l'elenco funziona anche per chi è fuori portata visiva.
 
 Il pannello e le capsule leggono soltanto i `NpcRecord`; non li modificano. La simulazione vive in
-`src/npcs/` e non conosce né la scena 3D né l'interfaccia.
+`src/npcs/` e `src/economy/` e non conosce né la scena 3D né l'interfaccia.
+
+### Economia locale e ciclo delle risorse (novità di questa fase)
+
+Il modulo `src/economy/` collega in modo deterministico il lavoro degli abitanti alle risorse della
+comunità:
+
+* **Quattro risorse intere non negative** (`ResourceType`): **Cibo** (`food`, prezzo base `2`),
+  **Legno** (`wood`, prezzo base `3`), **Pietra** (`stone`, prezzo base `4`) e **Moneta** (`coin`,
+  unità `1`).
+* **Inventari convalidati** (`ResourceInventory`): magazzino collettivo del villaggio (`village`,
+  scorte iniziali configurabili: `24 Cibo`, `12 Legno`, `10 Pietra`, `60 Moneta`), sacche
+  individuali degli abitanti (`npc_001` … `npc_016`, `4 Moneta` iniziali) ed emporio di scambio del
+  mercato (`market`, scorte finite). Nessuna operazione può portare una risorsa sotto zero o
+  modificare parzialmente lo stato in caso di errore.
+* **Produzione legata al lavoro reale**: un lavoratore accumula progresso produttivo (`+1` minuto
+  lavorato per tick) **solo** mentre si trova fisicamente nel proprio luogo di lavoro con
+  `Activity.WORKING`, prerequisiti della postazione soddisfatti (`workplace_prerequisites`), fame
+  `< 92` ed energia `> 5`:
+  * **Agricoltore** (`farmer`): `60` min lavorati → `+3 Cibo` (`+2 Moneta` di compenso dalla cassa
+    comune);
+  * **Raccoglitrice / Pescatore / Panettiera** (`forager`, `fisher`, `baker`): `60` min lavorati →
+    `+2 Cibo` (`+1 Moneta`);
+  * **Locandiera** (`innkeeper`): `75` min lavorati → `+2 Cibo` (`+1 Moneta`);
+  * **Boscaiolo** (`woodcutter`): `60` min lavorati → `+2 Legno` (`+2 Moneta`);
+  * **Cavatore / addetto all'estrazione** (`quarry_worker`): `60` min lavorati → `+2 Pietra`
+    (`+2 Moneta`);
+  * **Commerciante** (`merchant`): ogni `60` min lavorati al mercato facilita gli scambi tra sacche
+    individuali, magazzino del villaggio ed emporio a prezzi base fissi, **senza mai creare risorse
+    o moneta dal nulla**.
+* **Consumo alimentare e carenze**: ogni pasto (`Activity.EATING` o razione serale delle `19:00`)
+  consuma `1 Cibo` (dalla sacca personale o dal magazzino del villaggio, versando `2 Moneta` alla
+  cassa comune se disponibili). Se il cibo è esaurito (`0 Cibo`), il pasto fallisce senza portare le
+  scorte in negativo, registra una carenza, riduce il benessere (`-4,5` immediati e deriva negativa)
+  e impedisce alla fame di scendere sotto `76,0`, **senza introdurre mortalità né carestie
+  irreversibili**.
+* **Progetti comunitari**: `Legno`, `Pietra` e `Moneta` vengono impiegati in progetti del villaggio
+  (*Rinforzo del Granaio Comune*, *Cavalletto della Segheria*, *Armatura del Banco di Pietra*,
+  *Manutenzione del Pozzo*) che migliorano la resa produttiva (`+1` per lotto) o il benessere.
+* **Pannello economico** (`EconomyPanel`, a sinistra sotto `WorldHud`): mostra scorte disponibili,
+  produzione e consumo del periodo (`+prod / -cons`), stato dei progetti, carenze attive e ultime
+  transazioni importanti leggendo direttamente `EconomySystem`.
 
 ### Costo misurato della scena
 
@@ -202,6 +244,12 @@ src/
     npc_roster.gd                tabella fissa di 16 abitanti, nomi stabili
     npc_route_graph.gd           rete di waypoint su strade e luoghi, con ostacoli reali
     npc_simulation_system.gd     macchina a stati delle routine, movimento, bisogni
+  economy/                     economia locale e ciclo delle risorse (pura logica, nessun nodo)
+    resource_type.gd             tipi di risorsa (cibo, legno, pietra, moneta), prezzi e soglie
+    resource_inventory.gd        inventario intero non negativo con operazioni atomiche
+    economy_transaction.gd       registro tipizzato delle transazioni e dei rifiuti
+    economy_rules.gd             regole di produzione, prerequisiti, progetti e riepiloghi
+    economy_system.gd            sistema economico deterministico (produzione, consumo, scambi)
   world/                       mondo 3D
     scenes/main_world.tscn       scena principale
     main_world.gd                radice di composizione: terreno, villaggio, abitanti, spawn
@@ -226,16 +274,19 @@ src/
     diagnostics_hud.gd
     scenes/npc_panel.tscn        scheda dell'abitante selezionato
     npc_panel.gd
+    scenes/economy_panel.tscn    pannello economico del villaggio
+    economy_panel.gd
 tests/
   run_tests.gd                 runner di unità (exit code 0/1)
   run_world_tests.gd           runner di integrazione (avvia la scena, interroga la fisica)
   harness/test_harness.gd      micro harness di asserzioni
   unit/                        clock, loop, day cycle, terreno, config, layout, aree,
                                materiali, baker, direzione artistica, dati NPC, roster,
-                               rete di percorso, simulazione NPC, luoghi del villaggio
+                               rete di percorso, simulazione NPC, luoghi del villaggio,
+                               inventari/transazioni ed economia simulata
   integration/
     test_world_scene.gd        scena, terreno vs fisica, collisioni, budget, abitanti,
-                               selezione e pannello
+                               selezione, pannello NPC e pannello economico
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
@@ -301,16 +352,16 @@ Nessun numero qui sotto è stimato.
 
 | Controllo | Strumento | Esito |
 | --- | --- | --- |
-| Sintassi di tutti i 51 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
+| Sintassi di tutti i 59 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
 | Stile GDScript | `gdlint` (gdtoolkit 4.5.0) | **eseguito — 0 problemi** |
 | Coerenza progetto: scena principale, autoload, `res://`, ext/sub resource, percorsi `$Nodo` degli script rispetto alle scene, azioni di input, `.gitignore` | `tools/check_project.py` | **eseguito — OK** |
-| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **eseguito — 811 passati, 0 falliti, 0 saltati** |
-| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **eseguito — 79 passati, 0 falliti, 0 saltati** |
+| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **eseguito — 918 passati, 0 falliti, 0 saltati** |
+| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **eseguito — 96 passati, 0 falliti, 0 saltati** |
 | Resa visiva su GPU (come *appare* il villaggio e come si muovono le capsule) | — | **NON eseguita**: l'ambiente di verifica non ha GPU. Geometria, materiali e collisioni sono verificati; l'immagine finale no |
 | Prova su Windows con Godot desktop, selezione col mouse e pannello | — | **NON eseguita**: da fare in revisione |
 
 `bash tools/run_checks.sh` esegue tutti e cinque i controlli e termina con
-`All executed checks passed.` (in questa sessione: 811 + 79 asserzioni, zero errori di script).
+`All executed checks passed.` (in questa sessione: 918 + 96 asserzioni, zero errori di script).
 
 I controlli statici non sostituiscono l'esecuzione: coprono sintassi, stile, percorsi delle risorse
 e coerenza dei nodi, non il comportamento. La suite di unità contiene le prove di determinismo,
@@ -383,11 +434,12 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
 
 ## 8. Limiti noti di questa fase
 
-* **Gli NPC non hanno economia**: nessun inventario, prezzo, salario, scambio o produzione. La
-  fame si soddisfa in locanda, al mercato o in casa, senza moneta. È la fase successiva,
-  deliberatamente non iniziata.
-* **Nessuna simulazione sociale**: relazioni e ricordi esistono come dati iniziali (e sono
-  serializzati), ma nessuna regola li modifica. Non ci sono fazioni, leggi, cronache o eventi.
+* **Economia locale a prezzi base fissi**: sono implementati inventari, produzione da lavoro,
+  consumo alimentare, scambi tramite mercante e progetti comunitari; **non** esistono ancora prezzi
+  dinamici da domanda/offerta complessa, prestiti, debito, tassazione o mercati multi-insediamento.
+* **Nessuna simulazione sociale o politica**: relazioni e ricordi esistono come dati iniziali (e
+  sono serializzati), ma nessuna regola li modifica ancora. Non ci sono fazioni, leggi, cronache o
+  eventi politici.
 * **La memoria non è un sistema**: i ricordi sono un elenco seminato, non un registro che cresce
   con le azioni.
 * **Nessun interno**: le case sono volumi chiusi con una scatola di collisione. Porte e finestre

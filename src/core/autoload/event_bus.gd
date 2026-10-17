@@ -39,6 +39,10 @@ signal mouse_capture_changed(is_captured: bool)
 ## simulation. The UI listens once instead of polling a null system at boot.
 signal npc_system_ready
 
+## Emitted by the `Game` autoload when the world has registered its economy
+## simulation.
+signal economy_system_ready
+
 ## Emitted by the NPC presenter (click in the world) and by the observation
 ## panel (list selection). Carries a plain NPC id; subscribers query the
 ## simulation for the data they need.

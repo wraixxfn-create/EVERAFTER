@@ -59,17 +59,41 @@ mano sulle strade; è verificabile e deterministica, ma non conosce il traffico 
 Il costo per tick è lineare nella popolazione (10 record, nessuna allocazione di nodi) e va
 misurato quando la popolazione crescerà.
 
-## Fase 2 — Economia minima (`src/economy`) — **non iniziata**
+## Fase 2 — Economia locale (`src/economy`) ✅ (implementata in `0.4.0-economy`)
 
-**Obiettivo**: produrre, consumare, scambiare; la scarsità ha conseguenze.
+**Obiettivo**: produrre, consumare, scambiare; la scarsità ha conseguenze sui bisogni degli
+abitanti.
 
-* Risorse tipizzate (cibo, legname, pietra, manufatti) e inventari per NPC e per magazzini.
-* Produzione legata al lavoro svolto nella routine della Fase 1.
-* Scambio diretto e prezzi derivati da domanda/offerta locale (nessun RNG nei prezzi).
-* Conseguenze visibili: carestia, scorte esaurite, NPC che cambiano mestiere.
+Consegnato in `0.4.0-economy`:
 
-**Criteri di accettazione**: 30 giorni simulati in headless riproducibili, con bilancio delle
-risorse verificato da un test (nulla creato o distrutto senza una causale registrata).
+* **Risorse tipizzate intere non negative** (`ResourceType`: `food`, `wood`, `stone`, `coin`) con
+  prezzi base documentati (`2, 3, 4, 1`) e soglie di carenza (`8, 4, 4, 6`).
+* **Inventari atomici e convalidati** (`ResourceInventory`): magazzino collettivo del villaggio
+  (`village`), sacche individuali degli abitanti (`npc_001` … `npc_016`) ed emporio finito del
+  mercato (`market`). Tutte le operazioni non valide vengono rifiutate senza modifiche parziali né
+  valori negativi.
+* **Produzione legata al lavoro effettivo** (`EconomyRules`, `EconomySystem`):
+  * *Agricoltore / raccoglitrice / pescatore / panettiera / locandiera* producono `Cibo`;
+  * *Boscaiolo* produce `Legno`;
+  * *Cavatore (addetto all'estrazione)* produce `Pietra`;
+  * *Commerciante* facilita gli scambi tra sacche, magazzino ed emporio a prezzi base fissi senza
+    creare ricchezza dal nulla.
+  Se un lavoratore dorme, cammina, è esausto o ha la postazione non pronta, non produce.
+* **Consumo alimentare e carenze**: ogni pasto consuma `1 Cibo`; quando il cibo scarseggia, i pasti
+  non soddisfatti riducono il benessere e lasciano la fame alta (`>= 76`), senza mortalità né
+  carestie irreversibili.
+* **Progetti comunitari**: 4 progetti del villaggio che impiegano `Legno`, `Pietra` e `Moneta` per
+  aumentare la resa produttiva o il benessere.
+* **Pannello economico (`EconomyPanel`)**: mostra in tempo reale scorte, produzione/consumo del
+  periodo, carenze, progetti e transazioni recenti leggendo direttamente `EconomySystem`.
+
+**Funzionalità economiche future (non ancora implementate)**: prezzi dinamici guidati da domanda e
+offerta, catene produttive multi-stadio, usura degli utensili, credito/debito e commercio tra più
+insediamenti.
+
+**Criteri di accettazione verificati**: simulazione multi-giorno deterministica e ripetibile in
+headless, conservazione delle risorse verificata dai test (`TestEconomyInventory` e
+`TestEconomySimulation`), assenza di valori negativi e corrispondenza esatta tra UI e stato.
 
 ## Fase 3 — Relazioni (`src/relationships`)
 
