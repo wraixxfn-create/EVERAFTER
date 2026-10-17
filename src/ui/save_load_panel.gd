@@ -60,6 +60,9 @@ func toggle() -> void:
 func _show_panel() -> void:
 	_visible = true
 	_root.visible = true
+	# Clear stale feedback only when the panel opens: `_refresh()` also runs
+	# right after Save/Load/New and must not wipe their result message.
+	_message_label.text = ""
 	_refresh()
 	# Release mouse so the panel is clickable.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -239,7 +242,6 @@ func _refresh() -> void:
 	if _load_button != null:
 		_load_button.disabled = not bool(info.get("exists", false))
 	_refresh_entries()
-	_message_label.text = ""
 
 
 func _refresh_entries() -> void:
@@ -334,7 +336,8 @@ func _on_load_pressed() -> void:
 	_confirm_save = false
 	_confirm_dialog.dialog_text = (
 		"Caricare l'ultimo salvataggio? I progressi non salvati andranno persi.\n"
-		"Il mondo verrà ricaricato dal menu principale (questa versione non ricarica la scena senza riavvio)."
+		+ "Il mondo verrà ricaricato dal menu principale "
+		+ "(questa versione non ricarica la scena senza riavvio)."
 	)
 	_confirm_dialog.popup_centered()
 
@@ -343,7 +346,7 @@ func _on_new_pressed() -> void:
 	_confirm_save = false
 	_confirm_dialog.dialog_text = (
 		"Eliminare il salvataggio e cominciare un nuovo mondo?\n"
-		"Dovrai riavviare la partita per vedere il nuovo villaggio."
+		+ "Dovrai riavviare la partita per vedere il nuovo villaggio."
 	)
 	_confirm_dialog.popup_centered()
 

@@ -55,7 +55,7 @@ static func _codec_tests(h: TestHarness) -> void:
 	var nd: Dictionary = rn[1]
 	h.check_equals(String(nd["label"]), "casa", "string preserved in nested dict")
 	h.check_equals(int(nd["count"]), 7, "int preserved in nested dict")
-	h.check(bool(nd["flag"]), true, "bool preserved in nested dict")
+	h.check(bool(nd["flag"]), "bool preserved in nested dict")
 	var np: Vector2 = nd["pos"]
 	h.check_almost(np.x, 10.0, 0.001, "Vector2 in nested dict preserved")
 
@@ -68,7 +68,14 @@ static func _manager_tests(h: TestHarness) -> void:
 	_ensure_dir_clean()
 	var config := GameConfig.new()
 	config.npc_population_size = 6
-	var (loop, npc, economy, social, book, watcher) := _build_world(config)
+	# GDScript has no tuple unpacking: read the world parts by index.
+	var world := _build_world(config)
+	var loop: SimulationLoop = world[0]
+	var npc: NpcSimulationSystem = world[1]
+	var economy: EconomySystem = world[2]
+	var social: SocialSystem = world[3]
+	var book: ChronicleBook = world[4]
+	var watcher: ChronicleWatcher = world[5]
 	var sm := SaveManager.new(config)
 	sm.save_directory = TEST_DIR
 	sm.save_filename = "roundtrip.json"
@@ -98,7 +105,13 @@ static func _manager_tests(h: TestHarness) -> void:
 	h.check_equals(sm.last_save_population, before_records, "save stores population")
 
 	# Build a fresh world of the same size and load the file into it.
-	var (loop2, npc2, economy2, social2, book2, watcher2) := _build_world(config)
+	var world2 := _build_world(config)
+	var loop2: SimulationLoop = world2[0]
+	var npc2: NpcSimulationSystem = world2[1]
+	var economy2: EconomySystem = world2[2]
+	var social2: SocialSystem = world2[3]
+	var book2: ChronicleBook = world2[4]
+	var watcher2: ChronicleWatcher = world2[5]
 	var sm2 := SaveManager.new(config)
 	sm2.save_directory = TEST_DIR
 	sm2.save_filename = "roundtrip.json"
@@ -206,7 +219,7 @@ static func _build_world(config: GameConfig) -> Array:
 	loop.set_start_time(config.start_minute_of_day)
 	var records := NpcRoster.build(config.npc_population_size)
 	var places := _make_simple_places(records)
-	var obstacles: Array = []
+	var obstacles: Array[NpcRouteGraph.Obstacle] = []
 	var route := NpcRouteGraph.new(places, _make_simple_roads(), obstacles)
 	var npc := NpcSimulationSystem.new(records, places, route)
 	npc.initialize(loop.clock.tick)

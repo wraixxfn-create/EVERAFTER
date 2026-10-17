@@ -35,13 +35,13 @@ static func encode(value: Variant) -> Variant:
 			return value
 		TYPE_VECTOR2:
 			var v: Vector2 = value
-			return {\"__type__\": \"v2\", \"x\": v.x, \"y\": v.y}
+			return {"__type__": "v2", "x": v.x, "y": v.y}
 		TYPE_VECTOR3:
 			var v: Vector3 = value
-			return {\"__type__\": \"v3\", \"x\": v.x, \"y\": v.y, \"z\": v.z}
+			return {"__type__": "v3", "x": v.x, "y": v.y, "z": v.z}
 		TYPE_COLOR:
 			var c: Color = value
-			return {\"__type__\": \"c\", \"r\": c.r, \"g\": c.g, \"b\": c.b, \"a\": c.a}
+			return {"__type__": "c", "r": c.r, "g": c.g, "b": c.b, "a": c.a}
 		TYPE_ARRAY:
 			var out: Array = []
 			for item in (value as Array):
@@ -58,7 +58,7 @@ static func encode(value: Variant) -> Variant:
 			var points: Array = []
 			for v in arr:
 				points.append([v.x, v.y])
-			return {\"__type__\": \"pv2a\", \"v\": points}
+			return {"__type__": "pv2a", "v": points}
 		TYPE_PACKED_STRING_ARRAY:
 			var sa: PackedStringArray = value
 			var outs: Array = []
@@ -75,13 +75,13 @@ static func encode(value: Variant) -> Variant:
 			var v3arr: Array = []
 			for v in value:
 				v3arr.append(encode(v))
-			return {\"__type__\": \"pv3a\", \"v\": v3arr}
+			return {"__type__": "pv3a", "v": v3arr}
 		_:
 			# Unknown types: fall back to their string representation. This
 			# means saves survive the addition of new types in the future:
 			# they may lose that value on load (decoder returns the string),
 			# but they do not fail to parse entirely.
-			push_warning(\"JsonCodec: tipo non gestito nella codifica: %s\" % typeof(value))
+			push_warning("JsonCodec: tipo non gestito nella codifica: %s" % typeof(value))
 			return str(value)
 
 
@@ -99,34 +99,34 @@ static func decode(value: Variant) -> Variant:
 			return out
 		TYPE_DICTIONARY:
 			var d: Dictionary = value
-			if d.has(\"__type__\"):
-				var tag := String(d[\"__type__\"])
+			if d.has("__type__"):
+				var tag := String(d["__type__"])
 				match tag:
-					\"v2\":
-						return Vector2(float(d.get(\"x\", 0.0)), float(d.get(\"y\", 0.0)))
-					\"v3\":
+					"v2":
+						return Vector2(float(d.get("x", 0.0)), float(d.get("y", 0.0)))
+					"v3":
 						return Vector3(
-							float(d.get(\"x\", 0.0)),
-							float(d.get(\"y\", 0.0)),
-							float(d.get(\"z\", 0.0))
+							float(d.get("x", 0.0)),
+							float(d.get("y", 0.0)),
+							float(d.get("z", 0.0))
 						)
-					\"c\":
+					"c":
 						return Color(
-							float(d.get(\"r\", 0.0)),
-							float(d.get(\"g\", 0.0)),
-							float(d.get(\"b\", 0.0)),
-							float(d.get(\"a\", 1.0))
+							float(d.get("r", 0.0)),
+							float(d.get("g", 0.0)),
+							float(d.get("b", 0.0)),
+							float(d.get("a", 1.0))
 						)
-					\"pv2a\":
+					"pv2a":
 						var arr: PackedVector2Array = PackedVector2Array()
-						for point in d.get(\"v\", []):
+						for point in d.get("v", []):
 							var p = point as Array
 							if p.size() >= 2:
 								arr.append(Vector2(float(p[0]), float(p[1])))
 						return arr
-					\"pv3a\":
+					"pv3a":
 						var arr3: PackedVector3Array = PackedVector3Array()
-						for point in d.get(\"v\", []):
+						for point in d.get("v", []):
 							var dp = decode(point)
 							if typeof(dp) == TYPE_VECTOR3:
 								arr3.append(dp)
@@ -142,23 +142,19 @@ static func decode(value: Variant) -> Variant:
 
 ## Encodes [param data], serialises it to pretty-printed JSON.
 static func to_json(data: Variant) -> String:
-	return JSON.stringify(encode(data), \"\\t\")
+	return JSON.stringify(encode(data), "\t")
 
 
 ## Parses [param text] as JSON and decodes the result. Returns a tuple
 ## `[ok, value, error_string]` so callers can distinguish parse errors from
 ## successful null values.
 static func from_json(text: String) -> Array:
-	var parsed: Variant = JSON.parse_string(text)
-	if JSON.get_parse_error() != OK and parsed == null:
-		return [false, null, JSON.get_error_message()]
-	# Godot 4.3+ sets a parse error code even on success in some edge cases;
-	# treat a non-null result as a successful parse.
-	if parsed == null:
-		# \"null\" is a valid JSON value too; check whether the text trimmed is
-		# literally the word null.
-		var t := text.strip_edges()
-		if t == \"null\":
-			return [true, null, \"\"]
-		return [false, null, \"JSON vuoto\"]
-	return [true, decode(parsed), \"\"]
+	if text.strip_edges().is_empty():
+		return [false, null, "JSON vuoto"]
+	# `JSON.parse_string()` cannot tell a parse error from a literal `null`,
+	# and the error accessors are instance methods, so use a JSON instance.
+	var json := JSON.new()
+	var err := json.parse(text)
+	if err != OK:
+		return [false, null, "%s (riga %d)" % [json.get_error_message(), json.get_error_line()]]
+	return [true, decode(json.data), ""]

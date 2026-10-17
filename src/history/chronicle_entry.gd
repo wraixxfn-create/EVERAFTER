@@ -31,8 +31,8 @@ enum Category {
 const IMPORTANCE_MIN := 0
 const IMPORTANCE_MAX := 100
 
-## Stable id across saves (\"chr_000042\"), assigned by `ChronicleBook`.
-var id: String = \"\"
+## Stable id across saves ("chr_000042"), assigned by `ChronicleBook`.
+var id: String = ""
 ## When the entry refers to, in simulated time.
 var day: int = 1
 var minute_of_day: int = 0
@@ -44,7 +44,7 @@ var category: int = Category.MILESTONE
 var subject_ids: PackedStringArray = PackedStringArray()
 var resource_ids: PackedStringArray = PackedStringArray()
 ## Human readable description in Italian, already final when appended.
-var summary: String = \"\"
+var summary: String = ""
 ## 0..100, drives retention policies and display ordering.
 var importance: int = 0
 ## Optional structured details (e.g. amounts produced, well-being change).
@@ -54,20 +54,20 @@ var details: Dictionary = {}
 func category_label() -> String:
 	match category:
 		Category.PRODUCTION:
-			return \"Produzione\"
+			return "Produzione"
 		Category.SHORTAGE:
-			return \"Carenza\"
+			return "Carenza"
 		Category.HELP:
-			return \"Aiuto\"
+			return "Aiuto"
 		Category.RELATIONSHIP:
-			return \"Relazione\"
+			return "Relazione"
 		Category.PROJECT:
-			return \"Progetto\"
+			return "Progetto"
 		Category.MILESTONE:
-			return \"Tappa\"
+			return "Tappa"
 		Category.SYSTEM:
-			return \"Sistema\"
-	return \"Altro\"
+			return "Sistema"
+	return "Altro"
 
 
 ## True for entries that retention policies protect more aggressively.
@@ -89,41 +89,41 @@ func is_valid() -> bool:
 
 func to_dict() -> Dictionary:
 	return {
-		\"id\": id,
-		\"day\": day,
-		\"minute_of_day\": minute_of_day,
-		\"tick\": tick,
-		\"category\": category,
-		\"subject_ids\": subject_ids.duplicate(),
-		\"resource_ids\": resource_ids.duplicate(),
-		\"summary\": summary,
-		\"importance\": importance,
-		\"details\": details.duplicate(true),
+		"id": id,
+		"day": day,
+		"minute_of_day": minute_of_day,
+		"tick": tick,
+		"category": category,
+		"subject_ids": subject_ids.duplicate(),
+		"resource_ids": resource_ids.duplicate(),
+		"summary": summary,
+		"importance": importance,
+		"details": details.duplicate(true),
 	}
 
 
 func from_dict(data: Dictionary) -> void:
-	id = String(data.get(\"id\", id))
-	day = maxi(int(data.get(\"day\", day)), 1)
+	id = String(data.get("id", id))
+	day = maxi(int(data.get("day", day)), 1)
 	minute_of_day = clampi(
-		int(data.get(\"minute_of_day\", minute_of_day)), 0, SimulationClock.MINUTES_PER_DAY - 1
+		int(data.get("minute_of_day", minute_of_day)), 0, SimulationClock.MINUTES_PER_DAY - 1
 	)
-	tick = maxi(int(data.get(\"tick\", tick)), 0)
-	category = int(data.get(\"category\", category))
+	tick = maxi(int(data.get("tick", tick)), 0)
+	category = int(data.get("category", category))
 	subject_ids = PackedStringArray()
-	for sid in data.get(\"subject_ids\", []):
+	for sid in data.get("subject_ids", []):
 		subject_ids.append(String(sid))
 	resource_ids = PackedStringArray()
-	for rid in data.get(\"resource_ids\", []):
+	for rid in data.get("resource_ids", []):
 		resource_ids.append(String(rid))
-	summary = String(data.get(\"summary\", summary))
+	summary = String(data.get("summary", summary))
 	importance = clampi(
-		int(data.get(\"importance\", importance)), IMPORTANCE_MIN, IMPORTANCE_MAX
+		int(data.get("importance", importance)), IMPORTANCE_MIN, IMPORTANCE_MAX
 	)
-	details = (data.get(\"details\", {}) as Dictionary).duplicate(true)
+	details = (data.get("details", {}) as Dictionary).duplicate(true)
 
 
 func _to_string() -> String:
-	return \"giorno %d %s [%s] %s\" % [
+	return "giorno %d %s [%s] %s" % [
 		day, SimulationClock.format_minutes(minute_of_day), category_label(), summary
 	]
