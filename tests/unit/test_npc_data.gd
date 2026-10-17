@@ -98,8 +98,7 @@ static func _test_record(harness: TestHarness) -> void:
 	record.path = PackedVector2Array([Vector2(3, -4), Vector2(10, 2)])
 	record.needs = NpcNeeds.new(55.0, 72.0, 48.0)
 	record.personality = NpcPersonality.new(80, 30, 60, 70)
-	record.relationships["npc_other"] = {"kind": "amico", "affinity": 30, "familiarity": 40}
-	record.memories.append({"kind": "test", "text": "Una memoria.", "tick": 2})
+	record.origin_note = "Ricorda il primo raccolto andato a male."
 	record.set_goal(NpcRecord.Goal.WORK, "test")
 	record.set_activity(NpcRecord.Activity.WORKING, 12)
 	record.has_destination = true
@@ -111,8 +110,7 @@ static func _test_record(harness: TestHarness) -> void:
 	harness.check(record.activity_label().contains("mercante"), "activity label uses the job")
 	harness.check(record.summary_text().contains("Prova Vettori"), "summary names the NPC")
 	harness.check(record.destination_place_name == "Piazza", "destination name is stored")
-	harness.check_equals(record.get_relationship_count(), 1, "seeded relationships are countable")
-	harness.check_equals(record.get_memory_count(), 1, "seeded memories are countable")
+	harness.check(not record.origin_note.is_empty(), "the background note is stored on the record")
 
 	var snapshot := record.to_dict()
 	var restored := NpcRecord.new()
@@ -124,9 +122,9 @@ static func _test_record(harness: TestHarness) -> void:
 	harness.check_almost(restored.needs.hunger, record.needs.hunger, 0.0001, "needs survive")
 	harness.check_equals(restored.path, record.path, "path survives a round-trip")
 	harness.check_equals(
-		restored.get_relationship_count(), 1, "relationships survive a round-trip"
+		restored.origin_note, record.origin_note, "the background note survives a round-trip"
 	)
-	restored.relationships.clear()
-	harness.check_equals(
-		record.get_relationship_count(), 1, "round-trip relationships are independent"
+	restored.origin_note = ""
+	harness.check_not_equals(
+		record.origin_note, restored.origin_note, "the round-trip is a copy, not an alias"
 	)

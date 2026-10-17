@@ -74,6 +74,7 @@ func _run() -> void:
 	_tests.call("check_budget", _harness, _world)
 	await _tests.call("check_npcs", _harness, _world, self)
 	await _tests.call("check_economy", _harness, _world, self)
+	await _tests.call("check_social", _harness, _world, self)
 	_tests.call(
 		"check_terrain_collision", _harness, _world, root.world_3d.direct_space_state
 	)

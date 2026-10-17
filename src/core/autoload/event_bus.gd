@@ -43,6 +43,10 @@ signal npc_system_ready
 ## simulation.
 signal economy_system_ready
 
+## Emitted by the `Game` autoload when the world has registered the social
+## simulation (relationships, interactions and memories).
+signal social_system_ready
+
 ## Emitted by the NPC presenter (click in the world) and by the observation
 ## panel (list selection). Carries a plain NPC id; subscribers query the
 ## simulation for the data they need.

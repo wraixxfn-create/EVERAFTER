@@ -77,26 +77,16 @@ var leisure_cursor: int = 0
 ## True when the last meal consumed a real food ration from the economy.
 var last_meal_satisfied: bool = true
 
-# Prepared for the future social and memory systems. Nothing here is simulated
-# beyond the seeded contents; the shapes are stable so later phases can grow
-# into them without a save-format break.
-## other_npc_id -> {"kind": String, "affinity": int, "familiarity": int}
-var relationships: Dictionary = {}
-## [{ "kind": String, "text": String, "tick": int }]
-var memories: Array[Dictionary] = []
+## One line of personal background, written by the roster. The social layer
+## turns it into the character's first memory (`NpcMemory.Kind.ORIGIN`); the
+## record itself stores no relationships and no memories, because that state has
+## a single owner: `RelationshipGraph` and `MemoryBook` in `src/social/`.
+var origin_note: String = ""
 
 
 ## True when [param minute_of_day] falls inside this NPC's work window.
 func is_within_work_hours(minute_of_day: int) -> bool:
 	return minute_of_day >= work_start_minute and minute_of_day < work_end_minute
-
-
-func get_relationship_count() -> int:
-	return relationships.size()
-
-
-func get_memory_count() -> int:
-	return memories.size()
 
 
 func set_activity(new_activity: int, tick: int) -> void:
@@ -190,8 +180,8 @@ func summary_text() -> String:
 	]
 
 
-## Snapshot for the future persistence module. Relationships and memories are
-## copied so an external reader cannot mutate the live record.
+## Snapshot for the future persistence module. The returned dictionary is a
+## copy: an external reader cannot mutate the live record through it.
 func to_dict() -> Dictionary:
 	return {
 		"id": id,
@@ -223,8 +213,7 @@ func to_dict() -> Dictionary:
 		"blocked_ticks": blocked_ticks,
 		"leisure_cursor": leisure_cursor,
 		"last_meal_satisfied": last_meal_satisfied,
-		"relationships": relationships.duplicate(true),
-		"memories": memories.duplicate(true),
+		"origin_note": origin_note,
 	}
 
 
@@ -258,10 +247,7 @@ func from_dict(data: Dictionary) -> void:
 	blocked_ticks = int(data.get("blocked_ticks", blocked_ticks))
 	leisure_cursor = int(data.get("leisure_cursor", leisure_cursor))
 	last_meal_satisfied = bool(data.get("last_meal_satisfied", last_meal_satisfied))
-	relationships = data.get("relationships", {}).duplicate(true)
-	memories.clear()
-	for memory in data.get("memories", []):
-		memories.append((memory as Dictionary).duplicate(true))
+	origin_note = String(data.get("origin_note", origin_note))
 	needs.clamp_all()
 	personality.clamp_all()
 

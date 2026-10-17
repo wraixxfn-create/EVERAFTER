@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_config")
 project_title = "EVERAFTER"
-build_label = "0.4.0-economy"
+build_label = "0.5.0-social"
 logic_tick_seconds = 0.05
 time_scale_presets = PackedFloat32Array(1, 3, 10)
 default_time_scale_index = 0
@@ -25,3 +25,9 @@ starting_village_food = 24
 starting_village_wood = 12
 starting_village_stone = 10
 starting_village_coin = 60
+social_memory_capacity = 24
+social_memory_importance_floor = 12
+social_event_log_limit = 160
+social_interaction_radius = 3.2
+social_cooldown_ticks = 45
+social_daily_gain_cap = 14
