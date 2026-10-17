@@ -28,12 +28,29 @@ static func run_tests(harness: TestHarness) -> void:
 		"materials must read vertex colours, or merged meshes would lose their tint"
 	)
 	harness.check_equals(stone.metallic, 0.0, "stone is not metal")
+	var timber := materials.get_material("timber")
+	var plaster := materials.get_material("wall_cream")
+	var iron := materials.get_material("iron")
+	var water := materials.get_material("water")
+	var wet_rock := materials.get_material("rock_wet")
 	harness.check(
-		materials.get_material("iron").metallic > 0.5, "iron is metallic"
+		iron.metallic > 0.25 and iron.metallic < 0.5,
+		"wrought iron is metallic without a chrome-like response"
 	)
 	harness.check(
-		materials.get_material("water").transparency
-			== BaseMaterial3D.TRANSPARENCY_ALPHA,
+		plaster.roughness >= 0.9 and timber.roughness > 0.75,
+		"broad plaster and timber surfaces stay matte"
+	)
+	harness.check(
+		water.roughness >= 0.25 and water.metallic == 0.0,
+		"water has a restrained highlight instead of a mirror finish"
+	)
+	harness.check(
+		wet_rock.roughness > 0.65 and wet_rock.roughness < 0.8,
+		"wet rocks are a little smoother without becoming glossy"
+	)
+	harness.check(
+		water.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA,
 		"water is translucent"
 	)
 

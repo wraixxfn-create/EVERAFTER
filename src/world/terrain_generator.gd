@@ -313,6 +313,9 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	var patch := clampf(_value_noise(x, z, 0.031, 1.0) * 0.5 + 0.5, 0.0, 1.0)
 	color = color.lerp(COLOR_MEADOW, patch * 0.55)
 	var rock_t := clampf((slope - 0.35) / 0.6, 0.0, 1.0)
+	var road_t := 0.0
+	var pond_t := 0.0
+	var plaza_t := 0.0
 	color = color.lerp(COLOR_ROCK, rock_t)
 	if layout == null:
 		var distance := sqrt(x * x + z * z)
@@ -321,12 +324,27 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	else:
 		# Bare earth on the roads, stone on the plaza, mud at the water line.
 		# Order matters: each layer paints over the previous one.
-		var road_t := layout.road_weight(x, z) * (1.0 - rock_t)
+		road_t = layout.road_weight(x, z) * (1.0 - rock_t)
+		pond_t = layout.pond_weight(x, z)
+		plaza_t = layout.plaza_weight(x, z)
 		color = color.lerp(COLOR_DIRT, road_t)
-		# Worn wheel tracks: the middle of a road is packed darker than its edges.
-		color = color.darkened(road_t * road_t * 0.14)
-		color = color.lerp(COLOR_MUD, layout.pond_weight(x, z))
-		color = color.lerp(COLOR_COBBLE, layout.plaza_weight(x, z))
-	# Fine per-vertex jitter on top of the broad patches.
-	var variation := clampf(_value_noise(x, z, 0.42, 0.05), 0.0, 0.12)
-	return color.darkened(variation)
+		# The road centre stays packed, while the natural noise below breaks up
+		# the otherwise uniform earth without introducing a repeating texture.
+		color = color.darkened(road_t * road_t * 0.12)
+		color = color.lerp(COLOR_MUD, pond_t)
+		color = color.lerp(COLOR_COBBLE, plaza_t)
+	# Two deterministic noise scales act as restrained surface mottling. The
+	# larger value survives the one-metre vertex grid; the finer value keeps
+	# stone, earth and meadow from reading as three flat colour fills.
+	var medium_grain := _value_noise(x + 31.7, z - 18.3, 0.29, 0.055)
+	var fine_grain := _value_noise(x - 47.2, z + 63.1, 0.61, 0.02)
+	var surface_grain := medium_grain + fine_grain
+	var built_weight := 0.0
+	if layout != null:
+		built_weight = maxf(road_t, maxf(pond_t, plaza_t))
+	var grain_strength := 0.62 + built_weight * 0.3
+	if surface_grain >= 0.0:
+		color = color.lerp(Color.WHITE, surface_grain * grain_strength)
+	else:
+		color = color.darkened(-surface_grain * grain_strength)
+	return color

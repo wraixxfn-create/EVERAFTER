@@ -54,6 +54,10 @@ static func run_tests(harness: TestHarness) -> void:
 	# --- cylinder and sphere windings ----------------------------------------
 	var round_baker := MeshBaker.new()
 	round_baker.add_cylinder("trunk", 0.5, 0.5, 2.0, 8)
+	harness.check_equals(
+		round_baker.get_triangle_count(), 32,
+		"an eight-sided cylinder has one top and bottom cap, not eight duplicates"
+	)
 	var cylinder_arrays := _first_surface(round_baker, materials)
 	harness.check_equals(
 		_bad_windings(
@@ -123,6 +127,37 @@ static func run_tests(harness: TestHarness) -> void:
 		"materials read vertex colours as albedo, or the tint would be ignored"
 	)
 	for node in tinted.commit(materials):
+		(node as MeshInstance3D).free()
+
+	# Optional face tinting gives stone and timber blocks enough tonal structure
+	# to read as separate surfaces while leaving the default box path unchanged.
+	var faceted_box := MeshBaker.new()
+	faceted_box.add_box("stone", Vector3.ONE, Transform3D.IDENTITY, Color(0.7, 0.65, 0.6), 0.2)
+	var faceted_arrays := _first_surface(faceted_box, materials)
+	var faceted_colors: PackedColorArray = faceted_arrays[Mesh.ARRAY_COLOR]
+	harness.check(
+		faceted_colors[0].r > faceted_colors[6].r,
+		"face variation subtly separates the top and underside"
+	)
+	for node in faceted_box.commit(materials):
+		(node as MeshInstance3D).free()
+
+	# Rocks opt into flat facet normals; foliage keeps the analytic smooth path.
+	var flat_sphere := MeshBaker.new()
+	flat_sphere.add_sphere("rock", 1.0, 3, 5, Transform3D.IDENTITY, Color.WHITE, true)
+	var flat_arrays := _first_surface(flat_sphere, materials)
+	var flat_vertices: PackedVector3Array = flat_arrays[Mesh.ARRAY_VERTEX]
+	var flat_normals: PackedVector3Array = flat_arrays[Mesh.ARRAY_NORMAL]
+	harness.check(
+		flat_normals[0].distance_to(flat_normals[1]) < EPSILON,
+		"a rock facet uses one planar normal"
+	)
+	harness.check_equals(
+		_bad_windings(flat_vertices, flat_normals, Vector3.ZERO),
+		0,
+		"flat rock facets still face outwards"
+	)
+	for node in flat_sphere.commit(materials):
 		(node as MeshInstance3D).free()
 
 

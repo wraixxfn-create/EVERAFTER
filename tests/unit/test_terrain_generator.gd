@@ -125,13 +125,28 @@ static func run_tests(harness: TestHarness) -> void:
 		return
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	if vertices.is_empty() or normals.is_empty():
+	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	if vertices.is_empty() or normals.is_empty() or colors.is_empty():
 		harness.skip("mesh arrays are not readable in this rendering backend")
 		return
 	harness.check_equals(
 		vertices.size(), generator.get_vertex_count(), "mesh has one vertex per point"
 	)
 	harness.check_equals(normals.size(), vertices.size(), "mesh has one normal per vertex")
+	harness.check_equals(colors.size(), vertices.size(), "every terrain vertex has a surface colour")
+	var colour_range := Vector3(INF, INF, INF)
+	var colour_high := Vector3(-INF, -INF, -INF)
+	for color in colors:
+		colour_range.x = minf(colour_range.x, color.r)
+		colour_range.y = minf(colour_range.y, color.g)
+		colour_range.z = minf(colour_range.z, color.b)
+		colour_high.x = maxf(colour_high.x, color.r)
+		colour_high.y = maxf(colour_high.y, color.g)
+		colour_high.z = maxf(colour_high.z, color.b)
+	harness.check(
+		(colour_high - colour_range).length() > 0.05,
+		"the terrain retains deterministic colour mottling instead of a flat fill"
+	)
 	var upward := 0
 	for normal in normals:
 		if normal.y > 0.0:

@@ -125,9 +125,10 @@ func _build_pine(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
 	var trunk_height := 2.2 * scale
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.1))
+	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.09))
 	baker.add_cylinder(
 		"trunk", 0.14 * scale, 0.26 * scale, trunk_height, 6,
-		_transform(Vector3(0.0, trunk_height * 0.5, 0.0))
+		_transform(Vector3(0.0, trunk_height * 0.5, 0.0)), bark_tint, 0.055
 	)
 	var tiers := 3 + placement.variant % 2
 	for tier in tiers:
@@ -137,16 +138,17 @@ func _build_pine(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 		var y := lerpf(trunk_height * 0.75, trunk_height + 2.6 * scale, t)
 		baker.add_cylinder(
 			"pine", 0.0, radius, height, 7, _transform(Vector3(0.0, y, 0.0)),
-			tint.lightened(t * 0.1)
+			tint.lightened(t * 0.1), 0.035
 		)
 
 
 func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
 	var trunk_height := (2.0 + float(placement.variant) * 0.4) * scale
+	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.1))
 	baker.add_cylinder(
 		"trunk", 0.2 * scale, 0.34 * scale, trunk_height, 6,
-		_transform(Vector3(0.0, trunk_height * 0.5, 0.0))
+		_transform(Vector3(0.0, trunk_height * 0.5, 0.0)), bark_tint, 0.06
 	)
 	var leaf_key: String = LEAF_KEYS[placement.variant % LEAF_KEYS.size()]
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.12))
@@ -166,9 +168,10 @@ func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 func _build_birch(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
 	var trunk_height := (3.0 + float(placement.variant) * 0.5) * scale
+	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
 	baker.add_cylinder(
 		"trunk_birch", 0.13 * scale, 0.2 * scale, trunk_height, 6,
-		_transform(Vector3(0.0, trunk_height * 0.5, 0.0))
+		_transform(Vector3(0.0, trunk_height * 0.5, 0.0)), bark_tint, 0.08
 	)
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.08))
 	for index in 3:
@@ -197,20 +200,28 @@ func _build_bush(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 
 func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
-	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.2))
+	var rock_key := "rock_wet" if placement.variant == 2 else "rock"
+	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.18))
 	var squash := Vector3(
 		rng.randf_range(0.8, 1.3), rng.randf_range(0.6, 0.95), rng.randf_range(0.8, 1.3)
 	)
+	var main_basis := Basis.from_euler(
+		Vector3(rng.randf_range(-0.2, 0.2), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))
+	).scaled(squash)
 	baker.add_sphere(
-		"rock_wet" if placement.variant == 2 else "rock",
-		0.9 * scale, 3, 5,
-		_origin * Transform3D(
-			Basis.from_euler(
-				Vector3(rng.randf_range(-0.2, 0.2), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))
-			).scaled(squash),
-			Vector3(0.0, 0.35 * scale, 0.0)
-		),
-		tint
+		rock_key, 0.9 * scale, 3, 5,
+		_origin * Transform3D(main_basis, Vector3(0.0, 0.35 * scale, 0.0)),
+		tint, true
+	)
+	# A small attached chip breaks the perfect-egg silhouette without turning
+	# scattered stones into a separate pile of high-poly props.
+	var chip_basis := Basis.from_euler(
+		Vector3(rng.randf_range(-0.25, 0.25), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))
+	).scaled(Vector3(0.62, 0.52, 0.7) * scale)
+	baker.add_sphere(
+		rock_key, 0.46, 3, 5,
+		_origin * Transform3D(chip_basis, Vector3(0.38 * scale, 0.18 * scale, -0.16 * scale)),
+		tint.lightened(0.035), true
 	)
 
 
