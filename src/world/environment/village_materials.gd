@@ -10,10 +10,10 @@ extends RefCounted
 ##   less than 300 unique materials. This is the main reason the scene stays
 ##   comfortable on a GTX 1060 class GPU.
 ##
-## The materials are deliberately plain: no textures to download, no external
-## assets, no shaders. Variety comes from geometry, silhouette and vertex
-## colours, which is what a stylised look needs and what keeps the repository
-## text only.
+## Materials stay asset-light: there are no external textures or per-object
+## shader instances. Surface character comes from shared PBR responses, subtle
+## per-solid / per-face vertex colour and a small amount of purposeful geometry.
+## That keeps the repository text-only and the draw-call budget predictable.
 ##
 ## `apply_night_glow()` is called once per frame by `SkyRig` with the daylight
 ## factor. It writes two properties on two shared materials, so the whole
@@ -119,40 +119,51 @@ func _make_material(key: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = PALETTE.get(key, Color.MAGENTA)
 	material.metallic = 0.0
-	# A restrained roughness range gives timber, plaster and cloth their own
-	# tactile read without relying on textures or extra material variants.
-	material.roughness = 0.88
+	# A restrained roughness range keeps broad stylised surfaces matte, while
+	# giving worn wood, slate and iron a controlled highlight under the sun.
+	material.roughness = 0.9
 	match key:
 		"wall_cream", "wall_ochre", "wall_ash", "wall_pale":
-			material.roughness = 0.96
-		"timber", "timber_warm", "plank", "door":
-			material.roughness = 0.78
-		"roof_tile", "roof_shingle", "roof_slate", "roof_moss":
+			material.roughness = 0.95
+		"timber", "timber_warm", "plank":
 			material.roughness = 0.84
-		"cloth_red", "cloth_blue", "cloth_cream":
+		"door":
+			material.roughness = 0.8
+		"roof_tile", "roof_shingle":
+			material.roughness = 0.86
+		"roof_slate":
+			material.roughness = 0.78
+		"roof_moss":
 			material.roughness = 0.94
+		"cloth_red", "cloth_blue", "cloth_cream":
+			material.roughness = 0.96
 	# `MeshBaker` merges many solids into one mesh and keeps them apart with
 	# vertex colours, so every material has to read them as albedo.
 	material.vertex_color_use_as_albedo = true
 	match key:
 		"iron":
-			material.metallic = 0.75
-			material.roughness = 0.42
+			# Aged wrought iron: metallic, but dark and broad rather than chrome.
+			material.metallic = 0.38
+			material.roughness = 0.62
 		"water":
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			material.albedo_color = Color(PALETTE["water"], 0.82)
-			material.roughness = 0.12
-			material.metallic = 0.1
+			material.roughness = 0.34
+			material.metallic = 0.0
 			material.emission_enabled = true
-			material.emission = PALETTE["water"].lightened(0.15)
-			material.emission_energy_multiplier = 0.25
+			material.emission = PALETTE["water"].lightened(0.12)
+			material.emission_energy_multiplier = 0.12
 		"window", "lantern":
 			material.emission_enabled = true
 			material.emission = GLOW_COLOR
 			material.emission_energy_multiplier = 0.0
-			material.roughness = 0.55
-		"stone", "stone_dark", "cobble", "rock", "rock_wet":
-			material.roughness = 0.95
+			material.roughness = 0.62 if key == "window" else 0.72
+		"stone", "stone_dark", "cobble", "rock":
+			material.roughness = 0.94
+		"rock_wet":
+			material.roughness = 0.72
 		"leaf_deep", "leaf_mid", "leaf_bright", "leaf_autumn", "pine", "grass":
+			material.roughness = 0.94
+		"grass_blade", "trunk", "trunk_birch", "dirt":
 			material.roughness = 0.92
 	return material

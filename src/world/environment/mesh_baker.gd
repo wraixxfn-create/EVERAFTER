@@ -42,7 +42,7 @@ var _triangle_count := 0
 ## Axis aligned box of [param size], placed by [param xform].
 func add_box(
 	material_key: String, size: Vector3, xform: Transform3D = Transform3D.IDENTITY,
-	tint: Color = Color.WHITE
+	tint: Color = Color.WHITE, face_variation: float = 0.0
 ) -> void:
 	var half := size * 0.5
 	for face in BOX_FACES:
@@ -55,15 +55,20 @@ func add_box(
 		var b := u * hu - v * hv
 		var c := u * hu + v * hv
 		var d := -u * hu + v * hv
-		_add_quad(material_key, xform, a, b, c, d, normal, tint)
+		_add_quad(
+			material_key, xform, a, b, c, d, normal,
+			_face_tint(tint, normal, face_variation)
+		)
 	_triangle_count += 12
 
 
 ## Truncated cone. `top_radius == 0` gives a pyramid or a spike, and the
-## matching cap is skipped so no degenerate triangles are emitted.
+## matching cap is skipped so no degenerate triangles are emitted. Each cap is
+## emitted once after the side facets, avoiding coincident duplicate surfaces.
 func add_cylinder(
 	material_key: String, top_radius: float, bottom_radius: float, height: float,
-	segments: int, xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE
+	segments: int, xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE,
+	face_variation: float = 0.0
 ) -> void:
 	var sides := maxi(segments, 3)
 	var half_height := height * 0.5
@@ -78,12 +83,16 @@ func add_cylinder(
 		var flat_normal := Vector3(
 			cos((angle_0 + angle_1) * 0.5), 0.0, sin((angle_0 + angle_1) * 0.5)
 		)
-		_add_quad(material_key, xform, bottom_0, bottom_1, top_1, top_0, flat_normal, tint)
+		var segment_tint := _segment_tint(tint, index, sides, face_variation)
+		_add_quad(
+			material_key, xform, bottom_0, bottom_1, top_1, top_0, flat_normal,
+			segment_tint
+		)
 		_triangle_count += 2
-		if top_radius > 0.0001:
-			_add_cap(material_key, xform, top_radius, half_height, step, sides, 1.0, tint)
-		if bottom_radius > 0.0001:
-			_add_cap(material_key, xform, bottom_radius, -half_height, step, sides, -1.0, tint)
+	if top_radius > 0.0001:
+		_add_cap(material_key, xform, top_radius, half_height, step, sides, 1.0, tint)
+	if bottom_radius > 0.0001:
+		_add_cap(material_key, xform, bottom_radius, -half_height, step, sides, -1.0, tint)
 
 
 ## Triangular prism with its ridge along Z: the gable end of a roof.
@@ -127,39 +136,38 @@ func add_prism(
 
 
 ## UV sphere. `rings` is the number of latitude bands, `segments` the number of
-## longitude slices. Low values (4 x 6) give the faceted, stylised blobs used for
-## tree crowns and boulders; the analytic normal keeps them shaded smoothly.
+## longitude slices. Low values (4 x 6) make stylised forms; default smooth
+## normals suit foliage, while `flat_shading` preserves faceted rock planes.
 ##
 ## The winding was derived from the same measured rule as everything else here:
 ## the pole fans and the body quads are emitted so that `(c - a) x (b - a)`
 ## points outwards.
 func add_sphere(
 	material_key: String, radius: float, rings: int, segments: int,
-	xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE
+	xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE,
+	flat_shading: bool = false
 ) -> void:
 	var band_count := maxi(rings, 2)
 	var slice_count := maxi(segments, 3)
 	var surface := _surface(material_key)
 	var normal_basis := xform.basis.inverse().transposed()
-	var top := xform * Vector3(0.0, radius, 0.0)
-	var bottom := xform * Vector3(0.0, -radius, 0.0)
-	var top_normal := (normal_basis * Vector3.UP).normalized()
-	var bottom_normal := (normal_basis * Vector3.DOWN).normalized()
 	for slice in slice_count:
 		var angle_0 := TAU * float(slice) / float(slice_count)
 		var angle_1 := TAU * float(slice + 1) / float(slice_count)
 		var first_ring := _ring_point(radius, angle_0, 1, band_count)
 		var second_ring := _ring_point(radius, angle_1, 1, band_count)
-		_add_vertex(surface, top, top_normal, tint)
-		_add_vertex(surface, xform * first_ring, _sphere_normal(normal_basis, first_ring), tint)
-		_add_vertex(surface, xform * second_ring, _sphere_normal(normal_basis, second_ring), tint)
+		_add_sphere_triangle(
+			surface, xform, normal_basis, Vector3(0.0, radius, 0.0), first_ring,
+			second_ring, tint, flat_shading
+		)
 		_triangle_count += 1
 		var last := band_count - 1
 		var first_last := _ring_point(radius, angle_0, last, band_count)
 		var second_last := _ring_point(radius, angle_1, last, band_count)
-		_add_vertex(surface, bottom, bottom_normal, tint)
-		_add_vertex(surface, xform * second_last, _sphere_normal(normal_basis, second_last), tint)
-		_add_vertex(surface, xform * first_last, _sphere_normal(normal_basis, first_last), tint)
+		_add_sphere_triangle(
+			surface, xform, normal_basis, Vector3(0.0, -radius, 0.0), second_last,
+			first_last, tint, flat_shading
+		)
 		_triangle_count += 1
 	for band in range(1, band_count - 1):
 		for slice in slice_count:
@@ -169,8 +177,12 @@ func add_sphere(
 			var p10 := _ring_point(radius, angle_1, band, band_count)
 			var p11 := _ring_point(radius, angle_1, band + 1, band_count)
 			var p01 := _ring_point(radius, angle_0, band + 1, band_count)
-			_add_sphere_triangle(surface, xform, normal_basis, p00, p11, p10, tint)
-			_add_sphere_triangle(surface, xform, normal_basis, p00, p01, p11, tint)
+			_add_sphere_triangle(
+				surface, xform, normal_basis, p00, p11, p10, tint, flat_shading
+			)
+			_add_sphere_triangle(
+				surface, xform, normal_basis, p00, p01, p11, tint, flat_shading
+			)
 			_triangle_count += 2
 
 
@@ -283,11 +295,49 @@ func _add_cap(
 
 func _add_sphere_triangle(
 	surface: SurfaceTool, xform: Transform3D, normal_basis: Basis, a: Vector3, b: Vector3,
-	c: Vector3, tint: Color
+	c: Vector3, tint: Color, flat_shading: bool = false
 ) -> void:
-	_add_vertex(surface, xform * a, _sphere_normal(normal_basis, a), tint)
-	_add_vertex(surface, xform * b, _sphere_normal(normal_basis, b), tint)
-	_add_vertex(surface, xform * c, _sphere_normal(normal_basis, c), tint)
+	var point_a := xform * a
+	var point_b := xform * b
+	var point_c := xform * c
+	if flat_shading:
+		# Match Godot's measured winding convention used by the baker tests.
+		var flat_normal := (point_c - point_a).cross(point_b - point_a).normalized()
+		_add_vertex(surface, point_a, flat_normal, tint)
+		_add_vertex(surface, point_b, flat_normal, tint)
+		_add_vertex(surface, point_c, flat_normal, tint)
+		return
+	_add_vertex(surface, point_a, _sphere_normal(normal_basis, a), tint)
+	_add_vertex(surface, point_b, _sphere_normal(normal_basis, b), tint)
+	_add_vertex(surface, point_c, _sphere_normal(normal_basis, c), tint)
+
+
+func _face_tint(tint: Color, normal: Vector3, amount: float) -> Color:
+	if amount <= 0.0:
+		return tint
+	# Subtle orientation-based albedo shifts give the edges of stone and timber
+	# blocks a tactile read without introducing another material or texture.
+	var factor := 1.0 + (normal.y * 0.42 + normal.z * 0.22 - normal.x * 0.12) * amount
+	return _scaled_tint(tint, factor)
+
+
+func _segment_tint(tint: Color, index: int, count: int, amount: float) -> Color:
+	if amount <= 0.0:
+		return tint
+	# A bounded sinusoid is used only on low-poly stave-like cylinders, not as
+	# a repeating world texture.
+	var phase := TAU * float(index) / float(maxi(count, 1))
+	var factor := 1.0 + sin(phase * 2.0 + 0.7) * amount
+	return _scaled_tint(tint, factor)
+
+
+func _scaled_tint(tint: Color, factor: float) -> Color:
+	return Color(
+		clampf(tint.r * factor, 0.0, 1.0),
+		clampf(tint.g * factor, 0.0, 1.0),
+		clampf(tint.b * factor, 0.0, 1.0),
+		tint.a
+	)
 
 
 func _sphere_normal(normal_basis: Basis, local_point: Vector3) -> Vector3:
