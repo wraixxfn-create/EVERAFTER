@@ -18,7 +18,7 @@ extends RefCounted
 ##
 ## Unit tests: `tests/unit/test_chronicle_book.gd`.
 
-const TAG := \"Chronicle\"
+const TAG := "Chronicle"
 ## Default cap; can be reconfigured at runtime.
 const DEFAULT_MAX_ENTRIES := 400
 ## Entries at or above this importance are protected from eviction as long as
@@ -64,7 +64,9 @@ func record(
 	entry.day = maxi(day, 1)
 	entry.minute_of_day = clampi(minute_of_day, 0, SimulationClock.MINUTES_PER_DAY - 1)
 	entry.tick = maxi(tick, 0)
-	entry.importance = clampi(importance, IMPORTANCE_MIN, IMPORTANCE_MAX)
+	entry.importance = clampi(
+		importance, ChronicleEntry.IMPORTANCE_MIN, ChronicleEntry.IMPORTANCE_MAX
+	)
 	entry.summary = summary
 	for sid in subject_ids:
 		var s := String(sid)
@@ -91,7 +93,7 @@ func get_entries() -> Array[ChronicleEntry]:
 
 
 ## Filtered access. Negative or zero values for [param day]/[param category]
-## mean \"don't filter by that dimension\".
+## mean "don't filter by that dimension".
 func query(
 	min_importance: int = 0,
 	day: int = 0,
@@ -146,10 +148,10 @@ func remove_subject_orphans(known_subject_ids: Dictionary) -> void:
 		var e: ChronicleEntry = _entries[i]
 		var keep := true
 		for sid in e.subject_ids:
-			# Subjects that look like system ids (not starting with \"npc_\") are
+			# Subjects that look like system ids (not starting with "npc_") are
 			# never considered orphans: the chronicle can refer to places or
 			# future factions without having them registered.
-			if not sid.begins_with(\"npc_\"):
+			if not sid.begins_with("npc_"):
 				continue
 			if not known_subject_ids.has(sid):
 				keep = false
@@ -175,22 +177,22 @@ func to_dict() -> Dictionary:
 	for e in _entries:
 		entry_data.append(e.to_dict())
 	return {
-		\"max_entries\": max_entries,
-		\"next_id\": _next_id,
-		\"evicted_count\": evicted_count,
-		\"evicted_landmark_count\": evicted_landmark_count,
-		\"entries\": entry_data,
+		"max_entries": max_entries,
+		"next_id": _next_id,
+		"evicted_count": evicted_count,
+		"evicted_landmark_count": evicted_landmark_count,
+		"entries": entry_data,
 	}
 
 
 func from_dict(data: Dictionary) -> void:
 	_entries.clear()
 	_by_id.clear()
-	max_entries = maxi(int(data.get(\"max_entries\", DEFAULT_MAX_ENTRIES)), 10)
-	_next_id = maxi(int(data.get(\"next_id\", 1)), 1)
-	evicted_count = int(data.get(\"evicted_count\", 0))
-	evicted_landmark_count = int(data.get(\"evicted_landmark_count\", 0))
-	for ed in data.get(\"entries\", []):
+	max_entries = maxi(int(data.get("max_entries", DEFAULT_MAX_ENTRIES)), 10)
+	_next_id = maxi(int(data.get("next_id", 1)), 1)
+	evicted_count = int(data.get("evicted_count", 0))
+	evicted_landmark_count = int(data.get("evicted_landmark_count", 0))
+	for ed in data.get("entries", []):
 		var e := ChronicleEntry.new()
 		e.from_dict(ed as Dictionary)
 		if e.id.is_empty() or _by_id.has(e.id) or not e.is_valid():
@@ -207,15 +209,15 @@ func from_dict(data: Dictionary) -> void:
 func _allocate_id() -> String:
 	var assigned := _next_id
 	_next_id += 1
-	return \"chr_%06d\" % assigned
+	return "chr_%06d" % assigned
 
 
-## Extracts the numeric tail from an id like \"chr_000042\" -> 42. Returns 0 if
+## Extracts the numeric tail from an id like "chr_000042" -> 42. Returns 0 if
 ## the id does not match the expected shape.
 static func _parse_id_tail(entry_id: String) -> int:
-	if not entry_id.begins_with(\"chr_\"):
+	if not entry_id.begins_with("chr_"):
 		return 0
-	var tail := entry_id.trim_prefix(\"chr_\")
+	var tail := entry_id.trim_prefix("chr_")
 	return int(tail) if tail.is_valid_int() else 0
 
 
@@ -235,7 +237,7 @@ func _trim_to_capacity() -> void:
 			evicted_landmark_count += 1
 			GameLog.warning(
 				TAG,
-				\"rimossa voce importante '%s' (imp. %d): il libro e' pieno.\"
+				"rimossa voce importante '%s' (imp. %d): il libro e' pieno."
 				% [victim.id, victim.importance]
 			)
 

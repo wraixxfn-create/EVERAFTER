@@ -118,7 +118,7 @@ func read_saved_population() -> int:
 		text = _read_text_file(backup_path())
 	if text.is_empty():
 		return 0
-	var decoded := _safe_parse(text)
+	var decoded: Variant = _safe_parse(text)
 	if decoded == null or typeof(decoded) != TYPE_DICTIONARY:
 		return 0
 	var d: Dictionary = decoded as Dictionary
@@ -148,7 +148,8 @@ func save_to_file() -> int:
 	if FileAccess.file_exists(save_path()):
 		DirAccess.remove_absolute(backup_path())
 		DirAccess.rename_absolute(save_path(), backup_path())
-	if not DirAccess.rename_absolute(tmp_path(), save_path()):
+	# rename_absolute() returns an Error code: OK (0) means success.
+	if DirAccess.rename_absolute(tmp_path(), save_path()) != OK:
 		GameLog.error(TAG, "impossibile sostituire il salvataggio precedente.")
 		return Error.RENAME_FAILED
 	last_save_real_time = _real_now_seconds()
@@ -181,7 +182,7 @@ func load_from_file() -> Array:
 	var text := _read_text_file(path)
 	if text.is_empty():
 		return [Error.READ_FAILED, "Impossibile leggere il salvataggio."]
-	var decoded := _safe_parse(text)
+	var decoded: Variant = _safe_parse(text)
 	if decoded == null or typeof(decoded) != TYPE_DICTIONARY:
 		return [Error.NOT_JSON, "Il file non e' un JSON valido."]
 	var data: Dictionary = decoded as Dictionary

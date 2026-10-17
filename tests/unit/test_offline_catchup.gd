@@ -6,7 +6,12 @@ static func run_tests(h: TestHarness) -> void:
 	h.suite("OfflineCatchup")
 	var config := GameConfig.new()
 	config.npc_population_size = 4
-	var (loop, npc, economy, social, book, watcher) := _build_world(config)
+	# GDScript has no tuple unpacking: read the world parts by index.
+	var world := _build_world(config)
+	var loop: SimulationLoop = world[0]
+	var economy: EconomySystem = world[2]
+	var book: ChronicleBook = world[4]
+	var watcher: ChronicleWatcher = world[5]
 	# Set a deterministic tick_seconds for math verification: 0.05s per tick
 	# (same as default: 1 real second = 20 sim minutes).
 	loop.tick_seconds = 0.05
@@ -35,8 +40,8 @@ static func run_tests(h: TestHarness) -> void:
 	h.check(not bool(res["was_capped"]), "short catchup is not capped")
 
 	# Calling run again with the same (old) timestamp must not duplicate
-	# effects. We pass the same timestamp again; because the clock has moved
-	# forward, elapsed is now negative and nothing should advance.
+	# effects: the catch-up remembers the save timestamp it already advanced
+	# from, so a repeated run with it applies nothing.
 	var tick_before := loop.clock.tick
 	res = catchup.run(now - 180)
 	h.check_equals(loop.clock.tick, tick_before,
