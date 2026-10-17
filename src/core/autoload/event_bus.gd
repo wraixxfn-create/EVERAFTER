@@ -34,3 +34,12 @@ signal area_changed(area_name: String)
 ## Emitted by `PlayerExplorer` when the mouse is captured or released, so the
 ## HUD can show how to get the controls back.
 signal mouse_capture_changed(is_captured: bool)
+
+## Emitted by the `Game` autoload when the world has registered its inhabitant
+## simulation. The UI listens once instead of polling a null system at boot.
+signal npc_system_ready
+
+## Emitted by the NPC presenter (click in the world) and by the observation
+## panel (list selection). Carries a plain NPC id; subscribers query the
+## simulation for the data they need.
+signal npc_selected(npc_id: String)

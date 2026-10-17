@@ -35,28 +35,38 @@ sostenere una simulazione di popolazione persistente, deterministica e offline, 
 | --- | --- |
 | `core/` | orologio simulato (`SimulationClock`), `GameConfig` e `game_log`, singleton `EventBus` e `Game` |
 | `simulation/` | contratto `SimulationSystem`, `SimulationLoop` a fixed timestep, `DayCycleSystem` |
-| `world/` | scena principale, generatore di terreno, esploratore in prima persona, costruzione del villaggio, registro delle aree |
-| `ui/` | HUD del mondo (titolo, giorno, area) e pannello diagnostico |
+| `npcs/` | dati e simulazione degli abitanti: personalità, bisogni, luoghi, record, roster, rete di percorso, macchina a stati |
+| `world/` | scena principale, generatore di terreno, esploratore in prima persona, costruzione del villaggio, registro delle aree, ponte verso i luoghi degli NPC |
+| `world/npcs/` | presentazione degli abitanti: capsule, nomi, selezione, culling; nessuna scrittura sui record |
+| `ui/` | HUD del mondo (titolo, giorno, area), pannello diagnostico e scheda dell'abitante |
 | `tests/` | harness di asserzioni, runner di unità, runner di integrazione, suite di unità e di integrazione |
 | `tools/` | verifiche statiche di coerenza del progetto, script che esegue tutti i controlli |
 | `config/` | `game_config.tres`, i valori di tuning modificabili senza toccare il codice |
 
 ### Moduli previsti, non ancora presenti
 
-`npc/`, `social/`, `economy/`, `governance/`, `history/`, `memory/`, `events/`, `persistence/`,
-`ai/` sono descritti in `ROADMAP.md`. **Nessuno di questi esiste nel codice.** Questo documento
-non li elenca tra i moduli attivi, perché un'architettura che dichiara moduli inesistenti è più
-pericolosa di un'architettura incompleta.
+`social/`, `economy/`, `governance/`, `history/`, `memory/`, `events/`, `persistence/`, `ai/`
+sono descritti in `ROADMAP.md`. **Nessuno di questi esiste nel codice.** Questo documento non li
+elenca tra i moduli attivi, perché un'architettura che dichiara moduli inesistenti è più
+pericolosa di un'architettura incompleta. `npcs/` invece esiste ed è la fase NPC di questo progetto.
 
 ## Dipendenze consentite
 
 ```
 core  ->  niente
 simulation  ->  core
-world  ->  core, simulation
-ui  ->  core, simulation, world
+npcs  ->  core, simulation
+world  ->  core, simulation, npcs
+world/npcs  ->  core, npcs, world
+ui  ->  core, simulation, npcs, world
 tests  ->  tutto (ma senza dipendere da una GPU)
 ```
+
+`npcs/` è **pura logica**: non importa `Node`, `Node3D`, `Camera3D` né `TerrainGenerator`. L'unico
+punto in cui il piano 3D del villaggio diventa dati per gli NPC è
+`src/world/npcs/village_npc_places.gd`: conosce sia `VillageLayout` sia `NpcPlace`, e produce un
+`NpcPlaceRegistry` e una lista di ostacoli. Così la posizione dei luoghi resta quella reale del
+villaggio, ma la simulazione non dipende dalla scena.
 
 Regole operative:
 
@@ -77,8 +87,69 @@ Regole operative:
 * `max_steps_per_frame` limita i tick per frame: se il gioco resta in pausa a lungo o il frame
   dura molto, l'accumulatore non genera migliaia di tick in un solo fotogramma. Questo guard è
   considerato comportamento corretto e coperto da un test.
-* I sistemi sono **puri nel tempo**: ricevono `delta_seconds` e l'orologio, restituiscono niente,
+* I sistemi sono **puri nel tempo**: ricevono il numero di tick e l'orologio, restituiscono niente,
   modificano il proprio stato. Questo rende ogni sistema testabile con un orologio sintetico.
+
+## Simulazione degli abitanti
+
+La popolazione vive in `src/npcs/` e non ha alcun nodo. Il contratto con il resto dell'applicazione
+è un `Array[NpcRecord]` più un `NpcPlaceRegistry` e un `NpcRouteGraph`.
+
+### Dati
+
+* **`NpcPersonality`**: quattro interi 0..100 (diligenza, socievolezza, curiosità, calma).
+* **`NpcNeeds`**: tre float 0..100. Per la fame **100 significa affamato**, per energia e
+  benessere **100 significa pieno**. `get_pressure()` è la media normalizzata usata per i
+  riepiloghi.
+* **`NpcPlace`**: id, nome, tipo (`HOME`, `WORK`, `FOOD`, `REST`, `SOCIAL`, `LEISURE`), posizione
+  XZ, orario di apertura (con supporto alla mezzanotte), disponibilità di cibo, capienza futura.
+* **`NpcPlaceRegistry`**: indice per id e ricerche deterministiche (primo luogo aperto, filtrato
+  per tipo). Non contiene nodi.
+* **`NpcRecord`**: identità, età, professione, personalità, bisogni, casa, lavoro, posizione,
+  destinazione, percorso, obiettivo, attività, relazioni e ricordi. `to_dict()` / `from_dict()`
+  copiano anche relazioni e ricordi, per la futura persistenza.
+* **`NpcRoster`**: tabella fissa di 16 abitanti. `build(n)` restituisce sempre i primi `n`, con gli
+  stessi nomi, mestieri e orari: è ciò che rende i nomi stabili tra un avvio e l'altro. Il numero
+  richiesto viene da `GameConfig.npc_population_size`; il roster non legge la configurazione e non
+  contiene codice di scena.
+
+### Regole
+
+Un solo metodo (`on_tick`) aggiorna **tutti** i record. Per ogni abitante:
+
+1. i bisogni avanzano in base all'attività corrente (lavoro, cammino, sonno, pasto, socialità,
+   attesa) e il benessere deriva verso un valore obiettivo legato alla calma;
+2. una macchina a stati esplicita decide l'azione successiva:
+   * fame urgente (≥ 88) o energia urgente (≤ 7): cerca cibo o riposo;
+   * dentro il proprio turno: mangia se la fame è ≥ 62, altrimenti va a lavorare;
+   * tra le 22:00 e le 06:00: va a dormire a casa;
+   * fame ≥ 62: cerca cibo; energia ≤ 28: riposa;
+   * altrimenti tempo libero: un luogo sociale aperto, alternato a una passeggiata in base al
+     cursore `leisure_cursor` e alla socievolezza;
+3. il movimento avanza lungo il percorso di `NpcRouteGraph` di al massimo
+   `WALK_DISTANCE_PER_TICK` unità per tick. **La posizione non viene mai assegnata alla
+   destinazione**: si muove solo il cursore sul percorso. Se il percorso è vuoto, il record entra
+   in `BLOCKED` per tre tick e il problema viene registrato una volta sola;
+4. un luogo irraggiungibile non viene scelto: la ricerca filtra con `is_place_reachable()`. Se non
+   esiste alcun luogo di riposo raggiungibile, l'abitante dorme dove si trova; se non c'è cibo,
+   aspetta e riprova. Non viene mai teletrasportato;
+5. le decisioni non usano `randf()`, `Time`, delta di frame né ordine di iterazione di un
+   `Dictionary`. Lo stesso stato iniziale e lo stesso numero di tick danno lo stesso `to_dict()`.
+
+### Separazione dalla scena
+
+`NpcPresenter` e `NpcPanel` sono **lettori**. Il presenter crea capsule solo entro
+`npc_view_distance`; quando un record esce dal raggio, il nodo viene liberato, ma il record
+continua ad avanzare nello stesso loop di simulazione. La selezione nasce da un raycast contro i
+corpi degli NPC (layer `1 << 3`, maschera vuota: il giocatore ci cammina attraverso) oppure
+dall'elenco nel pannello; entrambi pubblicano `EventBus.npc_selected`.
+
+### Tempo
+
+L'avanzamento è quello di `SimulationLoop`: un tick = un minuto simulato. `Game.advance_simulation(n)`
+esegue `n` tick senza frame, ed è il punto di aggancio già pronto per il futuro "tempo trascorso
+mentre il giocatore era assente". La simulazione non dipende dal frame rate: un frame può produrre
+più tick (fino a `max_steps_per_frame`) o nessuno.
 
 ## Mondo 3D
 
@@ -146,12 +217,19 @@ Target dichiarato: **1080p a 60 fps su GPU classe GTX 1060**. Il budget è difes
   script, quindi sono rimappabili senza toccare il codice.
 * Il mouse si libera con `Esc` e si riprende con clic sinistro o `F`; lo stato è pubblicato su
   `EventBus.mouse_capture_changed` così l'interfaccia lo comunica invece di lasciarlo indovinare.
+* Il pannello degli abitanti è un `CanvasLayer` con un `OptionButton` e barre dei bisogni. Legge
+  `Game.get_npc_system()` e ascolta `EventBus.npc_system_ready` / `EventBus.npc_selected`; non
+  possiede stato di simulazione. Se l'abitante selezionato non ha una capsula 3D, il pannello
+  continua a mostrarne i dati live: è la prova visibile della separazione simulazione/rendering.
 
 ## Dati e persistenza
 
 * Nessun save in questa fase. `SimulationClock`, `SimulationLoop` e i sistemi espongono
   `to_dict()` / `from_dict()` per prepararne una, ma il modulo `persistence` non esiste ancora.
-* Gli ID saranno **UUID** quando esisteranno le entità.
+* Gli ID degli abitanti sono `npc_001` … `npc_016`: corti, stabili e leggibili. Non sono UUID,
+  perché il roster è una tabella fissa e la stabilità tra un avvio e l'altro è più utile
+  dell'unicità globale in questa fase. La persistenza potrà introdurre un UUID accanto all'ID
+  stabile quando servirà.
 * La versione del save è prevista per la migrazione dei dati; non è ancora necessaria.
 
 ## IA generativa
@@ -182,7 +260,15 @@ Tre livelli, dal più economico al più convincente.
 3. **Integrazione** (`tests/run_world_tests.gd`): avvia la scena principale e interroga il server
    fisico. Confronta la superficie fisica con l'height field, verifica che il giocatore stia in
    piedi e non affondi, spinge la **capsula reale** contro un **edificio reale**, controlla il
-   budget di draw call, triangoli e collider.
+   budget di draw call, triangoli e collider, e verifica gli abitanti: popolazione configurata,
+   ID unici, nomi stabili, bisogni che avanzano senza view, selezione condivisa da presenter e
+   pannello.
 
-Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno o
-giocatore. È il livello che ha trovato i tre bug reali della fase precedente.
+La nuova suite NPC aggiunge: dati e serializzazione, roster stabile, rete di percorso con
+ostacoli e luoghi irraggiungibili, simulazione di 240+ tick con bisogni che evolvono, routine che
+rispondono a orario e fame, sonno notturno, assenza di teletrasporti, determinismo e raggiungibilità
+di ogni luogo reale del villaggio.
+
+Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
+giocatore o presentazione degli NPC. È il livello che ha trovato i tre bug reali della fase
+precedente.

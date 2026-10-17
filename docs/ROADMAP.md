@@ -27,25 +27,39 @@ esecuzione della suite headless, avvio del gioco, resa 3D, sensazione dei comand
 
 ---
 
-## Fase 1 — NPC minimi (`src/npcs`)
+## Fase 1 — NPC minimi (`src/npcs`) ✅ (implementata, in verifica)
 
 **Obiettivo**: il mondo è abitato da persone che esistono anche quando nessuno le guarda.
 
-* `NpcRecord` (dati puri: id, nome, età, casa, lavoro, stato corrente) — nessun nodo.
-* Bisogni primari (riposo, cibo, socialità) come valori che crescono con i tick.
-* Una routine giornaliera semplice: dormire, lavorare, mangiare, socializzare, con fasce orarie.
-* Spostamento grezzo: posizione logica sul terreno + cammino verso un obiettivo; la rappresentazione
-  visiva è un segnaposto (capsula o `MultiMesh`).
-* Integrazione con l'orologio: i comportamenti cambiano con l'ora del giorno.
+Consegnato:
 
-**Criteri di accettazione**: 20 NPC simulati per un giorno intero in headless, senza nodi, con esito
-deterministico a parità di seme; il giocatore li vede muoversi nel villaggio; il pannello mostra il
-numero di abitanti.
+* `NpcRecord` (dati puri: id, nome, età, casa, lavoro, bisogni, obiettivo, attività, relazioni e
+  ricordi iniziali) — nessun nodo.
+* Bisogni primari (energia, fame, benessere) che evolvono a ogni minuto simulato, con soglie
+  esplicite per mangiare, riposare e andare a dormire.
+* Routine giornaliera a regole: lavoro nella propria fascia, sonno tra le 22:00 e le 06:00, pasti
+  in locanda o al mercato se aperti (altrimenti dispensa di casa), riposo, tempo libero sociale.
+* Spostamento continuo su una rete di waypoint costruita sulle strade reali del villaggio, con
+  ostacoli verificati; nessun teletrasporto; luoghi irraggiungibili esclusi e stato `BLOCKED`
+  con recupero.
+* Integrazione con `SimulationLoop`: la simulazione avanza per tick, non per frame, e
+  `Game.advance_simulation(n)` permette di far passare tempo senza disegnare nulla.
+* Presentazione separata: capsule con nome solo entro `npc_view_distance`, pannello di selezione
+  con nome, età, professione, attività, obiettivo, barre dei bisogni e riepilogo.
+* Popolazione configurabile in un unico punto: `GameConfig.npc_population_size` (0..16, default
+  10). Il roster contiene 16 abitanti fissi; `NpcRoster.build(n)` restituisce i primi `n`.
 
-**Rischi**: costo per tick se lo stato è frammentato in oggetti; si mitigano tenendo i dati in array
-paralleli o in un unico `Dictionary` per NPC e misurando il tempo di tick.
+**Criteri di accettazione**: la popolazione configurata (default 10) viene simulata per un giorno
+intero in headless, senza nodi, con esito deterministico a parità di stato iniziale; il giocatore li
+vede muoversi nel villaggio; il pannello mostra l'abitante selezionato e continua a mostrarne i dati
+anche quando è fuori portata visiva.
 
-## Fase 2 — Economia minima (`src/economy`)
+**Rischi residui**: il movimento non usa la navmesh di Godot ma una rete di waypoint costruita a
+mano sulle strade; è verificabile e deterministica, ma non conosce il traffico o gli altri NPC.
+Il costo per tick è lineare nella popolazione (10 record, nessuna allocazione di nodi) e va
+misurato quando la popolazione crescerà.
+
+## Fase 2 — Economia minima (`src/economy`) — **non iniziata**
 
 **Obiettivo**: produrre, consumare, scambiare; la scarsità ha conseguenze.
 

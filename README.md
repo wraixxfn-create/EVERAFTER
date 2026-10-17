@@ -6,13 +6,17 @@ Il mondo è abitato da personaggi con identità, bisogni, professioni, obiettivi
 Gli abitanti agiranno autonomamente, la società evolverà e gli eventi lasceranno conseguenze nel tempo.
 Il gioco deve funzionare **offline**, senza servizi a pagamento e senza server obbligatori.
 
-Questo repository contiene oggi la **Fase 1 — primo ambiente esplorabile**: un villaggio fantasy
-medievale costruito a codice, camminabile in prima persona, con terreno procedurale, collisioni
-verificate, ciclo giorno/notte guidato dall'orologio di simulazione e un'interfaccia minima.
+Questo repository contiene oggi la **fase NPC — primi abitanti autonomi**, costruita sopra il
+villaggio esplorabile della Fase 1: un ambiente fantasy medievale a codice, camminabile in prima
+persona, con terreno procedurale e ciclo giorno/notte, abitato da **10 persone** (numero
+configurabile) che hanno un nome, un mestiere, bisogni, una casa, un posto di lavoro e una routine
+giornaliera. La loro simulazione gira anche quando nessuno li guarda.
 
-> Stato onesto del progetto: **non esistono ancora NPC, economia, relazioni, politica, cronache o
-> salvataggi.** Sono progettati in [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementati.
-> Questa fase riguarda la solidità del mondo fisico, come richiesto.
+> Stato onesto del progetto: **esistono gli NPC e la loro routine; non esistono ancora economia,
+> relazioni simulate, politica, cronache o salvataggi.** Le strutture dati per relazioni e ricordi
+> sono seminate, ma non c'è ancora un sistema sociale. Sono progettate in
+> [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementate. La fase successiva (economia,
+> `src/economy/`) non è iniziata.
 
 ---
 
@@ -86,6 +90,9 @@ Su Windows l'output su console è visibile solo con l'eseguibile `_console.exe`.
 | `P` | Pausa / ripresa della simulazione |
 | `+` / `-` | Velocità della simulazione (x1, x3, x10) |
 | `F1` | Mostra / nasconde il pannello diagnostico (nascosto all'avvio) |
+| **Clic sinistro** (mouse catturato) | Seleziona l'abitante sotto il mirino e apre la sua scheda |
+| **Clic sinistro** (mouse libero) | Seleziona l'abitante sotto il puntatore e cattura di nuovo il mouse |
+| **Elenco "Abitanti"** | Sceglie un abitante dal pannello, anche se è lontano e non è disegnato |
 
 Quando il mouse è libero, in basso allo schermo compare la scritta
 *"Clic sinistro o F per riprendere il controllo"*: nessuno deve dover indovinare come si torna a
@@ -121,9 +128,42 @@ Un villaggio di confine, al mattino del giorno 1 (ore 07:00 simulate):
   dell'area in cui ti trovi (8 aree: piazza, tre strade, stagno, locanda, sala del consiglio,
   bosco; fuori da tutte, "Campi di Everafter").
 
+### Gli abitanti (novità di questa fase)
+
+Nel villaggio vivono **10 abitanti iniziali**, configurabili in un solo punto
+(`npc_population_size` in `config/game_config.tres`, da 0 a 16). Ognuno ha:
+
+* un **ID stabile** (`npc_001` … `npc_016`), un nome e un'età adulta;
+* una **professione** (agricoltore, locandiera, mercante, cancelliera, fabbro, guaritrice,
+  pescatore, tessitrice, falegname, fornaia, …) e un **posto di lavoro** con un orario;
+* una **personalità** numerica (diligenza, socievolezza, curiosità, calma);
+* tre **bisogni** (energia, fame, benessere) che cambiano a ogni minuto simulato;
+* una **casa** e una posizione sul terreno;
+* un **obiettivo** e un'**attività** correnti, con un motivo leggibile;
+* relazioni e ricordi iniziali, presenti come dati ma **non ancora simulati**.
+
+La giornata è regolata da regole esplicite e deterministiche: sveglia e sonno tra le 22:00 e le
+06:00, turno di lavoro nella propria fascia, pasti quando la fame supera la soglia (locanda o
+mercato se aperti, altrimenti la dispensa di casa), riposo quando l'energia scende, tempo libero
+in piazza, alla locanda o allo stagno. Non ci sono numeri casuali: lo stesso stato iniziale e lo
+stesso numero di tick producono lo stesso risultato su qualunque macchina.
+
+Gli abitanti sono rappresentati da capsule colorate per mestiere, con il nome sopra la testa. Le
+capsule vengono create solo entro `npc_view_distance` (70 unità, configurabile) e distrutte quando
+si allontanano: **la simulazione non si ferma mai** per un NPC non disegnato. Il pannello in basso
+a destra mostra la scheda dell'abitante selezionato (nome, età, professione, attività, obiettivo,
+tre barre dei bisogni, riepilogo). Si può selezionare cliccando la capsula oppure scegliendo il
+nome dall'elenco: l'elenco funziona anche per chi è fuori portata visiva.
+
+Il pannello e le capsule leggono soltanto i `NpcRecord`; non li modificano. La simulazione vive in
+`src/npcs/` e non conosce né la scena 3D né l'interfaccia.
+
 ### Costo misurato della scena
 
-Misurato avviando la scena con Godot 4.7.2 headless (`--script res://tests/run_world_tests.gd`):
+Misura della fase precedente, avviando la scena con Godot 4.7.2 headless
+(`--script res://tests/run_world_tests.gd`). Il villaggio non è cambiato in questa fase: cambiano
+solo le capsule degli abitanti, che sono viste temporanee create entro `npc_view_distance` e
+liberate fuori portata.
 
 | Voce | Valore |
 | --- | --- |
@@ -153,11 +193,23 @@ src/
     simulation_system.gd         contratto di ogni sistema
     simulation_loop.gd           fixed timestep, pausa, velocità, catch-up
     systems/day_cycle_system.gd  sole e fase del giorno
+  npcs/                        simulazione degli abitanti (pura logica, nessun nodo)
+    npc_personality.gd           tratti numerici 0..100
+    npc_needs.gd                 energia, fame, benessere; pressione e serializzazione
+    npc_place.gd                 luogo logico: tipo, posizione, orari, cibo
+    npc_place_registry.gd        indice dei luoghi e ricerche deterministiche
+    npc_record.gd                stato di un abitante: identità, spazio, obiettivo, relazioni
+    npc_roster.gd                tabella fissa di 16 abitanti, nomi stabili
+    npc_route_graph.gd           rete di waypoint su strade e luoghi, con ostacoli reali
+    npc_simulation_system.gd     macchina a stati delle routine, movimento, bisogni
   world/                       mondo 3D
     scenes/main_world.tscn       scena principale
-    main_world.gd                radice di composizione: terreno, villaggio, spawn, aree
+    main_world.gd                radice di composizione: terreno, villaggio, abitanti, spawn
     terrain_generator.gd         height field deterministico (mesh + heightmap di collisione)
     player_explorer.gd           esploratore in prima persona (CharacterBody3D)
+    npcs/
+      village_npc_places.gd      dal piano del villaggio ai luoghi della simulazione
+      npc_presenter.gd           capsule, nomi, selezione con raycast, culling
     areas/area_registry.gd       regioni nominate, pura dati
     environment/
       village_layout.gd          il piano del villaggio: strade, lotti, pesi del terreno
@@ -172,14 +224,18 @@ src/
     world_hud.gd
     scenes/diagnostics_hud.tscn  pannello diagnostico (F1)
     diagnostics_hud.gd
+    scenes/npc_panel.tscn        scheda dell'abitante selezionato
+    npc_panel.gd
 tests/
   run_tests.gd                 runner di unità (exit code 0/1)
   run_world_tests.gd           runner di integrazione (avvia la scena, interroga la fisica)
   harness/test_harness.gd      micro harness di asserzioni
   unit/                        clock, loop, day cycle, terreno, config, layout, aree,
-                               materiali, baker, direzione artistica
+                               materiali, baker, direzione artistica, dati NPC, roster,
+                               rete di percorso, simulazione NPC, luoghi del villaggio
   integration/
-    test_world_scene.gd        scena, terreno vs fisica, collisioni del giocatore, budget
+    test_world_scene.gd        scena, terreno vs fisica, collisioni, budget, abitanti,
+                               selezione e pannello
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
@@ -237,21 +293,36 @@ godot --headless --path . --script res://tests/run_world_tests.gd
 `tools/run_checks.sh` stampa chiaramente quali controlli sono stati **eseguiti** e quali sono stati
 **saltati** perché lo strumento non è installato: non dichiara mai superato un test non eseguito.
 
-### Verifiche realmente eseguite su questa fase
+### Verifiche eseguite su questa fase
 
-Le due suite sono state eseguite con un motore **Godot 4.7.2-stable reale**, in modalità headless
-(build WebAssembly avviata sotto Node, renderer "dummy"): gli script GDScript sono stati compilati
-ed eseguiti dal motore, la scena principale è stata istanziata, il server fisico ha simulato.
+Questa fase è stata sviluppata in un ambiente **senza un binario Godot**: il motore è stato
+compilato dai sorgenti durante la sessione, ma la build non era terminata al momento di aprire la
+pull request. Quindi, per essere espliciti:
+
+* i controlli **statici** sono stati eseguiti davvero e sono verdi;
+* le due suite **Godot** (`run_tests.gd`, `run_world_tests.gd`) sono scritte e aggiornate, ma in
+  questa fase **non sono state eseguite**: nessun numero di test è riportato come "passato" finché
+  non verrà misurato. I conteggi citati nelle sezioni storiche qui sotto si riferiscono alla fase
+  precedente e sono superati.
 
 | Controllo | Strumento | Esito |
 | --- | --- | --- |
-| Sintassi di tutti i 35 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
+| Sintassi di tutti i 51 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
 | Stile GDScript | `gdlint` (gdtoolkit 4.5.0) | **eseguito — 0 problemi** |
 | Coerenza progetto: scena principale, autoload, `res://`, ext/sub resource, percorsi `$Nodo` degli script rispetto alle scene, azioni di input, `.gitignore` | `tools/check_project.py` | **eseguito — OK** |
-| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **eseguito — 355 passati, 0 falliti** |
-| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **eseguito — 49 passati, 0 falliti** |
-| Resa visiva su GPU (come *appare* il villaggio) | — | **NON eseguito**: l'ambiente di verifica non ha GPU. Geometria, winding, normali, materiali e collisioni sono verificati; l'immagine finale no |
-| Prova su Windows con Godot desktop | — | **NON eseguita**: da fare in revisione |
+| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **NON eseguita in questa sessione** (motore in compilazione): da lanciare prima del merge |
+| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **NON eseguita in questa sessione** (motore in compilazione): da lanciare prima del merge |
+| Resa visiva su GPU (come *appare* il villaggio e come si muovono le capsule) | — | **NON eseguita**: l'ambiente di verifica non ha GPU |
+| Prova su Windows con Godot desktop, selezione col mouse e pannello | — | **NON eseguita**: da fare in revisione |
+
+I controlli statici non sostituiscono l'esecuzione: coprono sintassi, stile, percorsi delle risorse
+e coerenza dei nodi, non il comportamento. La suite di unità contiene le prove di determinismo,
+bisogni, routine, movimento continuo e luoghi; la suite di integrazione contiene le prove di
+selezione, pannello e simulazione senza viste. Vanno eseguite con:
+
+```bash
+bash tools/run_checks.sh
+```
 
 Che cosa copre davvero la suite di integrazione, perché è la parte che conta:
 
@@ -265,11 +336,18 @@ Che cosa copre davvero la suite di integrazione, perché è la parte che conta:
 * **i muri fermano il giocatore**: `PhysicsServer3D.body_test_motion()` con la **capsula reale del
   giocatore** contro una casa vera; la corsa si interrompe ben prima dei 12 metri richiesti.
 * **il giocatore non esce dal mondo**: la posizione è limitata ai bordi del terreno.
-* **budget**: draw call, triangoli e collider restano entro i limiti dichiarati.
+* **budget**: draw call, triangoli e collider restano entro i limiti dichiarati (il conteggio
+  esclude le capsule degli abitanti, che sono viste temporanee).
+* **abitanti** (`check_npcs`): la popolazione segue `npc_population_size`, gli ID sono unici e i
+  nomi stabili; i bisogni evolvono con `Game.advance_simulation()`; con `render_distance` a 0
+  nessuna capsula è disegnata eppure i record continuano a cambiare; la selezione dal presenter
+  arriva al pannello, che mostra nome, attività, obiettivo, barre e riepilogo del personaggio
+  scelto; un ID inesistente viene rifiutato senza cambiare la selezione.
 
-### Tre difetti reali trovati eseguendo il motore
+### Difetti reali trovati eseguendo il motore nella fase precedente
 
-La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono emersi tre bug:
+La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono emersi tre bug
+(riguardano il terreno e il loop del tempo, non gli abitanti):
 
 1. **`SimulationClock.to_string()` non veniva mai chiamata.** In GDScript il metodo virtuale è
    `_to_string()`; un metodo chiamato `to_string()` non sovrascrive nulla. Ora corretto, e il test
@@ -285,8 +363,13 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
 
 ## 8. Limiti noti di questa fase
 
-* **Nessun NPC**, bisogno, lavoro, inventario, prezzo, relazione, legge, fazione o cronaca: è la
-  fase successiva, deliberatamente non iniziata.
+* **Gli NPC non hanno economia**: nessun inventario, prezzo, salario, scambio o produzione. La
+  fame si soddisfa in locanda, al mercato o in casa, senza moneta. È la fase successiva,
+  deliberatamente non iniziata.
+* **Nessuna simulazione sociale**: relazioni e ricordi esistono come dati iniziali (e sono
+  serializzati), ma nessuna regola li modifica. Non ci sono fazioni, leggi, cronache o eventi.
+* **La memoria non è un sistema**: i ricordi sono un elenco seminato, non un registro che cresce
+  con le azioni.
 * **Nessun interno**: le case sono volumi chiusi con una scatola di collisione. Porte e finestre
   sono dettagli di superficie, non aperture.
 * **Nessuna serializzazione**: `to_dict()` / `from_dict()` esistono su clock, loop e sistemi, ma

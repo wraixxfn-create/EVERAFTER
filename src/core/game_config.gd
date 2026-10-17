@@ -20,7 +20,7 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 
 @export_group("Project")
 @export var project_title: String = "EVERAFTER"
-@export var build_label: String = "0.2.0-village"
+@export var build_label: String = "0.3.0-npcs"
 
 @export_group("Simulated time")
 ## Real seconds per logical tick at speed x1. With the default value the
@@ -54,6 +54,15 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 ## Every procedural element of the world derives from this seed, so the same
 ## seed always rebuilds the identical village.
 @export var terrain_seed: int = 20261016
+
+@export_group("Population")
+## Inhabitants created at world start. The roster is fixed and deterministic;
+## this value chooses how many of its entries are used. The requested phase
+## asks for a small starting group, so the default sits inside 8..12.
+@export_range(0, 16) var npc_population_size: int = 10
+## Distance at which an inhabitant gets a 3D view. This only affects
+## representation: simulation updates every NPC regardless of this value.
+@export_range(10.0, 200.0) var npc_view_distance: float = 70.0
 
 @export_group("Player")
 @export_range(0.5, 20.0) var player_walk_speed: float = 5.0
@@ -115,6 +124,10 @@ func validate() -> PackedStringArray:
 		problems.append("terrain_height_scale must be >= 0 (got %s)" % terrain_height_scale)
 	if player_walk_speed <= 0.0:
 		problems.append("player_walk_speed must be > 0 (got %s)" % player_walk_speed)
+	if npc_population_size < 0:
+		problems.append("npc_population_size must be >= 0 (got %d)" % npc_population_size)
+	if npc_view_distance <= 0.0:
+		problems.append("npc_view_distance must be > 0 (got %s)" % npc_view_distance)
 	if start_minute_of_day < 0 or start_minute_of_day >= SimulationClock.MINUTES_PER_DAY:
 		problems.append("start_minute_of_day out of range (got %d)" % start_minute_of_day)
 	if save_format_version < 1:

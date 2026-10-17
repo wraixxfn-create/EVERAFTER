@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_config")
 project_title = "EVERAFTER"
-build_label = "0.2.0-village"
+build_label = "0.3.0-npcs"
 logic_tick_seconds = 0.05
 time_scale_presets = PackedFloat32Array(1, 3, 10)
 default_time_scale_index = 0
@@ -19,3 +19,5 @@ player_walk_speed = 5.0
 player_sprint_speed = 9.0
 player_jump_velocity = 6.0
 mouse_sensitivity = 0.0022
+npc_population_size = 10
+npc_view_distance = 70.0

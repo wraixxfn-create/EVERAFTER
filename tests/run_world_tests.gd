@@ -61,6 +61,7 @@ func _run() -> void:
 	TestWorldScene.check_player_collides(_harness, _world)
 	TestWorldScene.check_areas(_harness, _world)
 	TestWorldScene.check_budget(_harness, _world)
+	await TestWorldScene.check_npcs(_harness, _world, self)
 	TestWorldScene.check_terrain_collision(
 		_harness, _world, root.world_3d.direct_space_state
 	)

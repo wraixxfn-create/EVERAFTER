@@ -1,0 +1,220 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://src/ui/npc_panel.gd" id="1_npcpanel"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.04, 0.05, 0.07, 0.82)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.35, 0.32, 0.24, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bar_bg"]
+bg_color = Color(0.14, 0.15, 0.17, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_energy"]
+bg_color = Color(0.42, 0.68, 0.35, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hunger"]
+bg_color = Color(0.82, 0.58, 0.28, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wellbeing"]
+bg_color = Color(0.42, 0.6, 0.78, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[node name="NpcPanel" type="CanvasLayer"]
+layer = 6
+script = ExtResource("1_npcpanel")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -392.0
+offset_top = 18.0
+offset_right = -20.0
+offset_bottom = 562.0
+grow_horizontal = 0
+grow_vertical = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Root/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Lines" type="VBoxContainer" parent="Root/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HeaderLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 16
+text = "ABITANTI"
+
+[node name="Selector" type="OptionButton" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+fit_to_longest_item = false
+
+[node name="Separator" type="HSeparator" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.92, 0.82, 1)
+theme_override_font_sizes/font_size = 22
+text = "Nessun abitante selezionato"
+
+[node name="ProfessionLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.76, 0.7, 1)
+theme_override_font_sizes/font_size = 13
+text = "—"
+
+[node name="ActivityLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.86, 0.88, 0.9, 1)
+theme_override_font_sizes/font_size = 14
+text = "Attività: —"
+
+[node name="GoalLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.8, 0.76, 1)
+theme_override_font_sizes/font_size = 13
+text = "Obiettivo: —"
+
+[node name="NeedsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 12
+text = "BISOGNI"
+
+[node name="NeedsGrid" type="GridContainer" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 4
+columns = 3
+
+[node name="EnergyLabel" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Energia"
+
+[node name="EnergyBar" type="ProgressBar" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+custom_minimum_size = Vector2(150, 12)
+layout_mode = 2
+size_flags_vertical = 4
+max_value = 100.0
+is_ratio_exp = false
+show_percentage = false
+theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_energy")
+
+[node name="EnergyValue" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+horizontal_alignment = 2
+
+[node name="HungerLabel" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Fame"
+
+[node name="HungerBar" type="ProgressBar" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+custom_minimum_size = Vector2(150, 12)
+layout_mode = 2
+size_flags_vertical = 4
+max_value = 100.0
+is_ratio_exp = false
+show_percentage = false
+theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_hunger")
+
+[node name="HungerValue" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+horizontal_alignment = 2
+
+[node name="WellbeingLabel" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Benessere"
+
+[node name="WellbeingBar" type="ProgressBar" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+custom_minimum_size = Vector2(150, 12)
+layout_mode = 2
+size_flags_vertical = 4
+max_value = 100.0
+is_ratio_exp = false
+show_percentage = false
+theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_wellbeing")
+
+[node name="WellbeingValue" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+horizontal_alignment = 2
+
+[node name="SummaryTitle" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 12
+text = "RIEPILOGO"
+
+[node name="SummaryLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.82, 0.84, 1)
+theme_override_font_sizes/font_size = 13
+text = "Scegli un nome dall'elenco o clicca un abitante nel villaggio."
+
+[node name="HintLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "Clic sinistro su un abitante, oppure scegli dall'elenco. I dati continuano ad aggiornarsi anche fuori vista."

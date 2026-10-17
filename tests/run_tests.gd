@@ -39,6 +39,11 @@ func _initialize() -> void:
 	TestVillageMaterials.run_tests(harness)
 	TestMeshBaker.run_tests(harness)
 	TestVillageArt.run_tests(harness)
+	TestNpcData.run_tests(harness)
+	TestNpcRoster.run_tests(harness)
+	TestNpcRouteGraph.run_tests(harness)
+	TestNpcSimulation.run_tests(harness)
+	TestVillageNpcPlaces.run_tests(harness)
 	harness.print_summary()
 
 	quit(1 if harness.failed_count() > 0 else 0)

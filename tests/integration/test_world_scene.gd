@@ -212,6 +212,118 @@ static func check_player_collides(harness: TestHarness, world: Node3D) -> void:
 		)
 
 
+## Inhabitants: the simulation exists, is stable, advances without frames, and
+## the 3D layer plus the panel reflect the same records. `tree` is needed to give
+## `NpcPresenter` and `NpcPanel` one idle frame to synchronise their views.
+static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> void:
+	harness.suite("Inhabitants")
+	var system: NpcSimulationSystem = world.get_npc_system()
+	var presenter: NpcPresenter = world.get_npc_presenter()
+	var panel := world.get_node_or_null("NpcPanel") as NpcPanel
+	harness.check(system != null, "the world exposes its NPC simulation")
+	harness.check(presenter != null, "the world exposes its NPC presenter")
+	harness.check(panel != null, "the world contains the observation panel")
+	if system == null or presenter == null or panel == null:
+		return
+	harness.check_equals(
+		system.get_record_count(),
+		mini(Game.config.npc_population_size, NpcRoster.MAX_POPULATION),
+		"the population follows GameConfig.npc_population_size"
+	)
+	harness.check(
+		Game.get_npc_system() == system,
+		"the simulation is registered with Game, not driven by the scene"
+	)
+	var view_ids := presenter.get_view_ids()
+	var known_views := 0
+	for view_id in view_ids:
+		if system.get_record(view_id) != null:
+			known_views += 1
+	harness.check_equals(known_views, view_ids.size(), "every view maps to a record")
+	harness.check(
+		view_ids.size() <= system.get_record_count(), "there are no orphan views"
+	)
+
+	var ids := {}
+	var names_match := true
+	var expected_roster := NpcRoster.build(system.get_record_count())
+	for index in system.get_records().size():
+		var record := system.get_records()[index]
+		ids[record.id] = true
+		if record.display_name != expected_roster[index].display_name:
+			names_match = false
+	harness.check_equals(ids.size(), system.get_record_count(), "NPC ids are unique")
+	harness.check(names_match, "names are stable across constructions")
+
+	# Simulated time advances needs without any rendered frame.
+	var watched := system.get_records()[0]
+	var hunger_before := watched.needs.hunger
+	Game.advance_simulation(60)
+	harness.check(
+		not is_equal_approx(watched.needs.hunger, hunger_before),
+		"needs evolve when the simulation advances"
+	)
+
+	# Hide every view: the records must keep changing.
+	EventBus.npc_selected.emit("")
+	presenter.set_render_distance(0.0)
+	# `process_frame` fires before Node._process, so one await only reaches the
+	# frame in which the views are about to be synchronised. Two awaits guarantee
+	# that the synchronisation itself has run.
+	await tree.process_frame
+	await tree.process_frame
+	harness.check_equals(presenter.get_view_count(), 0, "nobody is rendered at distance 0")
+	var hunger_unrendered := watched.needs.hunger
+	Game.advance_simulation(90)
+	harness.check(
+		not is_equal_approx(watched.needs.hunger, hunger_unrendered),
+		"the simulation advances while the NPC has no view"
+	)
+	harness.check(watched.position.is_finite(), "an unrendered NPC keeps a valid position")
+	harness.check(
+		not watched.current_place_name.is_empty(),
+		"an unrendered NPC still knows where it is"
+	)
+	harness.check(
+		watched.goal != NpcRecord.Goal.BLOCKED,
+		"an unrendered NPC keeps a coherent goal"
+	)
+
+	# Selection: the presenter, the event bus and the panel agree, and the panel
+	# shows the selected record rather than a placeholder.
+	presenter.set_render_distance(500.0)
+	await tree.process_frame
+	await tree.process_frame
+	harness.check_equals(
+		presenter.get_view_count(), system.get_record_count(), "all views exist within 500 units"
+	)
+	var target := system.get_records()[2]
+	harness.check(presenter.select_npc(target.id), "selecting a known NPC succeeds")
+	harness.check_equals(presenter.get_selected_id(), target.id, "the presenter remembers it")
+	harness.check_equals(panel.get_selected_id(), target.id, "the panel receives the event")
+	harness.check(presenter.get_view_node(target.id) != null, "the selected NPC has a view")
+	await tree.process_frame
+	harness.check_equals(panel.get_displayed_name(), target.display_name, "the panel shows the name")
+	harness.check_equals(
+		panel.get_selector_item_count(), system.get_record_count() + 1, "the selector lists everyone"
+	)
+	harness.check(
+		panel.get_displayed_activity().contains(target.activity_label()),
+		"the panel shows the live activity"
+	)
+	harness.check(
+		panel.get_displayed_summary().contains(target.display_name),
+		"the panel shows a status summary of that character"
+	)
+	harness.check_almost(
+		panel.get_displayed_energy(), target.needs.energy, 1.0, "need bars read the record"
+	)
+	harness.check(not presenter.select_npc("npc_999"), "an unknown id cannot be selected")
+	harness.check_equals(panel.get_selected_id(), target.id, "a failed selection changes nothing")
+	presenter.set_render_distance(Game.config.npc_view_distance)
+	EventBus.npc_selected.emit("")
+
+
 ## The village has to stay cheap enough for a GTX 1060 class GPU.
 static func check_budget(harness: TestHarness, world: Node3D) -> void:
 	harness.suite("PerformanceBudget")

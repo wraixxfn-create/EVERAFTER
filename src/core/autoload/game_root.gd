@@ -16,6 +16,7 @@ var loop: SimulationLoop = SimulationLoop.new()
 
 var _time_scale_index: int = 0
 var _day_cycle: DayCycleSystem = null
+var _npc_system: NpcSimulationSystem = null
 
 
 func _ready() -> void:
@@ -118,7 +119,34 @@ func get_daylight_factor() -> float:
 	return _day_cycle.get_daylight_factor()
 
 
+func get_npc_system() -> NpcSimulationSystem:
+	return _npc_system
+
+
 # --- commands ---------------------------------------------------------------
+
+
+## Registers the inhabitant simulation once the world has built its places.
+## Kept here instead of in the world so that `Game` remains the single owner of
+## the loop: the 3D scene injects data, it does not drive time.
+func set_npc_system(system: NpcSimulationSystem) -> bool:
+	if system == null:
+		return false
+	if _npc_system == system:
+		return true
+	if _npc_system != null:
+		push_warning("Game: an NPC system is already registered.")
+		return false
+	_npc_system = system
+	loop.register_system(system)
+	EventBus.npc_system_ready.emit()
+	return true
+
+
+## Explicit time advancement, independent of frames. Used by the integration
+## tests today and by the future "time passed while you were away" feature.
+func advance_simulation(ticks: int) -> void:
+	loop.run_ticks(maxi(ticks, 0))
 
 
 func set_time_scale_index(index: int) -> void:
