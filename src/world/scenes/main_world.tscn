@@ -10,10 +10,10 @@
 [ext_resource type="PackedScene" path="res://src/ui/scenes/economy_panel.tscn" id="8_ecopanel"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
-sky_top_color = Color(0.24, 0.44, 0.74, 1)
-sky_horizon_color = Color(0.7, 0.78, 0.87, 1)
-ground_horizon_color = Color(0.7, 0.78, 0.87, 1)
-ground_bottom_color = Color(0.24, 0.23, 0.2, 1)
+sky_top_color = Color(0.18, 0.4, 0.72, 1)
+sky_horizon_color = Color(0.92, 0.83, 0.68, 1)
+ground_horizon_color = Color(0.92, 0.83, 0.68, 1)
+ground_bottom_color = Color(0.3, 0.27, 0.21, 1)
 sun_angle_max = 12.0
 
 [sub_resource type="Sky" id="Sky_1"]
@@ -25,15 +25,24 @@ background_mode = 2
 sky = SubResource("Sky_1")
 ambient_light_source = 3
 tonemap_mode = 2
-tonemap_white = 4.0
+tonemap_white = 3.2
 ssao_enabled = true
-ssao_radius = 1.25
-ssao_intensity = 1.15
-glow_enabled = false
+ssao_radius = 1.45
+ssao_intensity = 1.25
+glow_enabled = true
+glow_intensity = 0.6
+glow_strength = 0.35
+glow_bloom = 0.05
+glow_blend_mode = 1
+glow_hdr_threshold = 1.15
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.05
+adjustment_saturation = 1.12
 fog_enabled = true
-fog_light_color = Color(0.7, 0.78, 0.87, 1)
-fog_density = 0.003
-fog_sky_affect = 0.6
+fog_light_color = Color(0.86, 0.79, 0.66, 1)
+fog_density = 0.0032
+fog_sky_affect = 0.55
 volumetric_fog_enabled = false
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
@@ -50,11 +59,13 @@ script = ExtResource("2_sky")
 environment = SubResource("Environment_1")
 
 [node name="Sun" type="DirectionalLight3D" parent="Sky"]
-light_energy = 1.3
+light_energy = 1.5
+light_angular_distance = 0.5
 shadow_enabled = true
-directional_shadow_max_distance = 100.0
+directional_shadow_max_distance = 128.0
 directional_shadow_mode = 1
-shadow_bias = 0.035
+directional_shadow_blend_splits = true
+shadow_bias = 0.03
 shadow_normal_bias = 1.0
 
 [node name="Fill" type="DirectionalLight3D" parent="Sky"]
@@ -86,7 +97,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
 
 [node name="Camera" type="Camera3D" parent="Player/Head"]
 current = true
-fov = 75.0
+fov = 70.0
 far = 420.0
 
 [node name="WorldHud" parent="." instance=ExtResource("4_worldhud")]

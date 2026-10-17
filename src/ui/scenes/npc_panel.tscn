@@ -3,19 +3,19 @@
 [ext_resource type="Script" path="res://src/ui/npc_panel.gd" id="1_npcpanel"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(0.04, 0.05, 0.07, 0.82)
+bg_color = Color(0.07, 0.06, 0.05, 0.85)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.35, 0.32, 0.24, 0.7)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+border_color = Color(0.5, 0.4, 0.22, 0.75)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bar_bg"]
-bg_color = Color(0.14, 0.15, 0.17, 1)
+bg_color = Color(0.12, 0.11, 0.1, 1)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
@@ -81,7 +81,7 @@ theme_override_constants/separation = 6
 
 [node name="HeaderLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 16
 text = "ABITANTI"
 
@@ -102,14 +102,14 @@ text = "Nessun abitante selezionato"
 
 [node name="ProfessionLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.72, 0.76, 0.7, 1)
+theme_override_colors/font_color = Color(0.76, 0.78, 0.68, 1)
 theme_override_font_sizes/font_size = 13
 text = "—"
 
 [node name="ActivityLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.86, 0.88, 0.9, 1)
+theme_override_colors/font_color = Color(0.9, 0.88, 0.8, 1)
 theme_override_font_sizes/font_size = 14
 text = "Attività: —"
 
@@ -122,7 +122,7 @@ text = "Obiettivo: —"
 
 [node name="NeedsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 12
 text = "BISOGNI"
 
@@ -200,7 +200,7 @@ horizontal_alignment = 2
 
 [node name="SummaryTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 12
 text = "RIEPILOGO"
 
@@ -214,7 +214,7 @@ text = "Scegli un nome dall'elenco o clicca un abitante nel villaggio."
 
 [node name="RelationsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 12
 text = "RELAZIONI"
 
@@ -228,7 +228,7 @@ text = "Nessuna relazione conosciuta."
 
 [node name="MemoriesTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 12
 text = "RICORDI"
 

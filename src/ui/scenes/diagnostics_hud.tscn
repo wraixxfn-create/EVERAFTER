@@ -68,14 +68,14 @@ text = "FPS: 0"
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.66, 0.82, 0.72, 1)
+theme_override_colors/font_color = Color(0.7, 0.82, 0.68, 1)
 text = "Avvio in corso…"
 
 [node name="HelpLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 13
-theme_override_colors/font_color = Color(0.72, 0.75, 0.8, 1)
+theme_override_colors/font_color = Color(0.76, 0.78, 0.72, 1)
 autowrap_mode = 2
 text = "WASD / frecce: muoversi · Shift: correre · Spazio: saltare
 Mouse: guardarsi · Clic: cattura il mouse · Esc: libera il mouse

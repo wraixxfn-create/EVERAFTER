@@ -20,48 +20,49 @@ extends RefCounted
 ## village lights up at dusk without any per-node work.
 
 const PALETTE := {
-	# Walls: plaster over wattle and daub, three tones so houses differ.
-	"wall_cream": Color(0.86, 0.80, 0.68),
-	"wall_ochre": Color(0.76, 0.65, 0.49),
-	"wall_ash": Color(0.68, 0.67, 0.66),
-	"wall_pale": Color(0.80, 0.79, 0.72),
-	# Timber frame, doors, planks, handles.
-	"timber": Color(0.30, 0.21, 0.15),
-	"timber_warm": Color(0.41, 0.29, 0.19),
-	"plank": Color(0.52, 0.38, 0.25),
-	"door": Color(0.26, 0.18, 0.13),
-	# Roofs: tiles, shingles, slate.
-	"roof_tile": Color(0.62, 0.32, 0.24),
-	"roof_shingle": Color(0.44, 0.30, 0.25),
-	"roof_slate": Color(0.36, 0.38, 0.42),
-	"roof_moss": Color(0.40, 0.42, 0.28),
-	# Masonry and metal.
-	"stone": Color(0.58, 0.57, 0.54),
-	"stone_dark": Color(0.41, 0.40, 0.39),
-	"iron": Color(0.22, 0.22, 0.25),
+	# Walls: plaster over wattle and daub, four warm tones so houses differ
+	# without ever leaving the same family.
+	"wall_cream": Color(0.88, 0.80, 0.64),
+	"wall_ochre": Color(0.82, 0.62, 0.40),
+	"wall_ash": Color(0.62, 0.58, 0.51),
+	"wall_pale": Color(0.87, 0.81, 0.68),
+	# Timber frame, doors, planks, handles: dark walnut against light plaster.
+	"timber": Color(0.24, 0.15, 0.09),
+	"timber_warm": Color(0.42, 0.26, 0.13),
+	"plank": Color(0.58, 0.41, 0.23),
+	"door": Color(0.28, 0.17, 0.09),
+	# Roofs: terracotta tiles, dark shingles, blue slate, mossy thatch.
+	"roof_tile": Color(0.72, 0.30, 0.18),
+	"roof_shingle": Color(0.42, 0.23, 0.15),
+	"roof_slate": Color(0.31, 0.35, 0.44),
+	"roof_moss": Color(0.36, 0.43, 0.21),
+	# Masonry and metal: warm stone, never cold grey.
+	"stone": Color(0.61, 0.57, 0.50),
+	"stone_dark": Color(0.39, 0.36, 0.31),
+	"iron": Color(0.19, 0.19, 0.23),
 	# Cloth: awnings, banners, the inn sign.
-	"cloth_red": Color(0.62, 0.22, 0.22),
-	"cloth_blue": Color(0.27, 0.35, 0.52),
-	"cloth_cream": Color(0.84, 0.79, 0.66),
-	# Nature.
-	"trunk": Color(0.33, 0.24, 0.17),
-	"trunk_birch": Color(0.76, 0.74, 0.68),
-	"leaf_deep": Color(0.16, 0.34, 0.19),
-	"leaf_mid": Color(0.23, 0.44, 0.22),
-	"leaf_bright": Color(0.34, 0.53, 0.24),
-	"leaf_autumn": Color(0.62, 0.48, 0.20),
-	"pine": Color(0.14, 0.30, 0.22),
-	"grass": Color(0.30, 0.47, 0.24),
-	"grass_blade": Color(0.85, 0.90, 0.70),
-	"rock": Color(0.47, 0.46, 0.44),
-	"rock_wet": Color(0.34, 0.35, 0.36),
-	# Ground.
-	"dirt": Color(0.55, 0.44, 0.31),
-	"cobble": Color(0.60, 0.58, 0.54),
-	"water": Color(0.20, 0.36, 0.44),
+	"cloth_red": Color(0.66, 0.17, 0.14),
+	"cloth_blue": Color(0.21, 0.33, 0.55),
+	"cloth_cream": Color(0.91, 0.82, 0.62),
+	# Nature: saturated greens with one warm autumn accent.
+	"trunk": Color(0.31, 0.21, 0.12),
+	"trunk_birch": Color(0.83, 0.79, 0.70),
+	"leaf_deep": Color(0.12, 0.31, 0.13),
+	"leaf_mid": Color(0.19, 0.43, 0.16),
+	"leaf_bright": Color(0.33, 0.55, 0.19),
+	"leaf_autumn": Color(0.80, 0.47, 0.12),
+	"pine": Color(0.09, 0.27, 0.17),
+	"grass": Color(0.28, 0.46, 0.17),
+	"grass_blade": Color(0.80, 0.88, 0.62),
+	"rock": Color(0.48, 0.45, 0.40),
+	"rock_wet": Color(0.32, 0.33, 0.34),
+	# Ground: packed earth roads, worn cobbles, deep pond water.
+	"dirt": Color(0.58, 0.43, 0.25),
+	"cobble": Color(0.59, 0.55, 0.48),
+	"water": Color(0.15, 0.33, 0.40),
 	# Emissive parts: dark albedo by day, lit by `apply_night_glow()` at night.
-	"window": Color(0.16, 0.19, 0.26),
-	"lantern": Color(0.30, 0.28, 0.24),
+	"window": Color(0.15, 0.18, 0.26),
+	"lantern": Color(0.32, 0.28, 0.22),
 }
 
 ## Emissive colour of windows and lanterns, modulated by the night glow.

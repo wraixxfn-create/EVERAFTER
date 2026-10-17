@@ -3,16 +3,16 @@
 [ext_resource type="Script" path="res://src/ui/economy_panel.gd" id="1_ecopanel"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ecopanel"]
-bg_color = Color(0.04, 0.05, 0.07, 0.82)
+bg_color = Color(0.07, 0.06, 0.05, 0.85)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.35, 0.32, 0.24, 0.7)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+border_color = Color(0.5, 0.4, 0.22, 0.75)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
 [node name="EconomyPanel" type="CanvasLayer"]
 layer = 6
@@ -52,7 +52,7 @@ theme_override_constants/separation = 5
 [node name="HeaderLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 15
 text = "ECONOMIA DEL VILLAGGIO"
 
@@ -203,7 +203,7 @@ mouse_filter = 2
 [node name="TransactionsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
 theme_override_font_sizes/font_size = 12
 text = "TRANSAZIONI RECENTI"
 

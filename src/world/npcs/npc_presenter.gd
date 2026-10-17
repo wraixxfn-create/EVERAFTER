@@ -33,6 +33,11 @@ var _selected_id: String = ""
 var _materials: Dictionary = {}
 var _body_mesh: CapsuleMesh = null
 var _head_mesh: SphereMesh = null
+var _hair_mesh: SphereMesh = null
+var _belt_mesh: CylinderMesh = null
+var _skin_material: StandardMaterial3D = null
+var _belt_material: StandardMaterial3D = null
+var _hair_materials: Array[StandardMaterial3D] = []
 var _ring_mesh: CylinderMesh = null
 var _ring_material: StandardMaterial3D = null
 
@@ -204,12 +209,27 @@ func _create_view(record: NpcRecord) -> Node3D:
 	torso.material_override = material
 	torso.position.y = BODY_HEIGHT * 0.5
 	body.add_child(torso)
+	# Leather belt: one dark band that breaks the capsule silhouette.
+	var belt := MeshInstance3D.new()
+	belt.name = "Belt"
+	belt.mesh = _belt_mesh
+	belt.material_override = _belt_material
+	belt.position.y = BODY_HEIGHT * 0.52
+	body.add_child(belt)
 	var head := MeshInstance3D.new()
 	head.name = "Head"
 	head.mesh = _head_mesh
-	head.material_override = material
+	head.material_override = _skin_material
 	head.position.y = BODY_HEIGHT + 0.18
 	body.add_child(head)
+	# Hair cap over the upper half of the head, colour hashed from the id so
+	# every villager keeps a stable, personal look.
+	var hair := MeshInstance3D.new()
+	hair.name = "Hair"
+	hair.mesh = _hair_mesh
+	hair.material_override = _hair_material_for(record.id)
+	hair.position.y = BODY_HEIGHT + 0.30
+	body.add_child(hair)
 	var label := Label3D.new()
 	label.name = "NameLabel"
 	label.text = record.display_name
@@ -258,6 +278,10 @@ func _material_for(record: NpcRecord) -> StandardMaterial3D:
 	return material
 
 
+func _hair_material_for(npc_id: String) -> StandardMaterial3D:
+	return _hair_materials[absi(npc_id.hash()) % _hair_materials.size()]
+
+
 func _build_shared_resources() -> void:
 	_body_mesh = CapsuleMesh.new()
 	_body_mesh.radius = BODY_RADIUS
@@ -269,6 +293,30 @@ func _build_shared_resources() -> void:
 	_head_mesh.height = 0.46
 	_head_mesh.radial_segments = 10
 	_head_mesh.rings = 6
+	_hair_mesh = SphereMesh.new()
+	_hair_mesh.radius = 0.25
+	_hair_mesh.height = 0.28
+	_hair_mesh.radial_segments = 10
+	_hair_mesh.rings = 5
+	_belt_mesh = CylinderMesh.new()
+	_belt_mesh.top_radius = BODY_RADIUS + 0.03
+	_belt_mesh.bottom_radius = BODY_RADIUS + 0.03
+	_belt_mesh.height = 0.12
+	_belt_mesh.radial_segments = 10
+	_skin_material = StandardMaterial3D.new()
+	_skin_material.albedo_color = Color(0.87, 0.68, 0.52)
+	_skin_material.roughness = 0.75
+	_belt_material = StandardMaterial3D.new()
+	_belt_material.albedo_color = Color(0.22, 0.14, 0.09)
+	_belt_material.roughness = 0.6
+	for hair_color in [
+		Color(0.14, 0.10, 0.08), Color(0.34, 0.20, 0.10),
+		Color(0.55, 0.41, 0.20), Color(0.70, 0.65, 0.56),
+	]:
+		var hair := StandardMaterial3D.new()
+		hair.albedo_color = hair_color
+		hair.roughness = 0.8
+		_hair_materials.append(hair)
 	_ring_mesh = CylinderMesh.new()
 	_ring_mesh.top_radius = 0.72
 	_ring_mesh.bottom_radius = 0.72

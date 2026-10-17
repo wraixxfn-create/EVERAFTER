@@ -39,13 +39,14 @@ const HIGH_FREQUENCY := 0.121
 const PLAZA_RADIUS := 15.0
 const PLAZA_FALLOFF := 12.0
 
-const COLOR_GRASS := Color(0.30, 0.50, 0.26)
-const COLOR_GRASS_DARK := Color(0.19, 0.33, 0.18)
-const COLOR_ROCK := Color(0.44, 0.41, 0.37)
-const COLOR_SAND := Color(0.70, 0.62, 0.44)
-const COLOR_DIRT := Color(0.48, 0.38, 0.27)
-const COLOR_COBBLE := Color(0.56, 0.54, 0.50)
-const COLOR_MUD := Color(0.28, 0.26, 0.21)
+const COLOR_GRASS := Color(0.30, 0.48, 0.21)
+const COLOR_GRASS_DARK := Color(0.17, 0.31, 0.13)
+const COLOR_MEADOW := Color(0.43, 0.55, 0.22)
+const COLOR_ROCK := Color(0.45, 0.41, 0.35)
+const COLOR_SAND := Color(0.72, 0.62, 0.42)
+const COLOR_DIRT := Color(0.56, 0.41, 0.23)
+const COLOR_COBBLE := Color(0.57, 0.53, 0.47)
+const COLOR_MUD := Color(0.29, 0.25, 0.19)
 
 ## Grid points per side. The terrain is (size_cells - 1) units across.
 var size_cells: int = DEFAULT_SIZE_CELLS
@@ -304,10 +305,15 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	var slope := _slope_at(ix, iz)
 	var height_t := clampf((height + height_scale) / (2.0 * maxf(height_scale, 0.001)), 0.0, 1.0)
 	var color := COLOR_GRASS_DARK.lerp(COLOR_GRASS, height_t)
-	var rock_t := clampf((slope - 0.35) / 0.6, 0.0, 1.0)
-	color = color.lerp(COLOR_ROCK, rock_t)
 	var x := cell_to_world_x(ix)
 	var z := cell_to_world_z(iz)
+	# Broad warm meadow patches: the ground reads as fields, not as one flat
+	# green sheet. Same deterministic noise as the heights, so no two machines
+	# paint a different world.
+	var patch := clampf(_value_noise(x, z, 0.031, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+	color = color.lerp(COLOR_MEADOW, patch * 0.55)
+	var rock_t := clampf((slope - 0.35) / 0.6, 0.0, 1.0)
+	color = color.lerp(COLOR_ROCK, rock_t)
 	if layout == null:
 		var distance := sqrt(x * x + z * z)
 		var sand_t := clampf(1.0 - (distance - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
@@ -315,8 +321,12 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	else:
 		# Bare earth on the roads, stone on the plaza, mud at the water line.
 		# Order matters: each layer paints over the previous one.
-		color = color.lerp(COLOR_DIRT, layout.road_weight(x, z) * (1.0 - rock_t))
+		var road_t := layout.road_weight(x, z) * (1.0 - rock_t)
+		color = color.lerp(COLOR_DIRT, road_t)
+		# Worn wheel tracks: the middle of a road is packed darker than its edges.
+		color = color.darkened(road_t * road_t * 0.14)
 		color = color.lerp(COLOR_MUD, layout.pond_weight(x, z))
 		color = color.lerp(COLOR_COBBLE, layout.plaza_weight(x, z))
+	# Fine per-vertex jitter on top of the broad patches.
 	var variation := clampf(_value_noise(x, z, 0.42, 0.05), 0.0, 0.12)
 	return color.darkened(variation)
