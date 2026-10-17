@@ -101,16 +101,16 @@ func _build_ui() -> void:
 	_panel.offset_bottom = PANEL_HEIGHT * 0.5
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var box_style := StyleBoxFlat.new()
-	box_style.bg_color = Color(0.04, 0.05, 0.07, 0.92)
+	box_style.bg_color = Color(0.07, 0.06, 0.05, 0.92)
 	box_style.border_width_left = 1
 	box_style.border_width_top = 1
 	box_style.border_width_right = 1
 	box_style.border_width_bottom = 1
-	box_style.border_color = Color(0.45, 0.40, 0.28, 0.8)
-	box_style.corner_radius_top_left = 6
-	box_style.corner_radius_top_right = 6
-	box_style.corner_radius_bottom_right = 6
-	box_style.corner_radius_bottom_left = 6
+	box_style.border_color = Color(0.52, 0.42, 0.24, 0.8)
+	box_style.corner_radius_top_left = 8
+	box_style.corner_radius_top_right = 8
+	box_style.corner_radius_bottom_right = 8
+	box_style.corner_radius_bottom_left = 8
 	_panel.add_theme_stylebox_override("panel", box_style)
 	_root.add_child(_panel)
 	var margin := MarginContainer.new()
@@ -125,7 +125,7 @@ func _build_ui() -> void:
 	# Title row.
 	var title := Label.new()
 	title.text = "CRONACHE E SALVATAGGIO"
-	title.add_theme_color_override("font_color", Color(0.93, 0.86, 0.66, 1.0))
+	title.add_theme_color_override("font_color", Color(0.95, 0.87, 0.62, 1.0))
 	title.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(title)
 	_save_status_label = Label.new()
