@@ -23,11 +23,19 @@ extends RefCounted
 ## Unit tests: `tests/unit/test_terrain_generator.gd`.
 
 const CELL_SIZE := 1.0
-const DEFAULT_SIZE_CELLS := 128
+const DEFAULT_SIZE_CELLS := 160
 const DEFAULT_HEIGHT_SCALE := 5.0
 const DEFAULT_SEED := 20261016
 
-## Flat, sand coloured plaza around the origin where the village is built.
+## Noise octaves. The lowest one survives on roads and building plots, the two
+## higher ones are faded out there, which is what makes a path walkable without
+## flattening the whole landscape into a trench.
+const LOW_FREQUENCY := 0.021
+const MID_FREQUENCY := 0.053
+const HIGH_FREQUENCY := 0.121
+
+## Legacy plaza used when no [VillageLayout] is supplied (unit tests, and any
+## caller that only wants raw hills). With a layout the plaza comes from it.
 const PLAZA_RADIUS := 15.0
 const PLAZA_FALLOFF := 12.0
 
@@ -35,25 +43,56 @@ const COLOR_GRASS := Color(0.30, 0.50, 0.26)
 const COLOR_GRASS_DARK := Color(0.19, 0.33, 0.18)
 const COLOR_ROCK := Color(0.44, 0.41, 0.37)
 const COLOR_SAND := Color(0.70, 0.62, 0.44)
+const COLOR_DIRT := Color(0.48, 0.38, 0.27)
+const COLOR_COBBLE := Color(0.56, 0.54, 0.50)
+const COLOR_MUD := Color(0.28, 0.26, 0.21)
 
 ## Grid points per side. The terrain is (size_cells - 1) units across.
 var size_cells: int = DEFAULT_SIZE_CELLS
 var height_scale: float = DEFAULT_HEIGHT_SCALE
 var terrain_seed: int = DEFAULT_SEED
 
+## Optional village plan. When present, the generator levels the plaza and the
+## plots, fades the detail octaves along the roads, carves the pond and paints
+## the ground to match. When null the terrain is plain hills with a flat disc.
+var layout: VillageLayout = null
+
 ## Cached height grid, row major: index = iz * size_cells + ix.
 var _heights := PackedFloat32Array()
+var _plaza_level := 0.0
+var _pond_level := 0.0
 
 
 func _init(
 	initial_size_cells: int = DEFAULT_SIZE_CELLS,
 	initial_height_scale: float = DEFAULT_HEIGHT_SCALE,
-	initial_seed: int = DEFAULT_SEED
+	initial_seed: int = DEFAULT_SEED,
+	initial_layout: VillageLayout = null
 ) -> void:
 	size_cells = maxi(initial_size_cells, 4)
 	height_scale = maxf(initial_height_scale, 0.0)
 	terrain_seed = initial_seed
+	layout = initial_layout
+	# Without a village plan the legacy plaza is levelled to y = 0, exactly as it
+	# was before the layout existed; with a plan the plaza follows the hill it
+	# sits on, so it does not become a bowl in the middle of the map.
+	_plaza_level = 0.0
+	if layout != null:
+		_plaza_level = _value_noise(0.0, 0.0, LOW_FREQUENCY, 1.0) * height_scale
+		_pond_level = (
+			_value_noise(layout.pond_center.x, layout.pond_center.y, LOW_FREQUENCY, 1.0)
+			* height_scale
+		)
 	_heights = _compute_heights()
+
+
+## Height of the pond surface. The basin is carved below `_pond_level`, so the
+## water sits a little under the rim and the shore stays visible.
+func get_pond_water_level() -> float:
+	if layout == null:
+		return 0.0
+	var center := layout.pond_center
+	return height_at(center.x, center.y) + 0.3
 
 
 # --- geometry queries (pure) -------------------------------------------------
@@ -148,13 +187,20 @@ func build_mesh() -> ArrayMesh:
 			var bottom_right := bottom_left + 1
 			var top_left := bottom_left + size_cells
 			var top_right := top_left + 1
-			# Counter-clockwise seen from above (+Y), so generated normals point up.
+			# Winding order decides which side is the front face, and the front
+			# face is the side `generate_normals()` points the normal to.
+			# Measured on Godot 4.7.2: the order (BL, TL, BR) produces normals
+			# pointing DOWN (-Y), which back-face culling then hides from above.
+			# Reversing each triangle ((BL, BR, TL) and (TL, BR, TR)) keeps the
+			# *same* two triangles — so `height_at()` still matches the physics
+			# heightmap — and turns the normals up. See
+			# `tests/unit/test_terrain_generator.gd`.
 			surface.add_index(bottom_left)
-			surface.add_index(top_left)
 			surface.add_index(bottom_right)
 			surface.add_index(top_left)
+			surface.add_index(top_left)
+			surface.add_index(bottom_right)
 			surface.add_index(top_right)
-			surface.add_index(bottom_right)
 	surface.generate_normals()
 	surface.generate_tangents()
 	return surface.commit()
@@ -185,15 +231,35 @@ func _compute_heights() -> PackedFloat32Array:
 
 
 func _base_height(x: float, z: float) -> float:
-	var height := 0.0
-	height += _value_noise(x, z, 0.021, 1.0)
-	height += _value_noise(x, z, 0.053, 0.45)
-	height += _value_noise(x, z, 0.121, 0.18)
-	height *= height_scale
-	# Flatten the village plaza around the origin.
+	var low := _value_noise(x, z, LOW_FREQUENCY, 1.0)
+	var detail := _value_noise(x, z, MID_FREQUENCY, 0.45)
+	detail += _value_noise(x, z, HIGH_FREQUENCY, 0.18)
+	var height := (low + detail * (1.0 - flatten_weight(x, z))) * height_scale
+	var plaza := plaza_weight(x, z)
+	if plaza > 0.0:
+		height = lerpf(height, _plaza_level, plaza)
+	if layout != null:
+		var pond := layout.pond_weight(x, z)
+		if pond > 0.0:
+			height = lerpf(height, _pond_level, clampf(pond * 2.0, 0.0, 1.0))
+			height += layout.terrain_offset(x, z) * height_scale
+	return height
+
+
+## 1.0 where the ground must be walkable and level (plaza, roads, plots), 0.0 in
+## open country. Delegates to the layout when there is one.
+func flatten_weight(x: float, z: float) -> float:
+	if layout != null:
+		return layout.flatten_weight(x, z)
 	var distance := sqrt(x * x + z * z)
-	var flatten := clampf((distance - PLAZA_RADIUS) / PLAZA_FALLOFF, 0.0, 1.0)
-	return height * _smoothstep(flatten)
+	return _smoothstep(clampf((distance - PLAZA_RADIUS) / PLAZA_FALLOFF, 0.0, 1.0))
+
+
+## 1.0 at the centre of the plaza, fading out past its rim.
+func plaza_weight(x: float, z: float) -> float:
+	if layout != null:
+		return layout.plaza_weight(x, z)
+	return 1.0 - clampf((sqrt(x * x + z * z) - PLAZA_RADIUS) / PLAZA_FALLOFF, 0.0, 1.0)
 
 
 ## Classic value noise: hashed lattice corners, smoothstep interpolation.
@@ -242,8 +308,15 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	color = color.lerp(COLOR_ROCK, rock_t)
 	var x := cell_to_world_x(ix)
 	var z := cell_to_world_z(iz)
-	var distance := sqrt(x * x + z * z)
-	var sand_t := clampf(1.0 - (distance - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
-	color = color.lerp(COLOR_SAND, sand_t)
+	if layout == null:
+		var distance := sqrt(x * x + z * z)
+		var sand_t := clampf(1.0 - (distance - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
+		color = color.lerp(COLOR_SAND, sand_t)
+	else:
+		# Bare earth on the roads, stone on the plaza, mud at the water line.
+		# Order matters: each layer paints over the previous one.
+		color = color.lerp(COLOR_DIRT, layout.road_weight(x, z) * (1.0 - rock_t))
+		color = color.lerp(COLOR_MUD, layout.pond_weight(x, z))
+		color = color.lerp(COLOR_COBBLE, layout.plaza_weight(x, z))
 	var variation := clampf(_value_noise(x, z, 0.42, 0.05), 0.0, 0.12)
 	return color.darkened(variation)

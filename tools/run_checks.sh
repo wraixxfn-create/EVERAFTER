@@ -22,14 +22,14 @@ section() {
   echo "=============================================================="
 }
 
-section "1/4 Static project consistency (tools/check_project.py)"
+section "1/5 Static project consistency (tools/check_project.py)"
 if command -v python3 >/dev/null 2>&1; then
   python3 tools/check_project.py "$@" || FAILED=1
 else
   echo "python3 not found: skipped (this check cannot run here)."
 fi
 
-section "2/4 GDScript syntax (gdparse, from the gdtoolkit package)"
+section "2/5 GDScript syntax (gdparse, from the gdtoolkit package)"
 if command -v gdparse >/dev/null 2>&1; then
   GD_FILES=$(find src tests -name '*.gd' | sort)
   # shellcheck disable=SC2086
@@ -44,7 +44,7 @@ else
   echo "  install with: pip install gdtoolkit"
 fi
 
-section "3/4 GDScript style (gdlint)"
+section "3/5 GDScript style (gdlint)"
 if command -v gdlint >/dev/null 2>&1; then
   gdlint src tests || FAILED=1
 else
@@ -52,7 +52,6 @@ else
   echo "  install with: pip install gdtoolkit"
 fi
 
-section "4/4 Headless engine tests (tests/run_tests.gd)"
 GODOT_BIN="${GODOT:-}"
 if [ -z "$GODOT_BIN" ]; then
   for candidate in godot4 godot Godot godot-4; do
@@ -62,13 +61,25 @@ if [ -z "$GODOT_BIN" ]; then
     fi
   done
 fi
+
+section "4/5 Headless unit tests (tests/run_tests.gd)"
 if [ -n "$GODOT_BIN" ]; then
   echo "using: $GODOT_BIN"
   "$GODOT_BIN" --headless --path . --script res://tests/run_tests.gd || FAILED=1
 else
-  echo "No Godot executable found: the engine test suite DID NOT RUN."
+  echo "No Godot executable found: the unit suite DID NOT RUN."
   echo "  Windows: download a stable Godot 4 build, then run"
   echo "    Godot_v4.x-stable_win64.exe --headless --path . --script res://tests/run_tests.gd"
+fi
+
+section "5/5 Headless world integration tests (tests/run_world_tests.gd)"
+if [ -n "$GODOT_BIN" ]; then
+  echo "using: $GODOT_BIN"
+  "$GODOT_BIN" --headless --path . --script res://tests/run_world_tests.gd || FAILED=1
+else
+  echo "No Godot executable found: the world integration suite DID NOT RUN."
+  echo "  Windows: download a stable Godot 4 build, then run"
+  echo "    Godot_v4.x-stable_win64.exe --headless --path . --script res://tests/run_world_tests.gd"
 fi
 
 section "Summary"

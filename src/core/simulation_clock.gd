@@ -93,7 +93,14 @@ func from_dict(data: Dictionary) -> void:
 	tick = int(data.get("tick", 0))
 
 
-func to_string() -> String:
+## Readable clock reading.
+##
+## The method is named `_to_string` on purpose: that is the virtual `Object`
+## looks up in a GDScript instance. A method called `to_string()` would *not*
+## override anything, it would just shadow a name, and `str(clock)` would keep
+## printing `<RefCounted#...>`. Verified against Godot 4.7.2 in
+## `tests/unit/test_simulation_clock.gd`.
+func _to_string() -> String:
 	return "day %d %s (tick %d)" % [get_display_day(), get_time_text(), tick]
 
 

@@ -1,63 +1,79 @@
 extends Node3D
-## MainWorld — the 3D scene the project boots into.
+## MainWorld — the scene the project boots into, and the composition root of the
+## 3D side of the game.
 ##
-## Responsibilities:
-## * turn the deterministic world data (terrain height field, village layout)
-##   into nodes, once, at startup;
-## * read the state published by the simulation each frame and express it
-##   visually (right now: the sun and the sky follow the simulated hour).
+## It does three things and nothing else:
+## 1. turns the deterministic world data (`VillageLayout`) into terrain, meshes
+##    and colliders, once, at startup;
+## 2. puts the player on a road, on the ground, facing the village;
+## 3. publishes where the player is, so the HUD can name the area.
 ##
-## The dependency arrow is always `simulation -> world`, never the other way
-## around: nothing in `simulation/` knows that this scene exists, which is what
-## keeps the simulation testable headless.
+## Everything visual that changes over time lives in `SkyRig`; everything about
+## the village shape lives in `src/world/environment/`. The dependency arrow is
+## always `simulation -> world`, never the other way around: nothing in
+## `simulation/` knows this scene exists, which is what keeps it testable
+## headless.
 
 const TAG := "World"
 
-const VILLAGE_HOUSES := 8
-const VILLAGE_TREES := 24
-## Gap between the terrain surface and the centre of the player capsule.
+## Gap between the terrain surface and the centre of the player capsule:
+## capsule height 1.8, so its feet end up on the ground instead of in it.
 const SPAWN_CLEARANCE := 1.0
-const SPAWN_OFFSET := Vector3(0.0, 0.0, 9.0)
-
-const SKY_TOP_NIGHT := Color(0.02, 0.03, 0.08)
-const SKY_TOP_DAY := Color(0.22, 0.40, 0.70)
-const SKY_HORIZON_NIGHT := Color(0.06, 0.07, 0.13)
-const SKY_HORIZON_DAY := Color(0.68, 0.76, 0.86)
-const GROUND_NIGHT := Color(0.03, 0.04, 0.06)
-const GROUND_DAY := Color(0.22, 0.22, 0.20)
-const SUN_COLOR_DAY := Color(1.00, 0.96, 0.88)
-const SUN_COLOR_LOW := Color(1.00, 0.52, 0.26)
-const SUN_ENERGY_DAY := 1.25
-const SUN_ENERGY_NIGHT := 0.06
-const AMBIENT_ENERGY_DAY := 1.0
-const AMBIENT_ENERGY_NIGHT := 0.18
+## The player arrives from the south-west road, a short walk from the plaza.
+const SPAWN_ROAD_INDEX := 2
+const SPAWN_DISTANCE := 30.0
 
 var _terrain: TerrainGenerator = null
+var _layout: VillageLayout = null
+var _materials: VillageMaterials = null
+var _areas: AreaRegistry = null
+var _current_area := ""
 
-@onready var _world_environment: WorldEnvironment = $WorldEnvironment
-@onready var _sun: DirectionalLight3D = $Sun
+@onready var _sky_rig: Node = $Sky
 @onready var _terrain_mesh: MeshInstance3D = $Terrain/Mesh
 @onready var _terrain_collision: CollisionShape3D = $Terrain/Collision
-@onready var _props_root: Node3D = $Props
+@onready var _village_root: Node3D = $Village
 @onready var _player: PlayerExplorer = $Player
 
 
 func _ready() -> void:
 	var config := Game.config
-	_terrain = TerrainGenerator.new(
-		config.terrain_size_cells, config.terrain_height_scale, config.terrain_seed
+	_materials = VillageMaterials.new()
+	_layout = VillageLayout.new(
+		config.terrain_seed, float(config.terrain_size_cells - 1) * 0.5
 	)
+	_terrain = TerrainGenerator.new(
+		config.terrain_size_cells, config.terrain_height_scale, config.terrain_seed, _layout
+	)
+	_areas = _layout.build_area_registry()
 	_build_terrain()
-	_build_props(config)
+	_build_village()
 	_configure_player(config)
 	GameLog.info(TAG, _build_summary())
 	EventBus.world_ready.emit("MainWorld")
 
 
-## Reads simulation state and applies it. Runs every frame, but the values only
-## change once per tick, so at speed x1 the sun moves 20 times per second.
 func _process(_delta: float) -> void:
-	_apply_day_cycle()
+	_publish_area()
+
+
+# --- read-only access, used by the integration tests --------------------------
+
+
+func get_terrain() -> TerrainGenerator:
+	return _terrain
+
+
+func get_layout() -> VillageLayout:
+	return _layout
+
+
+func get_area_registry() -> AreaRegistry:
+	return _areas
+
+
+func get_player() -> PlayerExplorer:
+	return _player
 
 
 # --- construction ------------------------------------------------------------
@@ -69,9 +85,12 @@ func _build_terrain() -> void:
 	_terrain_collision.shape = _terrain.build_collision_shape()
 
 
-func _build_props(config: GameConfig) -> void:
-	var builder := PropBuilder.new(_terrain, config.terrain_seed)
-	_props_root.add_child(builder.build_village(VILLAGE_HOUSES, VILLAGE_TREES))
+func _build_village() -> void:
+	var builder := VillageBuilder.new(_layout, _terrain, _materials)
+	_village_root.add_child(builder.build_village())
+	# The rig drives the window and lantern glow, so it needs the shared palette.
+	_sky_rig.set("village_materials", _materials)
+	GameLog.info(TAG, "village — %s" % builder.summary())
 
 
 func _configure_player(config: GameConfig) -> void:
@@ -79,63 +98,39 @@ func _configure_player(config: GameConfig) -> void:
 	_player.sprint_speed = config.player_sprint_speed
 	_player.jump_velocity = config.player_jump_velocity
 	_player.mouse_sensitivity = config.mouse_sensitivity
-	var spawn := SPAWN_OFFSET
-	spawn.y = _terrain.height_at(spawn.x, spawn.z) + SPAWN_CLEARANCE
-	_player.global_position = spawn
+	_player.world_half_extent = _terrain.get_half_extent()
+	var spawn := _layout.point_on_road(SPAWN_ROAD_INDEX, SPAWN_DISTANCE)
+	_player.global_position = Vector3(
+		spawn.x, _terrain.height_at(spawn.x, spawn.y) + SPAWN_CLEARANCE, spawn.y
+	)
+	_player.look_toward(Vector3.ZERO)
 
 
-# --- presentation of simulation state ----------------------------------------
+# --- area tracking -----------------------------------------------------------
 
 
-func _apply_day_cycle() -> void:
-	var day_cycle := Game.get_day_cycle()
-	if day_cycle == null or _sun == null:
+## Polls the registry and emits only on change: cheap enough to run every frame,
+## quiet enough that the event bus stays a low frequency channel.
+func _publish_area() -> void:
+	if _areas == null or _player == null:
 		return
-	_sun.transform = Transform3D(_sun_basis(day_cycle), Vector3.ZERO)
-	var daylight := day_cycle.get_daylight_factor()
-	_sun.light_energy = lerpf(SUN_ENERGY_NIGHT, SUN_ENERGY_DAY, daylight)
-	_sun.light_color = SUN_COLOR_DAY.lerp(SUN_COLOR_LOW, _horizon_glow(daylight))
-	if _world_environment == null or _world_environment.environment == null:
-		return
-	var environment := _world_environment.environment
-	environment.ambient_light_energy = lerpf(AMBIENT_ENERGY_NIGHT, AMBIENT_ENERGY_DAY, daylight)
-	if environment.sky == null:
-		return
-	var sky_material := environment.sky.sky_material as ProceduralSkyMaterial
-	if sky_material == null:
-		return
-	sky_material.sky_top_color = SKY_TOP_NIGHT.lerp(SKY_TOP_DAY, daylight)
-	sky_material.sky_horizon_color = SKY_HORIZON_NIGHT.lerp(SKY_HORIZON_DAY, daylight)
-	sky_material.ground_horizon_color = SKY_HORIZON_NIGHT.lerp(SKY_HORIZON_DAY, daylight)
-	sky_material.ground_bottom_color = GROUND_NIGHT.lerp(GROUND_DAY, daylight)
-	sky_material.sun_angle_max = 8.0 + 24.0 * _horizon_glow(daylight)
-	environment.fog_light_color = SKY_HORIZON_NIGHT.lerp(SKY_HORIZON_DAY, daylight)
-
-
-func _sun_basis(day_cycle: DayCycleSystem) -> Basis:
-	var basis := Basis()
-	basis = basis.rotated(Vector3.UP, deg_to_rad(day_cycle.sun_azimuth_deg))
-	# The light shines along -Z, so a positive elevation has to pitch it down.
-	basis = basis.rotated(basis.x, deg_to_rad(-day_cycle.sun_elevation_deg))
-	return basis.orthonormalized()
-
-
-## 0.0 when the sun is high or far below the horizon, 1.0 around sunrise/sunset.
-func _horizon_glow(daylight: float) -> float:
-	return clampf(1.0 - absf(daylight - 0.3) / 0.3, 0.0, 1.0)
+	var flat := Vector2(_player.global_position.x, _player.global_position.z)
+	var area := _areas.area_at(flat)
+	if area != _current_area:
+		_current_area = area
+		EventBus.area_changed.emit(area)
 
 
 func _build_summary() -> String:
 	return (
-		"MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), %d houses, %d trees, spawn %s"
+		"MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), %d named areas, spawn %s"
 		% [
 			_terrain.size_cells,
 			_terrain.size_cells,
 			_terrain.get_extent(),
 			_terrain.get_extent(),
 			_terrain.get_triangle_count(),
-			VILLAGE_HOUSES,
-			VILLAGE_TREES,
+			_areas.get_area_count(),
 			_player.global_position,
 		]
 	)

@@ -17,7 +17,10 @@ extends SceneTree
 ##   and no autoload is required, which is what keeps it runnable with
 ##   `--headless` on a machine without a GPU;
 ## * checks that would need a real rendering backend report themselves as
-##   "skipped" instead of silently passing (see `TestHarness.skip`).
+##   "skipped" instead of silently passing (see `TestHarness.skip`);
+## * the checks that need a scene tree and a physics server live in
+##   `tests/run_world_tests.gd`, which is a separate runner for exactly that
+##   reason.
 
 func _initialize() -> void:
 	print("==========================================================")
@@ -31,6 +34,11 @@ func _initialize() -> void:
 	TestSimulationLoop.run_tests(harness)
 	TestDayCycleSystem.run_tests(harness)
 	TestTerrainGenerator.run_tests(harness)
+	TestAreaRegistry.run_tests(harness)
+	TestVillageLayout.run_tests(harness)
+	TestVillageMaterials.run_tests(harness)
+	TestMeshBaker.run_tests(harness)
+	TestVillageArt.run_tests(harness)
 	harness.print_summary()
 
 	quit(1 if harness.failed_count() > 0 else 0)
