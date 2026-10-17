@@ -48,6 +48,9 @@ func _initialize() -> void:
 	TestEconomySimulation.run_tests(harness)
 	TestSocialRelationships.run_tests(harness)
 	TestSocialSimulation.run_tests(harness)
+	TestChronicleBook.run_tests(harness)
+	TestSaveManager.run_tests(harness)
+	TestOfflineCatchup.run_tests(harness)
 	harness.print_summary()
 
 	quit(1 if harness.failed_count() > 0 else 0)

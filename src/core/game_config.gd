@@ -20,7 +20,7 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 
 @export_group("Project")
 @export var project_title: String = "EVERAFTER"
-@export var build_label: String = "0.5.0-social"
+@export var build_label: String = "0.6.0-persistence"
 
 @export_group("Simulated time")
 ## Real seconds per logical tick at speed x1. With the default value the
@@ -42,6 +42,13 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 ## Version written into future save files. Bump it whenever the serialised
 ## shape of the world changes.
 @export var save_format_version: int = 1
+## Maximum simulated days the offline catch-up will advance at startup.
+@export_range(1, 60) var max_offline_simulated_days: int = 10
+## Ratio of simulated minutes to real seconds during catch-up. At 1.0 and the
+## default tick_seconds (0.05s), one real second = 20 simulated minutes.
+@export_range(0.1, 10.0, 0.1) var offline_time_scale: float = 1.0
+## How many entries the chronicle keeps.
+@export_range(50, 2000) var chronicle_max_entries: int = 400
 
 @export_group("World")
 ## Number of grid points per side of the terrain height field. The terrain is
@@ -180,4 +187,12 @@ func validate() -> PackedStringArray:
 		problems.append("start_minute_of_day out of range (got %d)" % start_minute_of_day)
 	if save_format_version < 1:
 		problems.append("save_format_version must be >= 1 (got %d)" % save_format_version)
+	if max_offline_simulated_days < 1:
+		problems.append(
+			"max_offline_simulated_days must be >= 1 (got %d)" % max_offline_simulated_days
+		)
+	if offline_time_scale <= 0.0:
+		problems.append("offline_time_scale must be > 0 (got %s)" % offline_time_scale)
+	if chronicle_max_entries < 50:
+		problems.append("chronicle_max_entries must be >= 50 (got %d)" % chronicle_max_entries)
 	return problems

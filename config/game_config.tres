@@ -5,13 +5,16 @@
 [resource]
 script = ExtResource("1_config")
 project_title = "EVERAFTER"
-build_label = "0.5.0-social"
+build_label = "0.6.0-persistence"
 logic_tick_seconds = 0.05
 time_scale_presets = PackedFloat32Array(1, 3, 10)
 default_time_scale_index = 0
 start_minute_of_day = 420
 max_steps_per_frame = 12
 save_format_version = 1
+max_offline_simulated_days = 10
+offline_time_scale = 1.0
+chronicle_max_entries = 400
 terrain_size_cells = 160
 terrain_height_scale = 5.0
 terrain_seed = 20261016

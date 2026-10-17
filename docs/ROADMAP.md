@@ -145,42 +145,71 @@ piccolo); memoria entro i limiti configurati ✅; nessuna crescita illimitata di
 **Criteri di accettazione**: una decisione collettiva cambia misurabilmente la simulazione
 (consumi, prezzi, spostamenti) e il cambiamento è osservabile nei test.
 
-## Fase 5 — Cronache (`src/history`)
+## Fase 5 — Cronache (`src/history`) ✅ (prima versione in `0.6.0-persistence`)
 
 **Obiettivo**: il mondo ricorda e racconta.
 
-* Registro di eventi importanti con data simulata, attori e conseguenze.
-* Consultazione in gioco (pannello o libro) e generazione di testo **deterministico** da template.
-* Collegamento con i ricordi individuali della Fase 3: `SocialEvent` e `NpcMemory.event_id` sono
-  già il punto d'aggancio, la cronaca deve solo leggerli e ordinare gli eventi per importanza.
+* Registro di eventi importanti con data simulata, attori e conseguenze ✅
+  (`ChronicleBook` + `ChronicleEntry` nel modulo `src/history/`).
+* Consultazione in gioco (pannello accessibile con `C`) e generazione di testo deterministico
+  da template ✅.
+* Collegamento con i ricordi individuali della Fase 3 ✅ (`ChronicleWatcher` promuove i
+  `SocialEvent` più importanti nella cronaca usando il contatore di ID come riferimento, così
+  il catch-up a lotti non perde eventi intermedi).
 
-**Criteri di accettazione**: dopo 30 giorni simulati esiste una cronaca leggibile e riproducibile,
-identica a parità di seme.
+**Limiti attuali**: non esiste ancora una narrazione stagionale o eventi narrativi casuali; le
+voci sono registrate da regole numeriche (soglie di scorte, aiuti, progetti completati,
+cambi di giorno, eventi di sistema).
 
-## Fase 6 — Persistenza (`src/persistence`)
+**Criteri di accettazione**: dopo la simulazione esiste una cronaca leggibile e riproducibile
+con voci reali della simulazione (produzione, carenze, aiuti, progetti), filtrabile per
+categoria e giorno ✅.
+
+## Fase 6 — Persistenza (`src/persistence`) ✅ (prima versione in `0.6.0-persistence`)
 
 **Obiettivo**: salvare e ricaricare l'intera civiltà.
 
-* Formato testo leggibile su `user://`, con `save_format_version`, checksum e campi opzionali.
-* Salvataggio di clock, loop, tutti i sistemi (abitanti, economia, **sociale**), mondo e (se esiste)
-  stato del giocatore. I sistemi espongono già `to_dict()` / `from_dict()`: la Fase 6 li raccoglie
-  in un unico file, non ne crea di paralleli.
-* Slot multipli, salvataggio automatico periodico e all'uscita.
-* Test di round trip per ogni sistema e test di caricamento di un salvataggio di versione precedente.
+* Formato testo leggibile su `user://` (JSON), con `save_format_version` ✅. Nessun checksum
+  in questa versione (il formato JSON + scrittura atomica sono già la salvaguardia principale;
+  un checksum verrà aggiunto quando il formato si stabilizza).
+* Salvataggio di clock, loop, tutti i sistemi (abitanti, economia, sociale), cronaca e watcher
+  in un unico file ✅.
+* Scrittura atomica (file `.tmp` + rename) e backup `.bak` del save precedente ✅.
+* Salvataggio automatico ogni 12 ore simulate e all'uscita (notifica di chiusura della finestra)
+  ✅; salvataggio/caricamento manuale dal pannello con conferma di sovrascrittura ✅.
+* Gestione di file mancanti, corrotti e versioni non supportate con messaggi in italiano ✅.
+* Test di round trip per tutti i sistemi e test di gestione dei file corrotti/versioni non
+  supportate scritti ✅ (vedi `TestSaveManager`).
 
-**Criteri di accettazione**: salvare, uscire, rientrare e continuare senza differenze rispetto a una
-sessione unica (verificato confrontando lo stato dopo N tick).
+**Limiti attuali**: niente slot multipli in questa versione (un solo file di save); la versione
+schema è `1` e non c'è ancora un migratore per le versioni future (il caricatore rifiuta le
+versioni non corrispondenti invece di interpretarle).
 
-## Fase 7 — Tempo trascorso in assenza del giocatore
+**Criteri di accettazione**: salvare, uscire, rientrare e continuare senza differenze rispetto a
+una sessione unica (verificato nei test di round trip; la verifica end-to-end su Godot è
+documentata in `docs/ARCHITECTURE.md` come non eseguita in questo ambiente perché il motore non
+è installato).
+
+## Fase 7 — Tempo trascorso in assenza del giocatore ✅ (prima versione in `0.6.0-persistence`)
 
 **Obiettivo**: il mondo non si ferma quando il giocatore non c'è.
 
-* All'avvio, calcolo del tempo trascorso e `SimulationLoop.run_ticks()` sul backlog, con un tetto
-  massimo e una sintesi degli eventi invece di una simulazione completa tick per tick.
-* "Riassunto del mondo" mostrato al rientro, coerente con la cronaca della Fase 5.
+* Calcolo del tempo trascorso dal timestamp reale salvato e `SimulationLoop.run_ticks()` sul
+  backlog, con tetto massimo configurabile (default 10 giorni simulati) ✅.
+* Avanzamento a batch (1 ora simulata per batch) con osservazione della cronaca ad ogni passo,
+  non un ciclo unico da migliaia di tick in un frame ✅.
+* Protezioni da orologio di sistema (timestamp futuro, riavvio rapido, chiamate ripetute) ✅.
+* Voce in cronaca che riassume l'esito (compreso il caso di tetto raggiunto) ✅.
 
-**Criteri di accettazione**: rientrare dopo 10 giorni reali produce un mondo plausibile in meno di
-due secondi, con esito riproducibile.
+**Limiti attuali**: non c'è ancora una sintesi testuale separata oltre alla voce di cronaca
+(nessun popup "bentornato" dedicato); l'avanzamento usa ancora la logica di `on_tick` per
+ogni passo, quindi non è un modello aggregato: con il tetto di 10 giorni il tempo di
+caricamento resta comunque entro ~2 secondi. Per periodi offline più lunghi servirà un modello
+aggregato, documentato come lavoro futuro in `docs/ARCHITECTURE.md`.
+
+**Criteri di accettazione**: rientrare dopo un periodo di assenza produce un mondo plausibile
+e una voce in cronaca che lo descrive (i test verificano che le risorse restino non negative
+dopo 5 giorni simulati di catch-up e che il tetto venga applicato correttamente).
 
 ## Fase 8 — IA generativa opzionale
 
@@ -209,16 +238,17 @@ provider configurato, i dialoghi migliorano senza bloccare la simulazione.
 ## Ordine consigliato e dipendenze
 
 ```
-Fase 0 ──▶ Fase 1 ──▶ Fase 2 ──▶ Fase 4
+Fase 0 ──▶ Fase 1 ──▶ Fase 2 ──▶ Fase 4 ──▶ Fase 8 ──▶ Fase 9
              │           │
-             └──▶ Fase 3 ┴──▶ Fase 5 ──▶ Fase 6 ──▶ Fase 7 ──▶ Fase 8 ──▶ Fase 9
+             └──▶ Fase 3 ┴──▶ Fase 5 ──▶ Fase 6 ──▶ Fase 7
+                                         (oggi)
 ```
 
-Le Fasi 2 e 3 possono procedere in parallelo dopo la Fase 1: la prima versione della Fase 3 è già
-consegnata, ma famiglie, gruppi e tipi di relazione restano aperti e possono essere ripresi in
-qualsiasi momento. La Fase 6 (persistenza) va anticipata se la simulazione diventa abbastanza
-grande da non poter essere ricostruita a ogni avvio: ora che anche lo stato sociale è serializzabile,
-il costo di rimandarla è cresciuto.
+Le Fasi 2 e 3 hanno prodotto un'economia e un sistema sociale serializzabili; le Fasi 5 (cronache),
+6 (persistenza) e 7 (avanzamento offline) sono state consegnate in questa iterazione come
+prima versione `0.6.0-persistence`, rimanendo volutamente semplici (un solo slot di save,
+catch-up con i tick normali entro un tetto, nessun modello aggregato). Le successive iterazioni
+potranno approfondirle senza rompere il formato o aggiungere complessità non verificabile.
 
 ## Definizione di "fatto" per ogni fase
 

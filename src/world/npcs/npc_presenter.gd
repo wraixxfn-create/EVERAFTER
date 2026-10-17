@@ -129,6 +129,18 @@ func set_render_distance(distance: float) -> void:
 	render_distance = maxf(distance, 0.0)
 
 
+## Clears all capsule views so they are rebuilt from the current records on
+## the next frame. Called by MainWorld after a save is loaded: at that point
+## record positions can jump (e.g. the NPC was home in the save but a fresh
+## build spawned them elsewhere) and stale views must not linger.
+func force_refresh() -> void:
+	for key in _views.keys():
+		_free_view(String(key))
+	if _selected_id != "":
+		_selected_id = ""
+		EventBus.npc_selected.emit("")
+
+
 # --- internals ---------------------------------------------------------------
 
 

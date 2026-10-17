@@ -8,18 +8,14 @@ extends Node3D
 ## 2. puts the player on a road, on the ground, facing the village;
 ## 3. publishes where the player is, so the HUD can name the area.
 ##
-## Everything visual that changes over time lives in `SkyRig`; everything about
-## the village shape lives in `src/world/environment/`. The dependency arrow is
-## always `simulation -> world`, never the other way around: nothing in
-## `simulation/` knows this scene exists, which is what keeps it testable
-## headless.
+## Once everything is built, [method _build_finished] lets `Game` know so that a
+## save can be loaded and offline catch-up applied. Nothing in `simulation/`
+## knows this scene exists, which is what keeps it testable headless.
 
 const TAG := "World"
 
-## Gap between the terrain surface and the centre of the player capsule:
-## capsule height 1.8, so its feet end up on the ground instead of in it.
+## Gap between the terrain surface and the centre of the player capsule.
 const SPAWN_CLEARANCE := 1.0
-## The player arrives from the south-west road, a short walk from the plaza.
 const SPAWN_ROAD_INDEX := 2
 const SPAWN_DISTANCE := 30.0
 
@@ -31,6 +27,7 @@ var _npc_system: NpcSimulationSystem = null
 var _economy_system: EconomySystem = null
 var _social_system: SocialSystem = null
 var _current_area := ""
+var _boot_summary: Dictionary = {}
 
 @onready var _sky_rig: Node = $Sky
 @onready var _terrain_mesh: MeshInstance3D = $Terrain/Mesh
@@ -53,16 +50,29 @@ func _ready() -> void:
 	_build_terrain()
 	_build_village()
 	_configure_player(config)
-	_build_inhabitants(config)
+	# Use the saved population size when a save exists, so houses and routes
+	# match the records we will restore. Without this a 16-NPC save loaded
+	# into a 10-NPC world would lose 6 inhabitants.
+	var population := Game.get_saved_population_size()
+	_build_inhabitants(config, population)
 	GameLog.info(TAG, _build_summary())
-	EventBus.world_ready.emit("MainWorld")
+	_boot_summary = Game.world_build_finished()
+	if _boot_summary.get("loaded", false):
+		GameLog.info(TAG, "save loaded: %s" % _boot_summary.get("message", ""))
+		if _boot_summary.has("catchup"):
+			var c: Dictionary = _boot_summary["catchup"]
+			GameLog.info(TAG, "catchup: %s" % c.get("message", ""))
+	# Sync the presenter to whatever state (fresh or loaded) the records have.
+	_npc_presenter.force_refresh()
+	# Attach the save/load/chronicle panel now that all systems exist.
+	_add_save_panel()
 
 
 func _process(_delta: float) -> void:
 	_publish_area()
 
 
-# --- read-only access, used by the integration tests --------------------------
+# --- read-only access --------------------------------------------------------
 
 
 func get_terrain() -> TerrainGenerator:
@@ -97,6 +107,10 @@ func get_npc_presenter() -> NpcPresenter:
 	return _npc_presenter
 
 
+func get_boot_summary() -> Dictionary:
+	return _boot_summary
+
+
 # --- construction ------------------------------------------------------------
 
 
@@ -109,13 +123,13 @@ func _build_terrain() -> void:
 func _build_village() -> void:
 	var builder := VillageBuilder.new(_layout, _terrain, _materials)
 	_village_root.add_child(builder.build_village())
-	# The rig drives the window and lantern glow, so it needs the shared palette.
 	_sky_rig.set("village_materials", _materials)
 	GameLog.info(TAG, "village — %s" % builder.summary())
 
 
-func _build_inhabitants(config: GameConfig) -> void:
-	var records := NpcRoster.build(config.npc_population_size)
+func _build_inhabitants(config: GameConfig, population: int) -> void:
+	var pop_clamped := clampi(population, 0, NpcRoster.MAX_POPULATION)
+	var records := NpcRoster.build(pop_clamped)
 	var places := VillageNpcPlaces.build(_layout, records)
 	var obstacles := VillageNpcPlaces.build_obstacles(_layout)
 	var route_graph := NpcRouteGraph.new(places, _layout.roads, obstacles)
@@ -148,9 +162,6 @@ func _build_inhabitants(config: GameConfig) -> void:
 	_build_social_layer(config)
 
 
-## Relationships, interactions and memories. Built last on purpose: the social
-## layer reads the routine and the stocks the other two systems produce, so it
-## is registered after them and runs after them on every tick.
 func _build_social_layer(config: GameConfig) -> void:
 	_social_system = SocialSystem.new(_npc_system, _economy_system)
 	_social_system.configure(
@@ -185,8 +196,6 @@ func _configure_player(config: GameConfig) -> void:
 # --- area tracking -----------------------------------------------------------
 
 
-## Polls the registry and emits only on change: cheap enough to run every frame,
-## quiet enough that the event bus stays a low frequency channel.
 func _publish_area() -> void:
 	if _areas == null or _player == null:
 		return
@@ -197,10 +206,16 @@ func _publish_area() -> void:
 		EventBus.area_changed.emit(area)
 
 
+func _add_save_panel() -> void:
+	# Only add once.
+	if has_node("SavePanel"):
+		return
+	var panel := SaveLoadPanel.new()
+	panel.name = "SavePanel"
+	add_child(panel)
+
+
 func _build_summary() -> String:
-	# Built as two pieces and formatted at the end: `%` binds tighter than `+`,
-	# so formatting an expression of concatenated strings silently feeds the
-	# argument array to the second half only.
 	var message := "MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), "
 	message += "%d named areas, %d inhabitants, spawn %s"
 	return message % [

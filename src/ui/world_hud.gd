@@ -44,3 +44,5 @@ func _on_area_changed(area_name: String) -> void:
 
 func _on_mouse_capture_changed(is_captured: bool) -> void:
 	_hint_label.visible = not is_captured
+	if not is_captured:
+		_hint_label.text = "Clic sinistro o F per riprendere il controllo · C per cronache e salvataggio · P pausa"

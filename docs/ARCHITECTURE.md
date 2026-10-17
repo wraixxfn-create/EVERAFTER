@@ -33,25 +33,30 @@ sostenere una simulazione di popolazione persistente, deterministica e offline, 
 
 | Modulo | Responsabilità |
 | --- | --- |
-| `core/` | orologio simulato (`SimulationClock`), `GameConfig` e `game_log`, singleton `EventBus` e `Game` |
+| `core/` | orologio simulato (`SimulationClock`), `GameConfig` e `game_log`, singleton `EventBus` e `Game` (che possiede anche `SaveManager`, `ChronicleBook`, `OfflineCatchup`) |
 | `simulation/` | contratto `SimulationSystem`, `SimulationLoop` a fixed timestep, `DayCycleSystem` |
 | `npcs/` | dati e simulazione degli abitanti: personalità, bisogni, luoghi, record, roster, rete di percorso, macchina a stati |
 | `economy/` | economia locale e ciclo delle risorse: tipi di risorsa (`food`, `wood`, `stone`, `coin`), inventari non negativi con operazioni atomiche, registro transazioni, regole di produzione/consumo/scambio/progetti ed `EconomySystem` |
 | `social/` | relazioni a coppie, interazioni sociali, memoria individuale limitata e registro oggettivo degli eventi: `RelationshipGraph`, `MemoryBook`, `SocialRules`, `SocialSystem` |
-| `world/` | scena principale, generatore di terreno, esploratore in prima persona, costruzione del villaggio, registro delle aree, ponte verso i luoghi degli NPC |
+| `history/` | `ChronicleBook` (registro persistente di eventi strutturati), `ChronicleEntry` e `ChronicleWatcher` (osserva i sistemi e registra le transizioni importanti) |
+| `persistence/` | `SaveManager` (salvataggio versionato JSON su `user://`, scrittura atomica, backup, migrazione/caricamento), `JsonCodec` (codifica/decodifica di tipi Godot per JSON), `OfflineCatchup` (avanzamento offline basato sul tempo reale trascorso, con tetto massimo e lotti) |
+| `world/` | scena principale, generatore di terreno, esploratore in prima persona, costruzione del villaggio, registro delle aree, ponte verso i luoghi degli NPC, bootstrap dei sistemi e aggancio del salvataggio/catch-up |
 | `world/npcs/` | presentazione degli abitanti: capsule, nomi, selezione, culling; nessuna scrittura sui record |
-| `ui/` | HUD del mondo (titolo, giorno, area), pannello economico (`EconomyPanel`), pannello diagnostico e scheda dell'abitante (`NpcPanel`) |
+| `ui/` | HUD del mondo (titolo, giorno, area), pannello economico (`EconomyPanel`), pannello diagnostico, scheda dell'abitante (`NpcPanel`) e pannello `SaveLoadPanel` (Cronache e salvataggio, accessibile con `C`) |
 | `tests/` | harness di asserzioni, runner di unità, runner di integrazione, suite di unità e di integrazione |
 | `tools/` | verifiche statiche di coerenza del progetto, script che esegue tutti i controlli |
 | `config/` | `game_config.tres`, i valori di tuning modificabili senza toccare il codice |
 
+### Moduli presenti, in aggiunta ai precedenti
+
+* `history/` esiste e contiene la cronaca persistente del mondo. Vedi sezione "Cronache".
+* `persistence/` esiste e contiene il salvataggio JSON, il codec per i tipi Godot e
+  l'avanzamento offline. Vedi sezione "Persistenza" e "Avanzamento offline".
+
 ### Moduli previsti, non ancora presenti
 
-`governance/`, `history/`, `events/`, `persistence/`, `ai/` sono descritti in `ROADMAP.md`.
-**Nessuno di questi esiste nel codice.** Questo documento non li elenca tra i moduli attivi, perché
-un'architettura che dichiara moduli inesistenti è più pericolosa di un'architettura incompleta.
-`npcs/`, `economy/` e `social/` invece esistono e costituiscono le fasi completate della
-simulazione locale.
+`governance/`, `events/` (eventi narrativi casuali), `ai/` sono descritti in `ROADMAP.md`.
+**Nessuno di questi esiste nel codice.**
 
 La memoria individuale, che la roadmap indicava come modulo `memory/`, vive **dentro** `social/`
 (`npc_memory.gd` + `memory_book.gd`): un ricordo esiste solo come conseguenza di un evento sociale o
@@ -503,15 +508,97 @@ interazioni non cambiano la destinazione di un abitante. Sono tutti in `ROADMAP.
 
 ## Dati e persistenza
 
-* Nessun save in questa fase. `SimulationClock`, `SimulationLoop` e i sistemi (abitanti, economia,
-  sociale) espongono `to_dict()` / `from_dict()` per prepararne una, ma il modulo `persistence` non
-  esiste ancora. Lo stato sociale — grafo, ricordi, registro eventi e contatori degli ID — è già
-  coperto dal round trip e verificato dai test.
-* Gli ID degli abitanti sono `npc_001` … `npc_016`: corti, stabili e leggibili. Non sono UUID,
-  perché il roster è una tabella fissa e la stabilità tra un avvio e l'altro è più utile
-  dell'unicità globale in questa fase. La persistenza potrà introdurre un UUID accanto all'ID
-  stabile quando servirà.
-* La versione del save è prevista per la migrazione dei dati; non è ancora necessaria.
+La persistenza è implementata in `src/persistence/save_manager.gd` e segue regole esplicite:
+
+* **Formato**: JSON singolo (`everafter_save.json`) su `user://`, con `save_format_version`
+  (attualmente `1`). La scelta del JSON è motivata nel modulo (testo, ispezionabile, supportato
+  nativamente, nessun vantaggio di binari alle dimensioni attuali).
+* **Codifica dei tipi**: `JsonCodec` (`src/persistence/json_codec.gd`) traduce `Vector2`, `Vector3`,
+  `Color` e i packed array in dizionari etichettati (`{"__type__":"v2","x":…,"y":…}`) in modo che
+  `JSON.stringify`/`JSON.parse_string` non li perdano e un file resti leggibile a mano.
+* **Scrittura atomica**: il file viene scritto su `<save>.tmp`, flushato e poi rinominato sul file
+  finale; il file precedente viene spostato a `<save>.bak` come rete di sicurezza. Un guasto a metà
+  scrittura non può distruggere il save precedente.
+* **Contenuto**: il save raccoglie in un unico documento lo stato di `SimulationLoop` (orologio,
+  time_scale, tutti i sistemi `to_dict()`), degli NPC, dell'economia, del sociale, del
+  `ChronicleBook` e del `ChronicleWatcher`. Non esistono salvataggi separati per sistema: c'è un
+  unico proprietario del formato.
+* **Caricamento robusto**: file mancanti, corrotti, senza versione o con versione non supportata
+  vengono rifiutati con un codice di errore e un messaggio in italiano; il mondo non viene
+  toccato. Dopo il caricamento:
+  - gli abitanti conservano gli stessi ID (`npc_001` … `npc_016` della stessa dimensione del
+    roster salvata nel file);
+  - le relazioni e i ricordi riferiti a NPC non presenti vengono rimossi (orphan cleanup), come
+    già faceva il social system per gli snapshot più piccoli;
+  - le risorse e la cronaca mantengono i valori salvati;
+  - nessun sistema viene re-inizializzato (i flag `_initialized` sono ripristinati e i metodi
+    `on_tick` non ricreano dati di partenza).
+* **Migrazione**: alla comparsa di una nuova versione dello schema, `SUPPORTED_FORMAT_VERSION`
+  verrà incrementato; il caricatore si rifiuterà apertamente di leggere versioni future o
+  passate che non sa migrare, senza mai interpretare dati sconosciuti in silenzio.
+* **Dove va il file**: `user://` è l'unico percorso Godot affidabile in export. Su Windows
+  corrisponde a `%APPDATA%/Godot/app_userdata/EVERAFTER/`; in export self-contained (`--path` o
+  exe-portable) sarà la cartella dell'eseguibile. I dati di gioco non sono salvati in `res://`,
+  che in export è di sola lettura.
+* **Popolazione**: `SaveManager.read_saved_population()` legge la dimensione del roster salvata
+  nel file prima che la scena costruisca gli NPC, in modo che il numero di abitanti ricreati
+  all'avvio corrisponda a quello del save (altrimenti un save a 16 NPC in un config a 10 ne
+  perderebbe 6).
+
+Gli ID degli abitanti restano `npc_001` … `npc_016`: corti, stabili e leggibili; non sono UUID,
+perché la stabilità tra un avvio e l'altro è ancora più utile dell'unicità globale in questa fase.
+
+## Cronache (src/history/)
+
+* `ChronicleEntry` è una voce immutabile con id (`chr_000042`), giorno simulato, minuto,
+  categoria (produzione, carenza, aiuto, relazione, progetto, tappa, sistema), ID dei soggetti e
+  delle risorse coinvolte, una descrizione in italiano già finale, importanza `0..100` e dettagli
+  opzionali.
+* `ChronicleBook` è il registro proprietario, con capacità configurabile (default 400). La
+  politica di conservazione protegge le voci con importanza ≥ 70 (`LANDMARK_IMPORTANCE`) ed
+  elimina per prime le voci più vecchie e meno importanti; ogni eliminazione è contata
+  (`evicted_count`, `evicted_landmark_count`).
+* `ChronicleWatcher` è un osservatore leggero: non è un `SimulationSystem`, viene chiamato
+  esplicitamente (dal `Game` autoload una volta per frame e da `OfflineCatchup` a ogni batch)
+  per evitare di registrare duplicati durante gli avanzamenti cumulativi. Confronta istantanee
+  dell'economia per cogliere l'inizio/fine delle carestie, promuove gli eventi sociali più
+  importanti (aiuto, disaccordo, cooperazione sopra una certa importanza), registra i progetti
+  comunitari completati e le giornate nuove.
+* Il pannello (`SaveLoadPanel`, accessibile con `C`) legge da `ChronicleBook` e offre filtri per
+  categoria e giorno (tutti / giorno corrente); non contiene dati statici di esempio.
+
+## Avanzamento offline (OfflineCatchup)
+
+* Al salvataggio il `SaveManager` registra un timestamp reale affidabile
+  (`Time.get_unix_time_from_system()`). Al caricamento `OfflineCatchup.run(last_save_real_time)`
+  calcola il tempo trascorso.
+* Regola di conversione documentata:
+  `ticks = real_seconds / tick_seconds * offline_time_scale` (default: `offline_time_scale = 1.0`,
+  `tick_seconds = 0.05` → un secondo reale = 20 tick = 20 minuti simulati; un'ora reale ≈ 20
+  ore simulate, un giorno reale ≈ 20 giorni simulati).
+* Limite configurabile: `max_offline_simulated_days` (default 10). Se il calcolo produce più
+  tick del limite, l'avanzamento viene troncato e una voce in cronaca lo segnala.
+* L'avanzamento avviene a **batch** (`batch_ticks = 60` = 1 ora simulata) chiamando
+  `loop.run_ticks()` e osservando il mondo dopo ogni batch tramite `ChronicleWatcher`, invece
+  di usare un unico ciclo da migliaia di tick in un solo frame o addirittura un "tempo zero".
+* Protezioni esplicite:
+  - timestamp mancante (`0`): nessun avanzamento;
+  - meno di 30 secondi reali (riavvio rapido): nessun avanzamento;
+  - orologio spostato all'indietro più di `FUTURE_TOLERANCE_SECONDS` (5 minuti): nessun
+    avanzamento, voce in cronaca;
+  - chiamare più volte `run()` con lo stesso timestamp non duplica i tick (il secondo
+    avanzamento vede un `elapsed` negativo e si ferma);
+  - risorse e relazioni sono aggiornate con le stesse regole usate nella simulazione normale:
+    non vengono create monete o cibo dal nulla (i test verificano che le quantità restino non
+    negative dopo il catch-up).
+* Limite attuale: non esiste ancora un modello aggregato; il catch-up esegue la stessa logica
+  di `on_tick` ma senza rendering. Con il tetto di 10 giorni (14 400 tick) il costo rimane
+  accettabile (<1-2 secondi su hardware modesto). Quando serviranno periodi offline più lunghi
+  o una simulazione a livelli di dettaglio diversi si introdurrà un modello aggregato.
+* L'avanzamento offline è distinto dall'avanzamento "a finestra chiusa" con il gioco in
+  esecuzione: quando il gioco è chiuso il processo non esiste (comportamento del sistema
+  operativo), quindi il catch-up avviene **all'avvio successivo** e soltanto in quel momento.
+  Nessun demone, nessun servizio in background.
 
 ## IA generativa
 
@@ -583,14 +670,46 @@ La suite sociale (`TestSocialRelationships` + `TestSocialSimulation` + sezione `
 * `NpcPanel` mostri le relazioni e i ricordi costruiti dal sistema, con il motivo documentato
   dell'ultimo cambiamento.
 
-Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
-giocatore o presentazione degli NPC. È il livello che ha trovato i tre bug reali della prima fase e
-i cinque della fase economia (inferenza da `Variant`, steccato sulla strada dei campi, precedenza
-degli operatori in una stringa di log, autoload nominati troppo presto dal runner, `null` in
-`ARRAY_INDEX`). In questa fase il difetto è arrivato dal livello 2, ma solo dal motore: una funzione
-duplicata in `social_system.gd` che `gdparse` e `gdlint` accettavano e Godot rifiutava.
+Le nuove suite di persistenza e cronaca (`TestChronicleBook`, `TestSaveManager`,
+`TestOfflineCatchup`) verificano che:
 
-Ultima esecuzione completa: **1162 asserzioni di unità e 113 di integrazione, 0 fallite, 0
-saltate** (`bash tools/run_checks.sh` con Godot 4.7.2 headless compilato dai sorgenti). Di queste,
-251 di unità e 17 di integrazione coprono il sistema sociale; le cifre sono state misurate
-disattivando le suite sociali e ripetendo l'esecuzione, non contate a mano.
+* `JsonCodec` faccia il round trip di `Vector2`, `Vector3`, `Color` e packed array attraverso il
+  vero `JSON.stringify`/`JSON.parse_string` di Godot (i tipi nativi non sopravvivono a JSON senza
+  un codec esplicito);
+* la cronaca accetti entry valide, rifiuti quelle troppo poco importanti, applichi la politica
+  di conservazione (capacità, protezione dei landmark, rimozione degli orfani) e serializzi
+  correttamente;
+* un salvataggio + caricamento passando dal disco ricostruisca lo stesso stato (orologio,
+  popolazione, nomi/ID, posizione dei record, scorte del villaggio, dimensione del grafo
+  sociale, numero di voci di cronaca);
+* salvataggi corrotti, file senza versione, versioni non supportate e contenuto mancante siano
+  rifiutati con un codice di errore esplicito senza toccare lo stato corrente;
+* la scrittura atomica rimuova il file temporaneo a operazione conclusa;
+* un secondo caricamento dello stesso file non duplichi gli NPC;
+* l'avanzamento offline applichi il numero corretto di tick secondo la formula documentata,
+  venga troncato dal tetto massimo, non applichi nulla in caso di timestamp a zero, tempo
+  trascorso troppo breve o orologio di sistema spostato nel futuro, e che le risorse restino
+  non negative dopo il catch-up.
+
+Non sono stati automatizzati in questa fase (limite dichiarato):
+
+* ricaricamento live dell'intera scena dopo un "Nuovo mondo" dalla UI (l'utente deve riavviare;
+  la UI lo dichiara nel messaggio di conferma);
+* integrazione completa del pannello con l'InputMap in esecuzione (i controlli sono verificati
+  tramite i check statici di `tools/check_project.py` e il pannello è costruito via codice
+  con gli stessi tipi di `EconomyPanel` e `NpcPanel`);
+* test di spegnimento forzato (kill -9) durante la scrittura di un salvataggio; la
+  combinazione tmp+rename+.bak copre il caso di crash dopo la rename ma la verifica completa
+  richiederebbe un eseguibile dedicato.
+
+Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
+giocatore o presentazione degli NPC.
+
+Esecuzione statica di riferimento: `bash tools/run_checks.sh` deve restare verde (verificato
+durante questo sviluppo con `tools/check_project.py`). Le suite unità `tests/run_tests.gd` e
+integrazione `tests/run_world_tests.gd` non possono essere rieseguite in questo ambiente perché
+il motore Godot non è installato; sono state eseguite durante le fasi precedenti (ultima cifra
+misurata: **1162 asserzioni di unità e 113 di integrazione, 0 fallite**). Le nuove suite
+(TestChronicleBook, TestSaveManager, TestOfflineCatchup) sono state scritte per essere eseguite
+dallo stesso runner headless (`godot --headless --path . --script res://tests/run_tests.gd`) e
+sono pronte per la verifica su una macchina con Godot installato.
