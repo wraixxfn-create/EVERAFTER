@@ -720,7 +720,7 @@ func _windows(
 		# Painted shutter leaves with two restrained battens, not blank coloured
 		# blocks pasted beside each opening.
 		for shutter_side in [-1.0, 1.0]:
-			var shutter_x := spread + shutter_side * 0.56 * scale
+			var shutter_x: float = spread + shutter_side * 0.56 * scale
 			baker.add_box(
 				shutter_key, Vector3(0.3, 0.85, 0.1) * scale,
 				_transform(Vector3(shutter_x, y, trim_z)),
@@ -737,8 +737,8 @@ func _windows(
 				)
 	# Small framed windows on the gable ends balance the street-facing openings.
 	for side in [-1.0, 1.0]:
-		var end_x := side * width * 0.5 * scale
-		var end_trim_x := end_x + side * 0.08 * scale
+		var end_x: float = side * width * 0.5 * scale
+		var end_trim_x: float = end_x + side * 0.08 * scale
 		var end_y := y * 0.95
 		baker.add_box(
 			"window", Vector3(0.14, 0.7, 0.6) * scale,

@@ -196,7 +196,12 @@ Regole di costruzione:
 * **Le mesh sono unite per materiale.**
 * L'erba e gli oggetti ripetuti usano **`MultiMesh`**.
 * **Una sola luce proietta ombre** (`DirectionalLight3D` del sole, `directional_shadow_max_distance
-  = 130`); la luce di riempimento no. SSAO e glow sono disattivati.
+  = 128`, sole `light_angular_distance = 0.65` per penombre morbide); la luce di riempimento no ed
+  è marcata `SKY_MODE_LIGHT_ONLY`, così il "cielo la vede" solo come luce sul terreno, mai come
+  secondo disco solare. SSAO e glow sono **attivi e misurati** (vedi sotto).
+* **L'atmosfera è a costo fisso**: foschia esponenziale + foschia di quota leggera +
+  prospettiva aerea + scattering solare nella foschia. La fog volumetrica resta **spenta**:
+  è il primo effetto che non starebbe nel budget della GTX 1060.
 * **Lod e streaming** (chunk, occlusion culling, distance culling) non sono implementati e sono
   dichiarati come lavoro futuro: al costo attuale della scena non servirebbero, e aggiungerli ora
   sarebbe complessità senza un problema da risolvere.
@@ -225,6 +230,20 @@ normale scritta **e** punti verso l'esterno.
 
 Target dichiarato: **1080p a 60 fps su GPU classe GTX 1060**. Il budget è difeso da un test
 (`PerformanceBudget`), non solo da una dichiarazione.
+
+## Illuminazione e atmosfera
+
+Il mapping `DayCycleSystem -> luce` vive tutto in `SkyRig`
+(`src/world/environment/sky_rig.gd`): sole, luna, luce di riempimento, cielo, foschia, glow
+notturno delle finestre. Il ciclo giorno/notte esistente **non è stato duplicato né sostituito**:
+il rig legge `sun_elevation_deg`, `sun_azimuth_deg` e il daylight factor e non possiede il tempo.
+
+La direzione luminosa è una giornata fantasy medievale: luce chiave calda che attraversa la
+giornata, ombre mai nere (fill + ambient con pavimento), cielo e terreno legati dalla prospettiva
+aerea, foschia leggera solo a scopo di profondità. Valori, motivazioni, curve della golden hour e
+opportunità future (meteo, UI dell'ora, stelle, GI) sono documentati in
+[`docs/LIGHTING.md`](LIGHTING.md). Il contratto è anche verificato da
+`tests/unit/test_sky_rig.gd`.
 
 ## Interfaccia
 
