@@ -21,7 +21,9 @@ static func run_tests(harness: TestHarness) -> void:
 		harness.check(record.age >= 18, "every inhabitant is an adult")
 		harness.check(record.personality.diligence >= 0, "personality is populated")
 		harness.check(record.needs.energy > 0.0, "initial energy is populated")
-		harness.check(record.get_memory_count() >= 2, "memories are seeded")
+		harness.check(
+			not record.origin_note.is_empty(), "every inhabitant has a background note"
+		)
 		harness.check(record.work_start_minute < record.work_end_minute, "work hours are sane")
 
 	var second_build := NpcRoster.build(10)
@@ -42,19 +44,21 @@ static func run_tests(harness: TestHarness) -> void:
 		clamped.size(), NpcRoster.MAX_POPULATION, "the roster never invents entries beyond the table"
 	)
 
-	# Relationships must never point outside the requested group.
+	# The roster owns no social state any more: relationships and memories are
+	# built by the social layer from these records (`TestSocialSimulation`).
+	var graph := SocialRules.build_initial_relationships(smaller)
 	var existing := {}
 	for record in smaller:
 		existing[record.id] = true
+	harness.check(graph.count() > 0, "the starting relationship web is not empty")
+	harness.check_equals(
+		graph.validate(existing).size(), 0,
+		"every starting relationship points inside the requested group"
+	)
 	for record in smaller:
-		for other_id in record.relationships.keys():
-			harness.check(
-				existing.has(other_id),
-				"relationship points at an inhabitant inside the group (%s -> %s)"
-				% [record.id, other_id]
-			)
 		harness.check(
-			record.get_relationship_count() > 0, "every inhabitant starts with a relationship"
+			not graph.relationships_of(record.id).is_empty(),
+			"every inhabitant starts with a relationship"
 		)
 
 	# Different inhabitants must not share the same initial state object.

@@ -417,6 +417,104 @@ static func check_economy(harness: TestHarness, world: Node3D, tree: SceneTree) 
 		panel.refresh_view()
 
 
+## Social layer and panel: relationships point at real inhabitants, living
+## together produces events, memories stay inside the configured capacity, and
+## the panel shows what the systems actually hold instead of a private copy.
+static func check_social(harness: TestHarness, world: Node3D, tree: SceneTree) -> void:
+	harness.suite("SocialAndPanel")
+	var social: SocialSystem = world.get_social_system()
+	var system: NpcSimulationSystem = world.get_npc_system()
+	var panel := world.get_node_or_null("NpcPanel") as NpcPanel
+	var game := _autoload(tree, "Game")
+	var config := _config_from(game)
+	harness.check(social != null, "the world exposes its social system")
+	harness.check(panel != null, "the world contains the observation panel")
+	if social == null or system == null or panel == null:
+		return
+	harness.check(
+		game != null and game.call("get_social_system") == social,
+		"the social system is registered with Game, not driven by the scene"
+	)
+	harness.check(social.get_relationship_count() > 0, "the village starts with relationships")
+	harness.check(social.memory_book.total_count() > 0, "every inhabitant starts with a memory")
+	harness.check_equals(social.validate().size(), 0, "the starting social state is consistent")
+
+	var known := {}
+	for record in system.get_records():
+		known[record.id] = true
+	var unique_keys := {}
+	var members_exist := true
+	for relationship in social.graph.all_relationships():
+		if not known.has(relationship.a_id) or not known.has(relationship.b_id):
+			members_exist = false
+	for pair_key in social.graph.keys():
+		if unique_keys.has(pair_key):
+			harness.check(false, "relationship '%s' is stored twice" % pair_key)
+		unique_keys[pair_key] = true
+	harness.check(members_exist, "every relationship joins two existing inhabitants")
+	harness.check_equals(
+		unique_keys.size(), social.get_relationship_count(), "one relationship per pair of ids"
+	)
+
+	# Two simulated days of real village life.
+	var events_before := social.get_event_count()
+	if game != null:
+		game.call("advance_simulation", 2 * SimulationClock.MINUTES_PER_DAY)
+	await tree.process_frame
+	await tree.process_frame
+	harness.check(
+		social.get_event_count() > events_before, "living together produces social events"
+	)
+	var actors_exist := true
+	for event in social.get_events():
+		for actor_id in event.actor_ids:
+			if not known.has(actor_id):
+				actors_exist = false
+	harness.check(actors_exist, "every event names inhabitants that exist")
+	harness.check(
+		social.get_event_count() <= social.event_log_limit, "the event log stays inside its limit"
+	)
+	var capacity := (
+		config.social_memory_capacity if config != null else social.memory_book.capacity_per_npc
+	)
+	var overflowing := 0
+	for record in system.get_records():
+		if social.get_memory_count(record.id) > capacity:
+			overflowing += 1
+	harness.check_equals(overflowing, 0, "no inhabitant holds more memories than configured")
+	harness.check_equals(
+		social.validate().size(), 0, "the social state is consistent after two days"
+	)
+
+	# The panel reads the systems: the same lines, from the same data.
+	var target := system.get_records()[1]
+	panel.select_npc(target.id)
+	await tree.process_frame
+	await tree.process_frame
+	harness.check_equals(panel.get_selected_id(), target.id, "the panel selected the inhabitant")
+	var relations := panel.get_displayed_relations()
+	var expected_relations := social.relationship_lines(target.id, 3)
+	harness.check(
+		relations.contains(expected_relations[0]), "the panel shows the strongest relationship"
+	)
+	var memories := panel.get_displayed_memories()
+	harness.check(
+		memories.contains(social.memory_lines(target.id, 3)[0]),
+		"the panel shows a memory the character really has"
+	)
+	var explanation := social.change_explanation(target.id)
+	if explanation.is_empty():
+		harness.check(
+			not relations.contains("Ultimo cambiamento"),
+			"with no documented change the panel does not invent one"
+		)
+	else:
+		harness.check(
+			relations.contains("Ultimo cambiamento"),
+			"the panel explains the last documented change"
+		)
+
+
 ## The village has to stay cheap enough for a GTX 1060 class GPU.
 static func check_budget(harness: TestHarness, world: Node3D) -> void:
 	harness.suite("PerformanceBudget")
@@ -456,6 +554,19 @@ static func check_budget(harness: TestHarness, world: Node3D) -> void:
 	harness.check(
 		colliders <= MAX_COLLIDERS,
 		"static collider count stays in budget: %d (limit %d)" % [colliders, MAX_COLLIDERS]
+	)
+	# Printed so the budget table in README.md can be refreshed from a real run
+	# instead of being copied from an older measurement.
+	print(
+		"[INFO] Budget measured: %d meshes, %d triangles, %d colliders (limits %d / %d / %d)"
+		% [
+			meshes,
+			triangles,
+			colliders,
+			MAX_VILLAGE_MESHES,
+			MAX_TOTAL_TRIANGLES,
+			MAX_COLLIDERS,
+		]
 	)
 
 

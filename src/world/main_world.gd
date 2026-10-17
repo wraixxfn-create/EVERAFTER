@@ -29,6 +29,7 @@ var _materials: VillageMaterials = null
 var _areas: AreaRegistry = null
 var _npc_system: NpcSimulationSystem = null
 var _economy_system: EconomySystem = null
+var _social_system: SocialSystem = null
 var _current_area := ""
 
 @onready var _sky_rig: Node = $Sky
@@ -88,6 +89,10 @@ func get_economy_system() -> EconomySystem:
 	return _economy_system
 
 
+func get_social_system() -> SocialSystem:
+	return _social_system
+
+
 func get_npc_presenter() -> NpcPresenter:
 	return _npc_presenter
 
@@ -140,6 +145,28 @@ func _build_inhabitants(config: GameConfig) -> void:
 		"inhabitants — %s; %s" % [_npc_system.summary(), _npc_system.validate()]
 	)
 	GameLog.info(TAG, "economy — %s" % _economy_system.summary())
+	_build_social_layer(config)
+
+
+## Relationships, interactions and memories. Built last on purpose: the social
+## layer reads the routine and the stocks the other two systems produce, so it
+## is registered after them and runs after them on every tick.
+func _build_social_layer(config: GameConfig) -> void:
+	_social_system = SocialSystem.new(_npc_system, _economy_system)
+	_social_system.configure(
+		config.social_memory_capacity,
+		config.social_memory_importance_floor,
+		config.social_event_log_limit,
+		config.social_interaction_radius,
+		config.social_cooldown_ticks,
+		config.social_daily_gain_cap
+	)
+	_social_system.initialize(Game.get_tick())
+	if not Game.set_social_system(_social_system):
+		push_error("MainWorld: the social system could not be registered with Game.")
+	for problem in _social_system.validate():
+		GameLog.warning(TAG, "social — %s" % problem)
+	GameLog.info(TAG, "social — %s" % _social_system.summary())
 
 
 func _configure_player(config: GameConfig) -> void:

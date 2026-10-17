@@ -37,6 +37,7 @@ sostenere una simulazione di popolazione persistente, deterministica e offline, 
 | `simulation/` | contratto `SimulationSystem`, `SimulationLoop` a fixed timestep, `DayCycleSystem` |
 | `npcs/` | dati e simulazione degli abitanti: personalità, bisogni, luoghi, record, roster, rete di percorso, macchina a stati |
 | `economy/` | economia locale e ciclo delle risorse: tipi di risorsa (`food`, `wood`, `stone`, `coin`), inventari non negativi con operazioni atomiche, registro transazioni, regole di produzione/consumo/scambio/progetti ed `EconomySystem` |
+| `social/` | relazioni a coppie, interazioni sociali, memoria individuale limitata e registro oggettivo degli eventi: `RelationshipGraph`, `MemoryBook`, `SocialRules`, `SocialSystem` |
 | `world/` | scena principale, generatore di terreno, esploratore in prima persona, costruzione del villaggio, registro delle aree, ponte verso i luoghi degli NPC |
 | `world/npcs/` | presentazione degli abitanti: capsule, nomi, selezione, culling; nessuna scrittura sui record |
 | `ui/` | HUD del mondo (titolo, giorno, area), pannello economico (`EconomyPanel`), pannello diagnostico e scheda dell'abitante (`NpcPanel`) |
@@ -46,11 +47,17 @@ sostenere una simulazione di popolazione persistente, deterministica e offline, 
 
 ### Moduli previsti, non ancora presenti
 
-`social/`, `governance/`, `history/`, `memory/`, `events/`, `persistence/`, `ai/`
-sono descritti in `ROADMAP.md`. **Nessuno di questi esiste nel codice.** Questo documento non li
-elenca tra i moduli attivi, perché un'architettura che dichiara moduli inesistenti è più
-pericolosa di un'architettura incompleta. `npcs/` ed `economy/` invece esistono e costituiscono le
-fasi completate della simulazione locale.
+`governance/`, `history/`, `events/`, `persistence/`, `ai/` sono descritti in `ROADMAP.md`.
+**Nessuno di questi esiste nel codice.** Questo documento non li elenca tra i moduli attivi, perché
+un'architettura che dichiara moduli inesistenti è più pericolosa di un'architettura incompleta.
+`npcs/`, `economy/` e `social/` invece esistono e costituiscono le fasi completate della
+simulazione locale.
+
+La memoria individuale, che la roadmap indicava come modulo `memory/`, vive **dentro** `social/`
+(`npc_memory.gd` + `memory_book.gd`): un ricordo esiste solo come conseguenza di un evento sociale o
+come background iniziale, e separare i due moduli avrebbe creato un confine senza comportamento.
+Se in futuro servirà una memoria non sociale (luoghi visitati, mestiere appreso) il modulo nascerà
+allora, con un motivo per esistere.
 
 ## Dipendenze consentite
 
@@ -59,9 +66,10 @@ core  ->  niente
 simulation  ->  core
 npcs  ->  core, simulation, economy (opzionale, iniettato)
 economy  ->  core, simulation, npcs
-world  ->  core, simulation, npcs, economy
+social  ->  core, simulation, npcs, economy (opzionale, iniettato)
+world  ->  core, simulation, npcs, economy, social
 world/npcs  ->  core, npcs, world
-ui  ->  core, simulation, npcs, economy, world
+ui  ->  core, simulation, npcs, economy, social, world
 tests  ->  tutto (ma senza dipendere da una GPU)
 ```
 
@@ -77,6 +85,8 @@ Regole operative:
   espliciti, e si fa iniettare il proprio `SimulationClock` (mai lo singleton) così da essere
   testabile in isolamento.
 * Il mondo 3D osserva la simulazione e non la pilota.
+* `social/` legge `npcs/` ed `economy/` ma **non scrive nei record** se non il benessere, con una
+  regola documentata: lo stato sociale ha un solo proprietario, il `SocialSystem`.
 * Nessun sistema salva in file direttamente: esiste un unico modulo di persistenza (da scrivere).
 * Ogni sistema deve poter funzionare anche senza rendering.
 * Le suite di test devono poter girare headless, senza GPU e senza autoload obbligatori.
@@ -357,10 +367,146 @@ sicurezza di `4 Legno`, `4 Pietra`, `12 Moneta`):
 | Progetti comunitari | 4 progetti con costi in `Legno`, `Pietra`, `Moneta` e bonus di resa/benessere | Costruzione fisica di nuovi edifici 3D tramite cantieri multi-giorno |
 | Relazioni e politica | Strutture dati iniziali in `NpcRecord` | Evoluzione delle relazioni, fazioni, tasse, leggi e cronache (`Fase 3+`) |
 
+## Sistema sociale (`src/social/`)
+
+Prima versione **persistente e deterministica** delle relazioni personali e della memoria degli
+abitanti. Nessuna chiamata di rete, nessun modello linguistico: solo regole numeriche in
+`social_rules.gd`, funzioni pure e costanti nominate. Il sistema è un `SimulationSystem` registrato
+dopo `npc_life` ed `economy`, quindi a ogni tick legge una routine e delle scorte già aggiornate.
+
+### 1. Identità di una relazione e duplicati
+
+* Una relazione appartiene a una **coppia non ordinata** di ID. La chiave è canonica:
+  `SocialRelationship.canonical_key(a, b)` ordina i due ID lessicograficamente e li unisce con `|`
+  (`npc_001|npc_002`). Non esiste una seconda forma della stessa chiave.
+* `RelationshipGraph` è l'**unico proprietario**. `create()` restituisce `null` e registra un errore
+  se la coppia esiste già, se un ID è vuoto o se i due ID coincidono: nessun duplicato può entrare
+  nel grafo, nemmeno da un file di salvataggio (`from_dict()` scarta la seconda occorrenza).
+* Riferimenti a NPC inesistenti: `remove_orphans(known_ids)` elimina le relazioni con un membro
+  sconosciuto e `validate(known_ids)` le segnala. Il caricamento di uno snapshot le pulisce prima di
+  restituire il controllo.
+* La scelta precedente — un dizionario simmetrico dentro ogni `NpcRecord` — è stata **rimossa**:
+  due copie dello stesso legame possono divergere, e questa è la definizione di duplicato. Il
+  record conserva solo `origin_note`, il background testuale che diventa il primo ricordo.
+
+### 2. Attributi, intervalli e regole di aggiornamento
+
+Tutti i valori sono interi in `0..100` (`SocialRelationship.VALUE_MIN/MAX`) e ogni scrittura passa
+da `clamp_all()`.
+
+| Attributo | Condivisione | Semantica |
+| --- | --- | --- |
+| `familiarity` | **condiviso** (un solo numero) | quanto si conoscono |
+| `tension` | **condiviso** | quanto è teso il rapporto |
+| `trust_a`, `trust_b` | **direzionale** (due numeri) | quanto A si fida di B e quanto B si fida di A |
+| `affinity_a`, `affinity_b` | **direzionale** | quanto A vuole bene a B e viceversa |
+
+La distinzione è sostanziale: ricevere aiuto aumenta **la fiducia di chi riceve** verso chi aiuta,
+non il contrario. Per questo fiducia e affinità hanno due valori, mentre familiarità e tensione —
+fatti della coppia, non di un lato — ne hanno uno.
+
+Regole di aggiornamento (`gain_*`, `lose_*`, `shift_tension`), tutte con valore di ritorno pari al
+cambiamento **effettivamente applicato**:
+
+1. **Rendimenti decrescenti** — `scaled_gain(current, amount) = round(amount * (1 - current/100))`.
+   A `0` il passo è pieno, a `90` vale un decimo, a `100` vale `0`.
+2. **Tetto giornaliero condiviso** — `daily_gain_cap` (default `14`, configurabile) è il numero
+   massimo di punti positivi che una coppia può guadagnare in un giorno simulato, **sommando
+   familiarità, fiducia e affinità**. Il contatore si azzera al cambio di giorno.
+3. **Nessun tetto sui peggioramenti** — `lose_trust`, `lose_affinity` e `shift_tension` sono sempre
+   applicati: un litigio deve poter fare danno anche a fine giornata.
+
+L'etichetta mostrata in UI (`kind_label()`) è **derivata** dai numeri, mai memorizzata: un'etichetta
+salvata sarebbe una seconda fonte di verità in grado di contraddire i valori che descrive.
+
+### 3. Interazioni: contesto, prossimità, attività
+
+Un tick produce al massimo `MAX_INTERACTIONS_PER_TICK = 2` interazioni. I candidati devono:
+
+* essere nello **stesso luogo** (`current_place_id`) e a distanza `<= interaction_radius` (3,2);
+* non stare dormendo, camminando o recuperando da un percorso bloccato (`SocialRules.is_available`);
+* non aver già interagito da meno di `cooldown_ticks` (45 minuti simulati).
+
+L'ordine di scansione è fisso (ID di luogo ordinati, poi ordine di roster) e la coppia è
+canonizzata (l'ID minore propone, l'altro risponde), quindi la stessa scena non viene mai ripetuta
+con i ruoli invertiti. `decide_interaction()` valuta in questo ordine: **disaccordo** (stesso
+posto di lavoro, entrambi al lavoro, carenza di cibo nel villaggio, fame `>= 72` di almeno uno,
+calma media `< 70`), **aiuto** (luogo che serve cibo, uno senza razione o con fame `>= 78`,
+l'altro con fame `<= 55`, energia `>= 20` e cibo realmente disponibile secondo
+`EconomyRules.has_available_food_for`), **cooperazione** (entrambi al lavoro nello stesso posto),
+**conversazione** o **saluto** (luogo sociale, soglia di familiarità `20`). Nessun dado: se le
+condizioni non ci sono, non succede niente.
+
+### 4. Evento oggettivo contro ricordo soggettivo
+
+* `SocialEvent` è ciò che il mondo concorda sia accaduto: id (`evt_000042`), tipo, esito, tick,
+  giorno, minuto, luogo, ID degli attori ordinati, iniziatore, descrizione, importanza `0..100`,
+  effetti applicati. È immutabile e viene solo accodato.
+* `NpcMemory` è ciò che un personaggio ne ha trattenuto: id (`mem_000107`), proprietario, tipo,
+  `event_id`, giorno, altri partecipanti, luogo, **ruolo** (`ricevuto`, `offerto`, `rifiutato`,
+  `condiviso`, `iniziato`), descrizione dal suo punto di vista, importanza propria, `source`
+  (`diretto` / `raccontato`) e `certainty` (`0..100`).
+* Lo stesso aiuto genera **due ricordi diversi** (importanza `58` per chi riceve, `40` per chi
+  offre) che puntano allo stesso evento. `source` e `certainty` sono sempre `diretto` / `100` in
+  questa fase: sono il punto d'aggancio già pronto per una prospettiva incompleta, senza che debba
+  cambiare lo schema.
+
+### 5. Limiti della memoria e regola di selezione
+
+* `MemoryBook` ha una capacità per abitante (`social_memory_capacity`, default 24) e una soglia di
+  importanza (`social_memory_importance_floor`, default 12). Un saluto (importanza 6) **non viene
+  memorizzato**: l'evento esiste, il ricordo no.
+* `retention_score = importanza * 3 + 2 * max(0, 6 - giorni_trascorsi)`. L'importanza domina; la
+  freschezza rompe solo i pareggi. Quando il libro è pieno esce il punteggio più basso (a pari
+  punteggio il più vecchio, poi l'ID minore).
+* I ricordi con importanza `>= 75` (`PERMANENT_IMPORTANCE`) sono eliminati solo se non esiste alcun
+  ricordo non protetto; ogni eliminazione è contata (`evicted_count`), quelle protette anche
+  (`evicted_protected_count`) e scritte nel log. Il registro oggettivo conserva comunque l'evento:
+  dimenticare è una proprietà del personaggio, non del mondo.
+* Il registro eventi è limitato (`social_event_log_limit`, default 160): esce prima l'evento meno
+  importante (a pari importanza il più vecchio) e la rimozione è contata in `dropped_event_count`.
+
+### 6. Conseguenze sulla simulazione
+
+`SocialRules.cooperation_willingness(asker, partner)` parte da `50` e applica `+0,4` per punto di
+fiducia sopra 50, `+0,2` per punto di affinità sopra 50, `-0,6` per punto di tensione, `+14` se
+l'interrogato ricorda un **aiuto ricevuto** da quella persona (importanza `>= 45`), `-18` se ricorda
+un **litigio degli ultimi 3 giorni** (importanza `>= 45`). Oltre la soglia `55` la cooperazione è
+accettata. Con fiducia 60 e affinità 50 la stessa coppia rifiuta a `54` e accetta a `68` dopo un
+aiuto memorizzato: la memoria cambia un comportamento, non solo un testo.
+
+Gli effetti raggiungono lo stato simulato: cooperazione accettata `+0,8` di benessere a entrambi,
+aiuto `+2,5` a chi riceve e `+0,5` a chi offre, disaccordo `-2,0` a entrambi. È l'unica scrittura
+che questo sistema fa su un `NpcRecord`, ed è sempre clampata.
+
+### 7. Interfaccia
+
+`NpcPanel` mostra tre relazioni principali (in ordine di `SocialRelationship.strength()`), la riga
+"Ultimo cambiamento" con il motivo documentato e il giorno dell'evento che lo spiega, e tre ricordi
+rilevanti. Le righe sono costruite dal sistema (`relationship_lines`, `change_explanation`,
+`memory_lines`), quindi l'interfaccia non può mostrare un numero diverso da quello simulato. Nessun
+pannello nuovo e nessun valore aggiunto oltre a questi.
+
+### 8. Persistenza
+
+`SocialSystem.to_dict()` / `from_dict()` coprono grafo, memoria, registro eventi, contatori e
+limiti, nella stessa convenzione di `SimulationClock`, `SimulationLoop`, `NpcSimulationSystem` ed
+`EconomySystem`: ogni sistema serializza il proprio stato e il futuro modulo `persistence` dovrà
+solo raccoglierli. Al caricamento ogni riferimento viene ripulito (`remove_orphans` su relazioni e
+ricordi, `_drop_dangling_events` sugli eventi) e `validate()` deve restituire un array vuoto.
+
+### 9. Che cosa non c'è ancora
+
+Nessuna famiglia, gruppo o fazione; nessuna reputazione pubblica; nessuna cronaca giocabile; nessun
+dialogo generativo; nessun ricordo non sociale; nessuna prospettiva incompleta attiva; le
+interazioni non cambiano la destinazione di un abitante. Sono tutti in `ROADMAP.md`, non nel codice.
+
 ## Dati e persistenza
 
-* Nessun save in questa fase. `SimulationClock`, `SimulationLoop` e i sistemi espongono
-  `to_dict()` / `from_dict()` per prepararne una, ma il modulo `persistence` non esiste ancora.
+* Nessun save in questa fase. `SimulationClock`, `SimulationLoop` e i sistemi (abitanti, economia,
+  sociale) espongono `to_dict()` / `from_dict()` per prepararne una, ma il modulo `persistence` non
+  esiste ancora. Lo stato sociale — grafo, ricordi, registro eventi e contatori degli ID — è già
+  coperto dal round trip e verificato dai test.
 * Gli ID degli abitanti sono `npc_001` … `npc_016`: corti, stabili e leggibili. Non sono UUID,
   perché il roster è una tabella fissa e la stabilità tra un avvio e l'altro è più utile
   dell'unicità globale in questa fase. La persistenza potrà introdurre un UUID accanto all'ID
@@ -417,11 +563,34 @@ La suite economica (`TestEconomyInventory` + `TestEconomySimulation` + sezione `
 * l'avanzamento di più giorni produca risultati identici e ripetibili a parità di condizioni
   iniziali.
 
-Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
-giocatore o presentazione degli NPC. È il livello che ha trovato i tre bug reali della fase
-precedente e i cinque di questa (inferenza da `Variant`, steccato sulla strada dei campi,
-precedenza degli operatori in una stringa di log, autoload nominati troppo presto dal runner,
-`null` in `ARRAY_INDEX`).
+La suite sociale (`TestSocialRelationships` + `TestSocialSimulation` + sezione `check_social` in
+`test_world_scene.gd`) verifica inoltre che:
 
-Ultima esecuzione completa: **918 asserzioni di unità e 96 di integrazione, 0 fallite, 0 saltate**
-(`bash tools/run_checks.sh` con Godot 4.7.2 headless compilato dai sorgenti).
+* la chiave di una relazione sia canonica e che `create()` rifiuti duplicati, ID vuoti e
+  auto-relazioni, anche caricando da un dizionario;
+* ogni evento e ogni ricordo indichino gli NPC davvero coinvolti, con ID presenti nel roster;
+* i valori restino in `0..100` dopo guadagni, perdite e serializzazioni ripetute;
+* il tetto giornaliero condiviso impedisca una crescita illimitata della fiducia: 40 giorni di
+  cooperazione continua non portano alcun attributo oltre 100 e la crescita giornaliera non supera
+  mai il tetto;
+* la memoria rispetti la capacità configurata, non elimini ricordi permanenti quando ne esistono di
+  eliminabili e conservi un contatore quando è costretta a farlo;
+* la disponibilità a cooperare dipenda dalla memoria (lo stesso rapporto rifiuta prima di un aiuto
+  memorizzato e accetta dopo) e non solo da un testo descrittivo;
+* un round trip `to_dict()` → `from_dict()` ripristini gli stessi ID e gli stessi valori;
+* caricare uno snapshot in un mondo più piccolo rimuova relazioni, ricordi **ed eventi** che
+  citano abitanti assenti, senza lasciare riferimenti pendenti;
+* `NpcPanel` mostri le relazioni e i ricordi costruiti dal sistema, con il motivo documentato
+  dell'ultimo cambiamento.
+
+Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
+giocatore o presentazione degli NPC. È il livello che ha trovato i tre bug reali della prima fase e
+i cinque della fase economia (inferenza da `Variant`, steccato sulla strada dei campi, precedenza
+degli operatori in una stringa di log, autoload nominati troppo presto dal runner, `null` in
+`ARRAY_INDEX`). In questa fase il difetto è arrivato dal livello 2, ma solo dal motore: una funzione
+duplicata in `social_system.gd` che `gdparse` e `gdlint` accettavano e Godot rifiutava.
+
+Ultima esecuzione completa: **1162 asserzioni di unità e 113 di integrazione, 0 fallite, 0
+saltate** (`bash tools/run_checks.sh` con Godot 4.7.2 headless compilato dai sorgenti). Di queste,
+251 di unità e 17 di integrazione coprono il sistema sociale; le cifre sono state misurate
+disattivando le suite sociali e ripetendo l'esecuzione, non contate a mano.

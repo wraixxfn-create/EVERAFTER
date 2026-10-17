@@ -63,7 +63,7 @@ anchor_right = 1.0
 offset_left = -392.0
 offset_top = 18.0
 offset_right = -20.0
-offset_bottom = 562.0
+offset_bottom = 726.0
 grow_horizontal = 0
 grow_vertical = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
@@ -211,6 +211,34 @@ autowrap_mode = 2
 theme_override_colors/font_color = Color(0.8, 0.82, 0.84, 1)
 theme_override_font_sizes/font_size = 13
 text = "Scegli un nome dall'elenco o clicca un abitante nel villaggio."
+
+[node name="RelationsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 12
+text = "RELAZIONI"
+
+[node name="RelationsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 62)
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.84, 0.86, 1)
+theme_override_font_sizes/font_size = 12
+text = "Nessuna relazione conosciuta."
+
+[node name="MemoriesTitle" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.93, 0.86, 0.66, 1)
+theme_override_font_sizes/font_size = 12
+text = "RICORDI"
+
+[node name="MemoriesLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.8, 0.78, 1)
+theme_override_font_sizes/font_size = 12
+text = "Nessun ricordo rilevante."
 
 [node name="HintLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2

@@ -18,6 +18,7 @@ var _time_scale_index: int = 0
 var _day_cycle: DayCycleSystem = null
 var _npc_system: NpcSimulationSystem = null
 var _economy_system: EconomySystem = null
+var _social_system: SocialSystem = null
 
 
 func _ready() -> void:
@@ -128,6 +129,10 @@ func get_economy_system() -> EconomySystem:
 	return _economy_system
 
 
+func get_social_system() -> SocialSystem:
+	return _social_system
+
+
 # --- commands ---------------------------------------------------------------
 
 
@@ -160,6 +165,21 @@ func set_economy_system(system: EconomySystem) -> bool:
 	_economy_system = system
 	loop.register_system(system)
 	EventBus.economy_system_ready.emit()
+	return true
+
+
+## Registers the social layer once the inhabitants and the economy exist.
+func set_social_system(system: SocialSystem) -> bool:
+	if system == null:
+		return false
+	if _social_system == system:
+		return true
+	if _social_system != null:
+		push_warning("Game: a social system is already registered.")
+		return false
+	_social_system = system
+	loop.register_system(system)
+	EventBus.social_system_ready.emit()
 	return true
 
 

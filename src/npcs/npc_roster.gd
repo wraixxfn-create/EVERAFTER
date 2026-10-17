@@ -9,9 +9,13 @@ extends RefCounted
 ## makes the inhabitants recognisable between sessions before persistence
 ## exists; later a save file can replace the table without changing the records.
 ##
-## Every entry owns a distinct set of initial needs and personality values.
-## Relationships and memories are seeded here but **not simulated** yet: they
-## are the data shape the social and chronicle phases will grow into.
+## Every entry owns a distinct set of initial needs and personality values, plus
+## one line of personal background ([member NpcRecord.origin_note]).
+##
+## The roster deliberately owns no social state. The starting relationships and
+## the first memories are built by `SocialRules.build_initial_relationships()`
+## and `SocialRules.seed_origin_memories()` from these records, so there is a
+## single owner of that state instead of two copies able to disagree.
 
 const MAX_POPULATION := 16
 
@@ -196,89 +200,7 @@ static func build(count: int) -> Array[NpcRecord]:
 		record.needs = NpcNeeds.new(
 			float(entry["energy"]), float(entry["hunger"]), float(entry["wellbeing"])
 		)
-		record.memories.append({
-			"kind": "origin",
-			"text": String(entry["memory"]),
-			"tick": 0,
-		})
-		record.memories.append({
-			"kind": "home",
-			"text": "Vive a Everafter da sempre.",
-			"tick": 0,
-		})
+		record.origin_note = String(entry["memory"])
 		records.append(record)
-	_seed_relationships(records)
 	return records
 
-
-## Seeds a deterministic, symmetric relationship web. The social system is not
-## implemented in this phase: these entries are data for a later one, and the
-## test suite only checks that they point at existing inhabitants.
-static func _seed_relationships(records: Array[NpcRecord]) -> void:
-	for first_index in records.size():
-		for second_index in range(first_index + 1, records.size()):
-			var roll := (first_index + 1) * 37 + (second_index + 1) * 61
-			var kind := ""
-			var affinity := 0
-			var familiarity := 0
-			if roll % 11 == 0:
-				kind = "familiare"
-				affinity = 68
-				familiarity = 85
-			elif roll % 5 == 0:
-				kind = "amico"
-				affinity = 46
-				familiarity = 58
-			elif roll % 3 == 0:
-				kind = "conoscente"
-				affinity = 18
-				familiarity = 27
-			if kind.is_empty():
-				continue
-			_link(records[first_index], records[second_index], kind, affinity, familiarity)
-	# Nobody starts completely isolated, even in a smaller population.
-	for index in records.size():
-		var record := records[index]
-		if record.relationships.is_empty() and records.size() > 1:
-			var other := records[(index + 1) % records.size()]
-			_link(record, other, "vicino di casa", 22, 30)
-			_link(other, record, "vicino di casa", 22, 30)
-	# One memory that refers to an existing relationship, for every inhabitant.
-	for index in records.size():
-		var record := records[index]
-		if record.relationships.is_empty():
-			continue
-		var other_id := String(record.relationships.keys()[index % record.relationships.size()])
-		var other := _find_by_id(records, other_id)
-		if other == null:
-			continue
-		var relation: Dictionary = record.relationships[other_id]
-		record.memories.append({
-			"kind": "relationship",
-			"text": "Ricorda %s, %s del villaggio." % [other.display_name, relation["kind"]],
-			"tick": 0,
-		})
-
-
-static func _link(
-	first: NpcRecord, second: NpcRecord, kind: String, affinity: int, familiarity: int
-) -> void:
-	first.relationships[second.id] = {
-		"kind": kind,
-		"affinity": affinity,
-		"familiarity": familiarity,
-		"last_interaction_tick": 0,
-	}
-	second.relationships[first.id] = {
-		"kind": kind,
-		"affinity": affinity,
-		"familiarity": familiarity,
-		"last_interaction_tick": 0,
-	}
-
-
-static func _find_by_id(records: Array[NpcRecord], npc_id: String) -> NpcRecord:
-	for record in records:
-		if record.id == npc_id:
-			return record
-	return null

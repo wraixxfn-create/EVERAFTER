@@ -20,7 +20,7 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 
 @export_group("Project")
 @export var project_title: String = "EVERAFTER"
-@export var build_label: String = "0.4.0-economy"
+@export var build_label: String = "0.5.0-social"
 
 @export_group("Simulated time")
 ## Real seconds per logical tick at speed x1. With the default value the
@@ -69,6 +69,23 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 @export_range(0, 500) var starting_village_wood: int = 12
 @export_range(0, 500) var starting_village_stone: int = 10
 @export_range(0, 1000) var starting_village_coin: int = 60
+
+@export_group("Social")
+## How many memories a single inhabitant keeps. Older or less important ones
+## leave the book following the rule documented in `NpcMemory.retention_score()`.
+@export_range(4, 200) var social_memory_capacity: int = 24
+## Memories below this importance (0..100) are not stored at all: a hundred
+## greetings must not fill a life.
+@export_range(0, 100) var social_memory_importance_floor: int = 12
+## Objective events kept in the social log, the raw material of the chronicle.
+@export_range(10, 2000) var social_event_log_limit: int = 160
+## World units: how close two inhabitants must be to interact.
+@export_range(0.5, 20.0) var social_interaction_radius: float = 3.2
+## Minimum simulated minutes between two interactions of the same pair.
+@export_range(0, 1440) var social_cooldown_ticks: int = 45
+## Positive points of trust/affinity/familiarity a pair can gain in one day.
+## This is the brake that keeps repeated interactions from running away.
+@export_range(1, 100) var social_daily_gain_cap: int = 14
 
 @export_group("Player")
 @export_range(0.5, 20.0) var player_walk_speed: float = 5.0
@@ -142,6 +159,23 @@ func validate() -> PackedStringArray:
 		problems.append("starting_village_stone must be >= 0 (got %d)" % starting_village_stone)
 	if starting_village_coin < 0:
 		problems.append("starting_village_coin must be >= 0 (got %d)" % starting_village_coin)
+	if social_memory_capacity < 1:
+		problems.append("social_memory_capacity must be >= 1 (got %d)" % social_memory_capacity)
+	if social_memory_importance_floor < 0 or social_memory_importance_floor > 100:
+		problems.append(
+			"social_memory_importance_floor must be inside 0..100 (got %d)"
+			% social_memory_importance_floor
+		)
+	if social_event_log_limit < 1:
+		problems.append("social_event_log_limit must be >= 1 (got %d)" % social_event_log_limit)
+	if social_interaction_radius <= 0.0:
+		problems.append(
+			"social_interaction_radius must be > 0 (got %s)" % social_interaction_radius
+		)
+	if social_cooldown_ticks < 0:
+		problems.append("social_cooldown_ticks must be >= 0 (got %d)" % social_cooldown_ticks)
+	if social_daily_gain_cap < 1:
+		problems.append("social_daily_gain_cap must be >= 1 (got %d)" % social_daily_gain_cap)
 	if start_minute_of_day < 0 or start_minute_of_day >= SimulationClock.MINUTES_PER_DAY:
 		problems.append("start_minute_of_day out of range (got %d)" % start_minute_of_day)
 	if save_format_version < 1:

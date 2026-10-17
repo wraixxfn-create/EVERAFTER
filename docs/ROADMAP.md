@@ -95,16 +95,44 @@ insediamenti.
 headless, conservazione delle risorse verificata dai test (`TestEconomyInventory` e
 `TestEconomySimulation`), assenza di valori negativi e corrispondenza esatta tra UI e stato.
 
-## Fase 3 — Relazioni (`src/relationships`)
+## Fase 3 — Relazioni e memoria (`src/social`) 🔶 (prima versione in `0.5.0-social`)
 
-**Obiettivo**: le persone si conoscono, si fidano, litigano.
+**Obiettivo**: le persone si conoscono, si fidano, litigano, e lo ricordano.
 
-* Grafo di relazioni con tipo e intensità (conoscente, amico, rivale, familiare).
-* Memoria individuale: gli eventi recenti influenzano la relazione.
-* Formazione di famiglie e di piccoli gruppi per prossimità e interazioni ripetute.
+Consegnato in `0.5.0-social` (il modulo si chiama `src/social/`, non `src/relationships/`: contiene
+relazioni, interazioni e memoria, che sono un solo comportamento):
 
-**Criteri di accettazione**: relazioni che evolvono in modo deterministico su 30 giorni; test che
-verificano simmetria/coerenza del grafo e assenza di relazioni orfane.
+* **Grafo di relazioni con un solo proprietario** (`RelationshipGraph`), chiave canonica per coppia
+  non ordinata, rifiuto esplicito di duplicati e di auto-relazioni, pulizia dei riferimenti a NPC
+  inesistenti al caricamento. Il vecchio dizionario simmetrico dentro `NpcRecord` è stato rimosso:
+  due copie dello stesso legame possono divergere.
+* **Quattro attributi documentati** in `0..100`: familiarità e tensione condivise, fiducia e
+  affinità direzionali (`trust_a/trust_b`, `affinity_a/affinity_b`), con guadagni a rendimenti
+  decrescenti e un tetto giornaliero condiviso che impedisce la crescita illimitata.
+* **Cinque interazioni a regole** (saluto, conversazione, cooperazione, aiuto, disaccordo) scelte
+  da contesto, prossimità, attività, relazioni esistenti e scorte del villaggio. Nessun evento
+  casuale privo di significato: se le condizioni non ci sono, non succede niente.
+* **Registro eventi oggettivo** (`SocialEvent`) separato dalla **memoria soggettiva** (`NpcMemory`,
+  con ruolo, fonte e confidenza pronte per una prospettiva incompleta), con capacità configurabile,
+  regola di ritenzione per importanza e rilevanza, e nessuna eliminazione silenziosa dei ricordi
+  importanti.
+* **Una conseguenza verificabile**: la disponibilità a cooperare dipende dai ricordi (aiuto
+  ricevuto, litigio recente), non dal testo.
+* **Interfaccia sobria**: tre relazioni, tre ricordi e il motivo documentato dell'ultimo
+  cambiamento nel pannello già esistente; nessun pannello nuovo.
+* **Serializzazione pronta**: `SocialSystem.to_dict()` / `from_dict()` seguono la stessa
+  convenzione degli altri sistemi, perché la Fase 6 li raccolga invece di duplicarli.
+
+Ancora da fare in questa fase:
+
+* Tipi di relazione espliciti (conoscente, amico, rivale, familiare) oggi derivati dai numeri.
+* Formazione di famiglie e piccoli gruppi per prossimità e interazioni ripetute.
+* Ricordi non sociali (luoghi, mestiere appreso) e memoria di lungo periodo consolidata.
+
+**Criteri di accettazione**: relazioni che evolvono in modo deterministico su 30 giorni ✅ (40
+giorni simulati in `TestSocialSimulation`, esito ripetibile); test che verificano coerenza del
+grafo e assenza di relazioni orfane ✅ (anche dopo il caricamento di uno snapshot in un mondo più
+piccolo); memoria entro i limiti configurati ✅; nessuna crescita illimitata di fiducia ✅.
 
 ## Fase 4 — Società e politica (`src/society` o `src/simulation/systems`)
 
@@ -123,7 +151,8 @@ verificano simmetria/coerenza del grafo e assenza di relazioni orfane.
 
 * Registro di eventi importanti con data simulata, attori e conseguenze.
 * Consultazione in gioco (pannello o libro) e generazione di testo **deterministico** da template.
-* Collegamento con i ricordi individuali della Fase 3.
+* Collegamento con i ricordi individuali della Fase 3: `SocialEvent` e `NpcMemory.event_id` sono
+  già il punto d'aggancio, la cronaca deve solo leggerli e ordinare gli eventi per importanza.
 
 **Criteri di accettazione**: dopo 30 giorni simulati esiste una cronaca leggibile e riproducibile,
 identica a parità di seme.
@@ -133,7 +162,9 @@ identica a parità di seme.
 **Obiettivo**: salvare e ricaricare l'intera civiltà.
 
 * Formato testo leggibile su `user://`, con `save_format_version`, checksum e campi opzionali.
-* Salvataggio di clock, loop, tutti i sistemi, mondo e (se esiste) stato del giocatore.
+* Salvataggio di clock, loop, tutti i sistemi (abitanti, economia, **sociale**), mondo e (se esiste)
+  stato del giocatore. I sistemi espongono già `to_dict()` / `from_dict()`: la Fase 6 li raccoglie
+  in un unico file, non ne crea di paralleli.
 * Slot multipli, salvataggio automatico periodico e all'uscita.
 * Test di round trip per ogni sistema e test di caricamento di un salvataggio di versione precedente.
 
@@ -183,8 +214,11 @@ Fase 0 ──▶ Fase 1 ──▶ Fase 2 ──▶ Fase 4
              └──▶ Fase 3 ┴──▶ Fase 5 ──▶ Fase 6 ──▶ Fase 7 ──▶ Fase 8 ──▶ Fase 9
 ```
 
-Le Fasi 2 e 3 possono procedere in parallelo dopo la Fase 1. La Fase 6 (persistenza) va anticipata
-se la simulazione diventa abbastanza grande da non poter essere ricostruita a ogni avvio.
+Le Fasi 2 e 3 possono procedere in parallelo dopo la Fase 1: la prima versione della Fase 3 è già
+consegnata, ma famiglie, gruppi e tipi di relazione restano aperti e possono essere ripresi in
+qualsiasi momento. La Fase 6 (persistenza) va anticipata se la simulazione diventa abbastanza
+grande da non poter essere ricostruita a ogni avvio: ora che anche lo stato sociale è serializzabile,
+il costo di rimandarla è cresciuto.
 
 ## Definizione di "fatto" per ogni fase
 

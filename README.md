@@ -6,18 +6,20 @@ Il mondo è abitato da personaggi con identità, bisogni, professioni, obiettivi
 Gli abitanti agiranno autonomamente, la società evolverà e gli eventi lasceranno conseguenze nel tempo.
 Il gioco deve funzionare **offline**, senza servizi a pagamento e senza server obbligatori.
 
-Questo repository contiene oggi la **fase Economia locale (`0.4.0-economy`)**, costruita sopra il
-villaggio esplorabile e gli abitanti autonomi delle fasi precedenti: un ambiente fantasy medievale
-a codice, camminabile in prima persona, con terreno procedurale e ciclo giorno/notte, abitato da
-**10 persone** (numero configurabile) che hanno un nome, un mestiere, bisogni, una casa, un posto
-di lavoro, una routine giornaliera e un **ciclo economico delle risorse** (`Cibo`, `Legno`,
-`Pietra`, `Moneta`). La simulazione gira anche quando nessuno li guarda.
+Questo repository contiene oggi la **fase Relazioni e memoria (`0.5.0-social`)**, costruita sopra il
+villaggio esplorabile, gli abitanti autonomi e l'economia locale delle fasi precedenti: un ambiente
+fantasy medievale a codice, camminabile in prima persona, con terreno procedurale e ciclo
+giorno/notte, abitato da **10 persone** (numero configurabile) che hanno un nome, un mestiere,
+bisogni, una casa, un posto di lavoro, una routine giornaliera, un **ciclo economico delle
+risorse** (`Cibo`, `Legno`, `Pietra`, `Moneta`) e da ora **relazioni personali, interazioni sociali
+e una memoria individuale limitata**. La simulazione gira anche quando nessuno li guarda.
 
-> Stato onesto del progetto: **esistono il villaggio 3D, gli NPC autonomi e il primo sistema
-> economico locale; non esistono ancora mercati dinamici complessi, finanza avanzata, relazioni
-> simulate, politica, cronache o salvataggi.** Le strutture dati per relazioni e ricordi sono
-> seminate, ma non c'è ancora un sistema sociale o politico. Sono progettati in
-> [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementati.
+> Stato onesto del progetto: **esistono il villaggio 3D, gli NPC autonomi, l'economia locale e un
+> primo sistema sociale (relazioni, cinque interazioni, memoria individuale con limiti e
+> conseguenze); non esistono ancora mercati dinamici complessi, finanza avanzata, famiglie,
+> fazioni, politica, cronache giocabili o salvataggi.** Le relazioni sono regolate da regole
+> numeriche verificabili: **nessun modello linguistico e nessun servizio online**. Politica e
+> dialoghi generativi restano progettati in [`docs/ROADMAP.md`](docs/ROADMAP.md), non implementati.
 
 ---
 
@@ -141,7 +143,7 @@ Nel villaggio vivono **10 abitanti iniziali**, configurabili in un solo punto
 * tre **bisogni** (energia, fame, benessere) che cambiano a ogni minuto simulato;
 * una **casa** e una posizione sul terreno;
 * un **obiettivo** e un'**attività** correnti, con un motivo leggibile;
-* relazioni e ricordi iniziali, presenti come dati ma **non ancora simulati**.
+* una riga di **background personale**, che il sistema sociale trasforma nel primo ricordo.
 
 La giornata è regolata da regole esplicite e deterministiche: sveglia e sonno tra le 22:00 e le
 06:00, turno di lavoro nella propria fascia, pasti quando la fame supera la soglia (locanda o
@@ -153,11 +155,12 @@ Gli abitanti sono rappresentati da capsule colorate per mestiere, con il nome so
 capsule vengono create solo entro `npc_view_distance` (70 unità, configurabile) e distrutte quando
 si allontanano: **la simulazione non si ferma mai** per un NPC non disegnato. Il pannello in basso
 a destra mostra la scheda dell'abitante selezionato (nome, età, professione, attività, obiettivo,
-tre barre dei bisogni, riepilogo). Si può selezionare cliccando la capsula oppure scegliendo il
-nome dall'elenco: l'elenco funziona anche per chi è fuori portata visiva.
+tre barre dei bisogni, riepilogo, tre relazioni principali e tre ricordi). Si può selezionare
+cliccando la capsula oppure scegliendo il nome dall'elenco: l'elenco funziona anche per chi è fuori
+portata visiva.
 
-Il pannello e le capsule leggono soltanto i `NpcRecord`; non li modificano. La simulazione vive in
-`src/npcs/` e `src/economy/` e non conosce né la scena 3D né l'interfaccia.
+Il pannello e le capsule leggono soltanto i record; non li modificano. La simulazione vive in
+`src/npcs/`, `src/economy/` e `src/social/` e non conosce né la scena 3D né l'interfaccia.
 
 ### Economia locale e ciclo delle risorse (novità di questa fase)
 
@@ -200,20 +203,120 @@ comunità:
   produzione e consumo del periodo (`+prod / -cons`), stato dei progetti, carenze attive e ultime
   transazioni importanti leggendo direttamente `EconomySystem`.
 
+### Relazioni, interazioni e memoria (novità di questa fase)
+
+Il modulo `src/social/` dà agli abitanti una vita sociale **persistente e deterministica**. Nessun
+modello linguistico, nessun servizio online: ogni comportamento nasce da regole numeriche scritte
+in `social_rules.gd`, leggibili e verificate dai test.
+
+**Relazioni** (`SocialRelationship`, una per coppia di ID). La coppia è *canonica*
+(`npc_001|npc_002`, IDs ordinati) e `RelationshipGraph` rifiuta i duplicati: due abitanti non
+possono avere due relazioni tra loro. Tutti i valori sono interi `0..100`:
+
+| Valore | Di chi è | Che cosa significa |
+| --- | --- | --- |
+| `familiarity` | **condiviso** | quanto si conoscono (0 estranei, 100 una vita insieme) |
+| `tension` | **condiviso** | quanto è teso il rapporto (0 sereno, 100 ostilità aperta) |
+| `trust_a` / `trust_b` | **direzionale** | quanto A si fida di B e viceversa: possono differire |
+| `affinity_a` / `affinity_b` | **direzionale** | quanto A vuole bene a B e viceversa |
+
+Ricevere aiuto alza **la propria** fiducia in chi aiuta, non quella di chi aiuta: per questo la
+fiducia e l'affinità hanno due valori e la familiarità e la tensione uno solo.
+
+**Due freni contro la crescita illimitata.** Ogni guadagno positivo passa da
+`SocialRelationship`, che applica (1) **rendimenti decrescenti**: il passo è scalato per lo spazio
+rimasto al tetto (`scaled_gain(90, 10) = 1`, `scaled_gain(100, 10) = 0`); (2) un **tetto
+giornaliero** (`social_daily_gain_cap`, default `14`): la somma di fiducia, affinità e familiarità
+concesse a una coppia in un giorno simulato non supera quel valore, qualunque sia il numero di
+interazioni. I peggioramenti non sono limitati: un litigio fa sempre danno.
+
+**Cinque interazioni**, scelte da contesto e mai a caso (ordine di priorità fisso):
+
+| Interazione | Condizioni | Effetti principali |
+| --- | --- | --- |
+| **Disaccordo** | stesso posto di lavoro, entrambi al lavoro, carenza di cibo nel villaggio, almeno uno con fame `>= 72`, calma media `< 70` | tensione `+14`, fiducia `-6`, affinità `-7`, benessere `-2,0` |
+| **Aiuto** | luogo che serve cibo, uno senza razione o con fame `>= 78`, l'altro sazio e con cibo davvero disponibile | familiarità `+8`, fiducia **solo di chi riceve** `+9`, affinità `+6` a entrambi, benessere `+2,5` a chi riceve / `+0,5` a chi aiuta |
+| **Cooperazione** | entrambi al lavoro nello stesso posto | accettata: familiarità `+5`, fiducia `+5`, affinità `+4`, benessere `+0,8`; rifiutata: tensione `+8`, affinità di chi rifiuta `-4` |
+| **Conversazione** | stesso luogo sociale, familiarità `>= 20` | familiarità `+4`, fiducia `+2`, affinità `+4`, benessere `+0,3` |
+| **Saluto** | stesso luogo sociale, familiarità `< 20` | familiarità `+6`, affinità `+2` |
+
+I numeri della colonna di destra sono quelli **nominali**, definiti dalle costanti di
+`SocialRules`: l'effetto realmente applicato passa dai due freni descritti sopra e viene registrato
+in `SocialEvent.effects`, quindi la scheda dell'abitante mostra il valore vero e non quello della
+tabella. Un litigio, un aiuto o una cooperazione tra sconosciuti valgono di più della ripetizione
+dello stesso gesto tra persone che si frequentano da mesi.
+
+Un'interazione avviene solo se i due sono **nello stesso luogo**, a distanza
+`<= social_interaction_radius` (3,2 unità), **non stanno dormendo, camminando o recuperando da un
+percorso bloccato**, e non hanno già interagito da meno di `social_cooldown_ticks` (45 minuti
+simulati). Al massimo `2` interazioni per tick: la folla non genera rumore e il registro resta
+leggibile.
+
+**Eventi oggettivi** (`SocialEvent`): id univoco (`evt_000042`), tipo, esito, tick, giorno, minuto,
+luogo, IDs dei partecipanti, chi ha iniziato, descrizione sintetica, importanza `0..100` e gli
+effetti realmente applicati. Il registro è limitato (`social_event_log_limit`, default 160): esce
+prima l'evento meno importante e la rimozione di un evento importante viene contata e registrata
+nel log. È la materia prima della cronaca futura.
+
+**Memoria individuale** (`NpcMemory` dentro `MemoryBook`): id univoco (`mem_000107`), proprietario
+(di chi è il ricordo), tipo, riferimento all'evento, giorno, partecipanti, luogo, ruolo
+(`ricevuto` / `offerto` / `rifiutato` …), descrizione sintetica **dal punto di vista del
+personaggio**, importanza, `source` (`diretto` / `raccontato`) e `certainty`. Gli ultimi due campi
+esistono già, sempre `diretto` / `100` in questa fase: sono il punto d'aggancio per dare in futuro
+a un NPC una visione parziale di un evento a cui ha assistito solo a metà.
+
+* **Limiti configurabili**: `social_memory_capacity` (default 24 ricordi per abitante) e
+  `social_memory_importance_floor` (default 12). Un saluto (importanza 6) **non viene proprio
+  memorizzato**: esiste l'evento, non il ricordo.
+* **Regola di selezione**: `retention_score = importanza * 3 + 2 * giorni_di_freschezza` (finestra
+  di 6 giorni). Quando il libro è pieno esce il punteggio più basso; l'importanza domina, la
+  freschezza serve solo a rompere i pareggi.
+* **Niente scompare in silenzio**: ogni rimozione è contata (`evicted_count`), quelle di ricordi con
+  importanza `>= 75` sono contate a parte (`evicted_protected_count`) e scritte nel log, e avvengono
+  solo se non c'è altro da eliminare. L'evento resta comunque nel registro oggettivo: dimenticare è
+  una proprietà del personaggio, mai del mondo.
+* **Un ricordo non è la verità**: lo stesso aiuto produce due ricordi diversi (importanza `58` per
+  chi lo riceve, `40` per chi lo offre, ruoli e testi diversi) che puntano allo stesso evento.
+
+**Conseguenze reali.** Una cooperazione avviene solo se chi riceve la proposta è disponibile, e la
+disponibilità è calcolata da `SocialRules.cooperation_willingness()`: `50` di partenza, `+0,4` per
+punto di fiducia sopra 50, `+0,2` per punto di affinità sopra 50, `-0,6` per punto di tensione,
+**`+14` se ricorda un aiuto ricevuto da quella persona**, **`-18` se ricorda un litigio degli
+ultimi 3 giorni** (soglia `55`). Con fiducia 60 e affinità 50 la stessa coppia rifiuta a `54` e
+accetta a `68` dopo un aiuto memorizzato: la memoria cambia un comportamento, non solo un testo.
+Cooperazione, aiuto e litigio muovono anche `needs.wellbeing`, quindi l'effetto è visibile nello
+stato della simulazione e non solo nel registro.
+
+**Pannello.** La scheda dell'abitante (`NpcPanel`) mostra tre relazioni principali
+(nome, etichetta derivata dai numeri, fiducia, familiarità), la riga *"Ultimo cambiamento"* con il
+motivo documentato e il giorno dell'evento, e tre ricordi rilevanti. Nessun numero in più, nessun
+pannello nuovo: le stesse righe che il sistema produce, lette direttamente da esso.
+
 ### Costo misurato della scena
 
-Misura della fase precedente, avviando la scena con Godot 4.7.2 headless
-(`--script res://tests/run_world_tests.gd`). Il villaggio non è cambiato in questa fase: cambiano
-solo le capsule degli abitanti, che sono viste temporanee create entro `npc_view_distance` e
-liberate fuori portata.
+Misura **ripetuta in questa fase** avviando la scena con Godot 4.7.2 headless
+(`--script res://tests/run_world_tests.gd`). La suite di integrazione ora stampa i tre numeri a
+ogni esecuzione:
 
-| Voce | Valore |
+```
+[INFO] Budget measured: 145 meshes, 149673 triangles, 291 colliders (limits 260 / 260000 / 900)
+```
+
+Il villaggio non è cambiato in questa fase: cambiano solo le capsule degli abitanti, viste
+temporanee create entro `npc_view_distance` e liberate fuori portata.
+
+| Voce | Valore misurato |
 | --- | --- |
 | Draw call (mesh + MultiMesh + terreno) | **145** |
-| Triangoli totali | **107.643** (50.562 terreno + 57.081 villaggio ed erba) |
-| Collider statici | **292** |
-| Materiali distinti | **≤ 24** (verificato da un test) |
+| Triangoli totali | **149.673** (50.562 terreno + 78.311 villaggio + 20.800 erba istanziata) |
+| Collider statici | **291** |
+| Materiali distinti | **≤ 24** (verificato da `test_village_art.gd`, che costruisce il villaggio) |
 | Istanze d'erba | 2.600 in 1 draw call |
+
+I numeri riportati finora (**107.643** triangoli e **292** collider) non corrispondevano alla scena
+attuale: la differenza di 42.030 triangoli comprende le 20.800 delle 2.600 istanze d'erba e 21.230
+di geometria del villaggio, mentre i collider erano uno in più. Il terreno (50.562) era corretto.
+Ora la cifra esce dal log della suite, quindi non può invecchiare in silenzio.
 
 Per confronto: una casa "a primitive" sarebbe circa 15 nodi e 15 draw call; qui l'intera foresta
 ne costa una manciata, perché `MeshBaker` fonde per materiale.
@@ -240,7 +343,7 @@ src/
     npc_needs.gd                 energia, fame, benessere; pressione e serializzazione
     npc_place.gd                 luogo logico: tipo, posizione, orari, cibo
     npc_place_registry.gd        indice dei luoghi e ricerche deterministiche
-    npc_record.gd                stato di un abitante: identità, spazio, obiettivo, relazioni
+    npc_record.gd                stato di un abitante: identità, spazio, obiettivo, background
     npc_roster.gd                tabella fissa di 16 abitanti, nomi stabili
     npc_route_graph.gd           rete di waypoint su strade e luoghi, con ostacoli reali
     npc_simulation_system.gd     macchina a stati delle routine, movimento, bisogni
@@ -250,6 +353,15 @@ src/
     economy_transaction.gd       registro tipizzato delle transazioni e dei rifiuti
     economy_rules.gd             regole di produzione, prerequisiti, progetti e riepiloghi
     economy_system.gd            sistema economico deterministico (produzione, consumo, scambi)
+  social/                      relazioni, interazioni e memoria (pura logica, nessun nodo)
+    social_relationship.gd       una coppia di IDs: valori condivisi e direzionali, freni di crescita
+    relationship_graph.gd        proprietario unico delle relazioni, chiavi canoniche, niente orfani
+    social_event.gd              evento oggettivo: attori, giorno, luogo, importanza, effetti
+    npc_memory.gd                un ricordo: proprietario, importanza, ruolo, riferimento all'evento
+    memory_book.gd               archivio limitato dei ricordi con regola di selezione
+    social_interaction.gd        dati di lavoro di una singola interazione
+    social_rules.gd              tutte le regole e le soglie, funzioni pure
+    social_system.gd             sistema deterministico: prossimità, scelte, effetti, registro
   world/                       mondo 3D
     scenes/main_world.tscn       scena principale
     main_world.gd                radice di composizione: terreno, villaggio, abitanti, spawn
@@ -283,10 +395,11 @@ tests/
   unit/                        clock, loop, day cycle, terreno, config, layout, aree,
                                materiali, baker, direzione artistica, dati NPC, roster,
                                rete di percorso, simulazione NPC, luoghi del villaggio,
-                               inventari/transazioni ed economia simulata
+                               inventari/transazioni, economia simulata, relazioni e memoria
+                               (test_social_relationships, test_social_simulation)
   integration/
     test_world_scene.gd        scena, terreno vs fisica, collisioni, budget, abitanti,
-                               selezione, pannello NPC e pannello economico
+                               selezione, pannello NPC, pannello economico, strato sociale
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
@@ -302,7 +415,7 @@ filmico, SSAO e glow disattivati, `Camera3D.far = 420`).
 
 Motivazione:
 
-* una GTX 1060 gestisce Vulkan senza problemi; con 145 draw call e ~108k triangoli la scena è
+* una GTX 1060 gestisce Vulkan senza problemi; con 145 draw call e ~150k triangoli la scena è
   molto al di sotto di ciò che mette in difficoltà quella scheda a 1080p;
 * `forward_plus` offre gli strumenti di debug migliori e resta il percorso più mantenuto del
   motore, quindi è la scelta più stabile su cui costruire le fasi successive;
@@ -352,16 +465,20 @@ Nessun numero qui sotto è stimato.
 
 | Controllo | Strumento | Esito |
 | --- | --- | --- |
-| Sintassi di tutti i 59 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
+| Sintassi di tutti i 69 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
 | Stile GDScript | `gdlint` (gdtoolkit 4.5.0) | **eseguito — 0 problemi** |
 | Coerenza progetto: scena principale, autoload, `res://`, ext/sub resource, percorsi `$Nodo` degli script rispetto alle scene, azioni di input, `.gitignore` | `tools/check_project.py` | **eseguito — OK** |
-| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **eseguito — 918 passati, 0 falliti, 0 saltati** |
-| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **eseguito — 96 passati, 0 falliti, 0 saltati** |
+| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **eseguito — 1162 passati, 0 falliti, 0 saltati** |
+| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **eseguito — 113 passati, 0 falliti, 0 saltati** |
 | Resa visiva su GPU (come *appare* il villaggio e come si muovono le capsule) | — | **NON eseguita**: l'ambiente di verifica non ha GPU. Geometria, materiali e collisioni sono verificati; l'immagine finale no |
 | Prova su Windows con Godot desktop, selezione col mouse e pannello | — | **NON eseguita**: da fare in revisione |
 
 `bash tools/run_checks.sh` esegue tutti e cinque i controlli e termina con
-`All executed checks passed.` (in questa sessione: 918 + 96 asserzioni, zero errori di script).
+`All executed checks passed.` (in questa sessione: 1162 + 113 asserzioni, zero errori di script).
+Di queste, **268 sono nuove** e riguardano solo relazioni, interazioni e memoria: 251 nelle due
+suite di unità (126 in `test_social_relationships.gd`, 125 in `test_social_simulation.gd`) e 17
+nella sezione `check_social` dell'integrazione. Le cifre sono state misurate disattivando le suite
+sociali e ripetendo l'esecuzione (918 → 1162 unità, 96 → 113 integrazione), non contate a mano.
 
 I controlli statici non sostituiscono l'esecuzione: coprono sintassi, stile, percorsi delle risorse
 e coerenza dei nodi, non il comportamento. La suite di unità contiene le prove di determinismo,
@@ -391,25 +508,36 @@ Che cosa copre davvero la suite di integrazione, perché è la parte che conta:
   nessuna capsula è disegnata eppure i record continuano a cambiare; la selezione dal presenter
   arriva al pannello, che mostra nome, attività, obiettivo, barre e riepilogo del personaggio
   scelto; un ID inesistente viene rifiutato senza cambiare la selezione.
-
-### Difetti reali trovati eseguendo il motore nella fase precedente
-
-La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono emersi tre bug
-(riguardano il terreno e il loop del tempo, non gli abitanti):
-
-1. **`SimulationClock.to_string()` non veniva mai chiamata.** In GDScript il metodo virtuale è
-   `_to_string()`; un metodo chiamato `to_string()` non sovrascrive nulla. Ora corretto, e il test
-   confronta la stringa formattata, quindi la regressione non può tornare.
-2. **Il terreno aveva il winding invertito**: tutte le normali puntavano verso il basso. Misurato
-   sul motore: Godot 4.7.2 ricava la normale di un triangolo `(a, b, c)` come `(c − a) × (b − a)`.
-   Con il back-face culling attivo il suolo sarebbe sparito visto dall'alto. Corretto, e coperto da
-   `tests/unit/test_mesh_baker.gd` e dai raggi della suite di integrazione.
-3. **Un test del loop chiedeva l'impossibile**: `update(0.25)` a velocità x4 pretende 20 tick, ma
-   il guard `max_steps_per_frame = 12` (giustamente) li limita, e l'accumulatore in virgola mobile
-   perde il ventesimo tick. Il test ora usa un `tick_seconds` potenza di due e un tetto esplicito,
-   e verifica il guard come comportamento proprio.
+* **strato sociale** (`check_social`): il sistema è registrato in `Game` e non pilotato dalla scena;
+  ogni relazione unisce due abitanti esistenti e nessuna coppia è duplicata; due giorni simulati
+  producono eventi i cui attori esistono tutti; il registro eventi e i ricordi restano entro i
+  limiti configurati; `validate()` resta pulito; il pannello mostra le stesse righe che produce il
+  sistema (relazioni, motivo dell'ultimo cambiamento, ricordi).
 
 ### Difetti reali trovati eseguendo il motore in questa fase
+
+1. **Una funzione duplicata che solo il motore vede.** `social_system.gd` conteneva due volte
+   `get_last_tick()`: `gdparse` e `gdlint` passavano entrambi, perché la sintassi è valida, mentre
+   il motore rifiutava l'intero script con *"Function has the same name as a previously declared
+   function"*. La conseguenza a catena è doppia: `SocialSystem` non si compila e il runner, che
+   chiama `quit()` solo alla fine di `_initialize()`, resta appeso per sempre invece di uscire con
+   un errore. Corretto rimuovendo il duplicato. È la seconda volta che succede in questo progetto
+   (vedi la fase precedente, `npc_route_graph.gd`): **i controlli statici non sostituiscono
+   l'esecuzione**.
+2. **Riferimenti pendenti dopo un caricamento.** `SocialSystem.from_dict()` puliva relazioni e
+   ricordi che puntavano ad abitanti inesistenti, ma non gli eventi: caricando il salvataggio di un
+   mondo da 6 abitanti in un mondo da 2, `validate()` segnalava 3 eventi con attori sconosciuti.
+   Ora `_drop_dangling_events()` li elimina al caricamento, li conta in `dropped_event_count` e lo
+   scrive nel log. Il test `_test_load_drops_unknown_references` copre esattamente questo caso.
+3. **Due aspettative di test sbagliate, non il codice.** (a) Il tetto giornaliero di crescita è un
+   **budget condiviso** tra familiarità, fiducia e affinità: un test si aspettava `+8` di affinità
+   dopo aver già concesso `+10` di fiducia nello stesso giorno, e il valore corretto era `+4`. (b)
+   `strength()` di una relazione senza fiducia né affinità è pari alla sola familiarità, non
+   maggiore. In entrambi i casi il comportamento era quello progettato e documentato: sono stati
+   corretti i test, e il vincolo del budget condiviso è ora scritto nella documentazione della
+   classe.
+
+### Difetti reali trovati eseguendo il motore nella fase economia (`0.4.0-economy`)
 
 1. **Un errore di parsing che solo il motore vede.** `npc_route_graph.gd` conteneva
    `var current := queue.pop_back()`: `pop_back()` restituisce un `Variant` e Godot tratta
@@ -432,16 +560,43 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
    `null` per le mesh non indicizzate, generando un errore di script a ogni superficie. Corretto:
    il conteggio ora include anche quelle superfici.
 
+### Difetti reali trovati eseguendo il motore nelle prime fasi (villaggio e NPC)
+
+La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono emersi tre bug
+(riguardano il terreno e il loop del tempo, non gli abitanti):
+
+1. **`SimulationClock.to_string()` non veniva mai chiamata.** In GDScript il metodo virtuale è
+   `_to_string()`; un metodo chiamato `to_string()` non sovrascrive nulla. Ora corretto, e il test
+   confronta la stringa formattata, quindi la regressione non può tornare.
+2. **Il terreno aveva il winding invertito**: tutte le normali puntavano verso il basso. Misurato
+   sul motore: Godot 4.7.2 ricava la normale di un triangolo `(a, b, c)` come `(c − a) × (b − a)`.
+   Con il back-face culling attivo il suolo sarebbe sparito visto dall'alto. Corretto, e coperto da
+   `tests/unit/test_mesh_baker.gd` e dai raggi della suite di integrazione.
+3. **Un test del loop chiedeva l'impossibile**: `update(0.25)` a velocità x4 pretende 20 tick, ma
+   il guard `max_steps_per_frame = 12` (giustamente) li limita, e l'accumulatore in virgola mobile
+   perde il ventesimo tick. Il test ora usa un `tick_seconds` potenza di due e un tetto esplicito,
+   e verifica il guard come comportamento proprio.
+
 ## 8. Limiti noti di questa fase
 
 * **Economia locale a prezzi base fissi**: sono implementati inventari, produzione da lavoro,
   consumo alimentare, scambi tramite mercante e progetti comunitari; **non** esistono ancora prezzi
   dinamici da domanda/offerta complessa, prestiti, debito, tassazione o mercati multi-insediamento.
-* **Nessuna simulazione sociale o politica**: relazioni e ricordi esistono come dati iniziali (e
-  sono serializzati), ma nessuna regola li modifica ancora. Non ci sono fazioni, leggi, cronache o
-  eventi politici.
-* **La memoria non è un sistema**: i ricordi sono un elenco seminato, non un registro che cresce
-  con le azioni.
+* **Sistema sociale minimo, nessuna società**: esistono relazioni a coppie, cinque interazioni e
+  una memoria individuale limitata. **Non** esistono famiglie, gruppi, fazioni, reputazione
+  pubblica, politica, leggi o cronache consultabili: un evento sociale resta un dato strutturato,
+  non un racconto.
+* **Le interazioni non spostano nessuno**: avvengono dove la routine ha già portato i due abitanti
+  e cambiano fiducia, affinità, tensione e benessere; non cambiano ancora la destinazione di un
+  abitante. La memoria influenza la disponibilità a cooperare, non la scelta del luogo.
+* **Nessuna prospettiva incompleta attiva**: `source` e `certainty` esistono in ogni ricordo, ma in
+  questa fase valgono sempre `diretto` e `100`. Un personaggio non può ancora ricordare male, né
+  sapere qualcosa per sentito dire.
+* **Il registro eventi non è una cronaca**: è limitato, ordinato e serializzabile, ma non esiste
+  ancora un pannello o un libro per leggerlo in gioco (Fase 5).
+* **Il runner headless resta appeso se una suite non compila**: `quit()` viene chiamato solo alla
+  fine di `_initialize()`, quindi un errore di parse in una suite lascia il processo in attesa
+  invece di uscire con codice 1. Va aggiunto un watchdog nel runner.
 * **Nessun interno**: le case sono volumi chiusi con una scatola di collisione. Porte e finestre
   sono dettagli di superficie, non aperture.
 * **Nessuna serializzazione**: `to_dict()` / `from_dict()` esistono su clock, loop e sistemi, ma

@@ -9,11 +9,18 @@ extends CanvasLayer
 ## that simulation and representation are separate.
 ##
 ## The panel is deliberately plain: name, profession, activity, goal, three
-## need bars and a short state summary. No debug numbers, no hidden actions.
+## need bars, a short state summary and — since the social phase — the few
+## relationships and memories that explain why this character behaves like this.
+## No debug numbers, no hidden actions: the social section shows three
+## relationships and three memories, in words, and names the event behind the
+## last documented change instead of listing every value it owns.
 
 const PLACEHOLDER_ID := ""
+const RELATION_LINES := 3
+const MEMORY_LINES := 3
 
 var _system: NpcSimulationSystem = null
+var _social: SocialSystem = null
 var _selected_id: String = ""
 
 @onready var _header_label: Label = $Root/Panel/Margin/Lines/HeaderLabel
@@ -29,10 +36,13 @@ var _selected_id: String = ""
 @onready var _wellbeing_bar: ProgressBar = $Root/Panel/Margin/Lines/NeedsGrid/WellbeingBar
 @onready var _wellbeing_value: Label = $Root/Panel/Margin/Lines/NeedsGrid/WellbeingValue
 @onready var _summary_label: Label = $Root/Panel/Margin/Lines/SummaryLabel
+@onready var _relations_label: Label = $Root/Panel/Margin/Lines/RelationsLabel
+@onready var _memories_label: Label = $Root/Panel/Margin/Lines/MemoriesLabel
 
 
 func _ready() -> void:
 	EventBus.npc_system_ready.connect(_on_system_ready)
+	EventBus.social_system_ready.connect(_on_system_ready)
 	EventBus.npc_selected.connect(_on_npc_selected)
 	_selector.item_selected.connect(_on_selector_item_selected)
 	_refresh_system()
@@ -42,6 +52,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if _system != Game.get_npc_system():
 		_refresh_system()
+	_social = Game.get_social_system()
 	_refresh_detail()
 
 
@@ -78,6 +89,16 @@ func get_displayed_summary() -> String:
 
 func get_displayed_energy() -> float:
 	return _energy_bar.value
+
+
+## Text of the social section, exactly as shown. The integration test reads it
+## to prove the panel is wired to the social layer and not to a private copy.
+func get_displayed_relations() -> String:
+	return _relations_label.text
+
+
+func get_displayed_memories() -> String:
+	return _memories_label.text
 
 
 # --- internals ---------------------------------------------------------------
@@ -129,6 +150,26 @@ func _refresh_detail() -> void:
 	_hunger_value.text = "%d" % int(round(record.needs.hunger))
 	_wellbeing_value.text = "%d" % int(round(record.needs.wellbeing))
 	_summary_label.text = record.summary_text()
+	_relations_label.text = _relations_text(record.id)
+	_memories_label.text = _memories_text(record.id)
+
+
+## Up to three relationships, strongest first, plus the documented reason of the
+## last change when the social layer has one to show.
+func _relations_text(npc_id: String) -> String:
+	if _social == null:
+		return "Nessuna relazione conosciuta."
+	var lines := _social.relationship_lines(npc_id, RELATION_LINES)
+	var explanation := _social.change_explanation(npc_id)
+	if not explanation.is_empty():
+		lines.append("Ultimo cambiamento: %s" % explanation)
+	return "\n".join(lines)
+
+
+func _memories_text(npc_id: String) -> String:
+	if _social == null:
+		return "Nessun ricordo rilevante."
+	return "\n".join(_social.memory_lines(npc_id, MEMORY_LINES))
 
 
 func _show_empty(title: String, hint: String) -> void:
@@ -143,6 +184,8 @@ func _show_empty(title: String, hint: String) -> void:
 	_hunger_value.text = "—"
 	_wellbeing_value.text = "—"
 	_summary_label.text = hint
+	_relations_label.text = "Nessuna relazione conosciuta."
+	_memories_label.text = "Nessun ricordo rilevante."
 
 
 func _on_selector_item_selected(index: int) -> void:
@@ -160,6 +203,7 @@ func _on_npc_selected(npc_id: String) -> void:
 
 func _on_system_ready() -> void:
 	_refresh_system()
+	_social = Game.get_social_system()
 	_refresh_detail()
 
 
