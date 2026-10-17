@@ -118,7 +118,18 @@ func _make_material(key: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = PALETTE.get(key, Color.MAGENTA)
 	material.metallic = 0.0
+	# A restrained roughness range gives timber, plaster and cloth their own
+	# tactile read without relying on textures or extra material variants.
 	material.roughness = 0.88
+	match key:
+		"wall_cream", "wall_ochre", "wall_ash", "wall_pale":
+			material.roughness = 0.96
+		"timber", "timber_warm", "plank", "door":
+			material.roughness = 0.78
+		"roof_tile", "roof_shingle", "roof_slate", "roof_moss":
+			material.roughness = 0.84
+		"cloth_red", "cloth_blue", "cloth_cream":
+			material.roughness = 0.94
 	# `MeshBaker` merges many solids into one mesh and keeps them apart with
 	# vertex colours, so every material has to read them as albedo.
 	material.vertex_color_use_as_albedo = true
