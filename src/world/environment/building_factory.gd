@@ -173,11 +173,11 @@ func _build_house(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 		"timber", Vector3(1.25, 0.16, 0.2) * scale,
 		_transform(Vector3(0.0, 1.92, depth * 0.5) * scale)
 	)
-	# Stone step in front of the door: grounds the entrance instead of letting
-	# it float on the plaster.
+	# Stone stoop in front of the door, from the ground to just above the
+	# plinth: grounds the entrance instead of letting it float on the plaster.
 	baker.add_box(
-		"stone_dark", Vector3(1.35, 0.16, 0.6) * scale,
-		_transform(Vector3(0.0, 0.08, depth * 0.5 + 0.3) * scale)
+		"stone_dark", Vector3(1.35, 0.5, 0.8) * scale,
+		_transform(Vector3(0.0, 0.25, depth * 0.5 + 0.35) * scale)
 	)
 	_windows(
 		baker, width, depth, wall_height, 2 + placement.variant, scale,
