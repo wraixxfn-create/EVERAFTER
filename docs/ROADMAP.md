@@ -229,7 +229,8 @@ provider configurato, i dialoghi migliorano senza bloccare la simulazione.
 **Obiettivo**: da prototipo a gioco presentabile.
 
 * Asset 3D stilizzati al posto delle primitive, con LOD e atlanti di materiali.
-* Audio ambientale e di interfaccia, illuminazione curata, cielo e meteo.
+* Audio ambientale e di interfaccia. Illuminazione diurna curata **fatta**
+  ([`docs/LIGHTING.md`](LIGHTING.md)); restano meteo, stelle e GI su preset alti.
 * UI reale (pannelli di NPC, economia, cronache) al posto del pannello diagnostico.
 * Preset di export Windows, icone, pass di prestazioni su hardware di riferimento.
 

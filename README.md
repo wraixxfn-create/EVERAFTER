@@ -426,22 +426,26 @@ tests/
                                materiali, baker, direzione artistica, dati NPC, roster,
                                rete di percorso, simulazione NPC, luoghi del villaggio,
                                inventari/transazioni, economia simulata, relazioni e memoria
-                               (test_social_relationships, test_social_simulation)
+                               (test_social_relationships, test_social_simulation), illuminazione
+                               (test_sky_rig)
   integration/
     test_world_scene.gd        scena, terreno vs fisica, collisioni, budget, abitanti,
-                               selezione, pannello NPC, pannello economico, strato sociale
+                               selezione, pannello NPC, pannello economico, strato sociale,
+                               illuminazione oraria e tour della mappa
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
 docs/
   ARCHITECTURE.md              scelte architetturali e regole di dipendenza
+  LIGHTING.md                  illuminazione e atmosfera: problemi, valori, budget, futuro
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 
 ## 6. Renderer e prestazioni
 
-**Renderer scelto: `forward_plus`** (con MSAA 3D 2x, una sola luce con ombre a 130 m, tonemapping
-filmico, SSAO e glow disattivati, `Camera3D.far = 420`).
+**Renderer scelto: `forward_plus`** (con MSAA 3D 2x, una sola luce con ombre a 128 m, penombre
+PCSS, tonemapping filmico con spalla morbida, SSAO e glow attivi e misurati, foschia leggera a
+costo fisso — mai volumetrica — `Camera3D.far = 420`).
 
 Motivazione:
 
@@ -460,8 +464,11 @@ Regole di costo applicate nel codice, non solo dichiarate:
 2. **una palette condivisa** (`VillageMaterials`): ≤ 24 materiali per tutto il villaggio, con
    variazione cromatica affidata ai colori per vertice;
 3. **erba in `MultiMesh`**, senza ombre proiettate;
-4. **una sola mappa d'ombre**: la luce di riempimento (`Sky/Fill`) non ne ha;
-5. **niente SSAO, niente glow, niente nebbia volumetrica**;
+4. **una sola mappa d'ombre**: la luce di riempimento (`Sky/Fill`) non ne ha ed è esclusa dal
+   cielo (`SKY_MODE_LIGHT_ONLY`);
+5. **atmosfera a costo fisso**: SSAO e glow con valori misurati, foschia esponenziale + di quota +
+   prospettiva aerea + scattering solare; **niente nebbia volumetrica** (primo effetto fuori
+   budget su GTX 1060);
 6. un test (`PerformanceBudget`) fallisce se draw call, triangoli o collider superano il budget:
    il costo non può raddoppiare di nascosto.
 
@@ -633,7 +640,10 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
   `user://` con scrittura atomica; c'è anche l'avanzamento offline con tetto e la cronaca
   accessibile dal pannello (`C`). Non esistono ancora slot multipli o un migratore di formato.
 * **La resa visiva non è stata vista su GPU in questa iterazione.** Geometria, materiali e illuminazione sono costruiti
-  con criterio e verificati strutturalmente, ma l'aspetto finale va giudicato a schermo.
+  con criterio e verificati strutturalmente, ma l'aspetto finale va giudicato a schermo. Il pass
+  di illuminazione/atmosfera (`docs/LIGHTING.md`) ha una verifica numerica eseguibile (curve,
+  energie, arco delle ore da più punti della mappa) ma **nessuna verifica visiva**: va controllato
+  a occhio su una macchina con GPU.
 * Il terreno è un'unica mesh generata all'avvio (25.600 vertici). Oltre queste dimensioni serviranno
   chunk e streaming (in roadmap).
 * Alberi e oggetti non hanno LOD: a 145 draw call non serve, ma andrà rivisto se il mondo cresce.

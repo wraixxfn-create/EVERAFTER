@@ -26,6 +26,13 @@ const DAWN_START_HOUR := 5
 const DAY_START_HOUR := 8
 const DUSK_START_HOUR := 18
 const NIGHT_START_HOUR := 21
+## Elevation (degrees) at which the daylight factor saturates to 1.0.
+## 22 degrees keeps the light evolving through most of the morning and the
+## afternoon: with a smaller divisor the whole 08:00-16:00 band would light
+## the world identically ("flat" lighting), and the golden transitions would
+## last less than an hour. Endpoints are unchanged: 0.0 below the horizon,
+## 1.0 at noon (62 degrees).
+const DAYLIGHT_SATURATION_ELEVATION_DEG := 22.0
 
 ## Fraction of the day already elapsed (0.0 .. 0.9993).
 var day_progress: float = 0.0
@@ -55,7 +62,11 @@ func reset() -> void:
 ## 0.0 at night, 1.0 when the sun is clearly above the horizon.
 ## Used by the world to fade light energy, sky colours and ambient light.
 func get_daylight_factor() -> float:
-	return clampf(sun_elevation_deg / 12.0, 0.0, 1.0)
+	return clampf(
+		sun_elevation_deg / DAYLIGHT_SATURATION_ELEVATION_DEG,
+		0.0,
+		1.0
+	)
 
 
 func get_phase_name() -> String:

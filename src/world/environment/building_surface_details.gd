@@ -250,7 +250,7 @@ func _add_roof_tiles(
 	var segment_pitch := roof_depth / float(segment_count)
 	var joint := 0.045 * scale
 	for side in [-1.0, 1.0]:
-		var roll := -side * atan2(roof_rise, half_width)
+		var roll: float = -side * atan2(roof_rise, half_width)
 		var surface_normal := Vector3(
 			side * roof_rise / slope_length, half_width / slope_length, 0.0
 		)

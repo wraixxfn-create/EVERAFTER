@@ -17,7 +17,10 @@ extends RefCounted
 ## * the player rests on the ground, does not sink and does not fall through;
 ## * building walls actually stop the player capsule (`body_test_motion` against
 ##   the live capsule shape, not a stand-in);
-## * the village stays inside its performance budget.
+## * the village stays inside its performance budget;
+## * the lighting rig maps every hour of the day onto the live environment
+##   (noon, golden hour, dusk, night, dawn) and stays coherent from several
+##   map points: no light from below the horizon, no black night, no milky fog.
 
 ## Tolerance between the generated height field and the physics hit. Half a
 ## grid cell of disagreement would mean the mesh and the heightmap use
@@ -595,6 +598,155 @@ static func check_areas(harness: TestHarness, world: Node3D) -> void:
 			Vector2(player.global_position.x, player.global_position.z)
 		)
 		harness.check(not area_name.is_empty(), "the player position resolves to an area name")
+
+
+## Lighting and atmosphere: the live rig must map every hour of the simulated
+## day onto the real Environment without ever lighting the world from below,
+## crushing the night to black or milking the day with fog. Checked at noon,
+## golden hour, dusk, deep night and dawn, then from several map points: the
+## world has to stay coherent wherever the player stands. This check runs last
+## on purpose: it moves the clock and the player.
+static func check_lighting(harness: TestHarness, world: Node3D, tree: SceneTree) -> void:
+	harness.suite("Lighting")
+	var sun := world.get_node_or_null("Sky/Sun") as DirectionalLight3D
+	var env_node := world.get_node_or_null("Sky/WorldEnvironment") as WorldEnvironment
+	var sky_rig := world.get_node_or_null("Sky") as SkyRig
+	harness.check(sun != null, "the sun light is in the scene")
+	harness.check(
+		env_node != null and env_node.environment != null, "the world environment is in the scene"
+	)
+	harness.check(sky_rig != null, "the sky rig owns the lighting")
+	if sun == null or env_node == null or env_node.environment == null or sky_rig == null:
+		return
+	var game := _autoload(tree, "Game")
+	harness.check(game != null, "the Game autoload is available")
+	if game == null:
+		return
+	var clock := game.call("get_clock") as SimulationClock
+	var day_cycle := game.call("get_day_cycle") as DayCycleSystem
+	harness.check(clock != null and day_cycle != null, "the day cycle is reachable")
+	if clock == null or day_cycle == null:
+		return
+	var materials := sky_rig.get("village_materials") as VillageMaterials
+	harness.check(materials != null, "the rig drives the village night glow")
+	var environment := env_node.environment
+	var sky_material := environment.sky.sky_material as ProceduralSkyMaterial
+
+	# A monotonic forward walk through the day: the clock cannot rewind, and
+	# the samples cover noon, golden hour, dusk, the deep night and dawn.
+	for sample in [
+		[720, "noon"],
+		[1050, "golden evening"],
+		[1110, "dusk"],
+		[1260, "night"],
+		[1560, "small hours"],
+		[1830, "dawn"],
+		[1920, "morning"],
+	]:
+		var label := str(sample[1])
+		var step := posmod(
+			int(sample[0]) - clock.get_minute_of_day(), SimulationClock.MINUTES_PER_DAY
+		)
+		if step > 0:
+			clock.advance(step)
+		day_cycle.on_tick(clock.tick, clock)
+		# `process_frame` fires before Node._process: two awaits guarantee that
+		# SkyRig has applied this hour to the environment before it is sampled.
+		await tree.process_frame
+		await tree.process_frame
+		var elevation := day_cycle.sun_elevation_deg
+		var travel := -sun.transform.basis.z
+		var energy := sun.light_energy
+		# Invariants at every hour: bounded energies, an ambient floor, haze.
+		harness.check(
+			energy > 0.0 and energy <= SkyRig.SUN_ENERGY_DAY + 0.01,
+			"sun energy stays in band at %s" % label
+		)
+		harness.check(
+			environment.ambient_light_energy > 0.3,
+			"the ambient floor holds at %s (no black shadows)" % label
+		)
+		harness.check(
+			environment.fog_density >= 0.001 and environment.fog_density <= 0.01,
+			"the fog stays a light haze at %s" % label
+		)
+		match label:
+			"noon", "morning":
+				harness.check(
+					day_cycle.get_daylight_factor() > 0.9, "daylight saturates at %s" % label
+				)
+				harness.check(energy > 1.0, "the day sun is strong at %s" % label)
+				harness.check(travel.y < -0.45, "the sun shines from above at %s" % label)
+				harness.check(
+					sun.light_color.r > sun.light_color.b, "the day sun is warm at %s" % label
+				)
+			"golden evening", "dawn":
+				harness.check(
+					SkyRig.horizon_glow(elevation) > 0.5, "the horizon glows at %s" % label
+				)
+				harness.check(
+					sun.light_color.r > sun.light_color.b * 1.4,
+					"the low sun is golden at %s" % label
+				)
+				harness.check(
+					environment.fog_sun_scatter > 0.05,
+					"the haze catches the low sun at %s" % label
+				)
+			"dusk":
+				harness.check(energy < 0.4, "the sun fades at dusk")
+				harness.check(
+					SkyRig.horizon_glow(elevation) > 0.2, "the afterglow survives sunset"
+				)
+				harness.check(
+					SkyRig.moon_weight(elevation) > 0.2,
+					"the light lifts off the horizon right after sunset"
+				)
+			"night", "small hours":
+				harness.check(energy < 0.25, "the night is dim at %s" % label)
+				harness.check(travel.y < -0.5, "the moon lights from above at %s" % label)
+				harness.check(
+					sun.light_color.b > sun.light_color.r, "the night light is cool at %s" % label
+				)
+				if sky_material != null:
+					var top := sky_material.sky_top_color
+					harness.check(
+						top.r + top.g + top.b > 0.1, "the night sky is not black at %s" % label
+					)
+				if materials != null:
+					var window := materials.get_material("window")
+					harness.check(
+						window.emission_energy_multiplier > 1.0, "windows glow at %s" % label
+					)
+
+	# The atmosphere is global, so the map tour verifies that the world stays
+	# coherent at each observation point: the player stands on the ground and
+	# the position resolves to a named area under the same sky.
+	var terrain: TerrainGenerator = world.get_terrain()
+	var player: CharacterBody3D = world.get_player()
+	var layout: VillageLayout = world.get_layout()
+	var registry: AreaRegistry = world.get_area_registry()
+	if terrain != null and player != null and layout != null and registry != null:
+		for flat in [
+			layout.point_on_road(0, 25.0),
+			layout.point_on_road(1, 45.0),
+			layout.point_on_road(2, 70.0),
+			Vector2.ZERO,
+			Vector2(35.0, -30.0),
+		]:
+			var ground := terrain.height_at(flat.x, flat.y)
+			player.global_position = Vector3(flat.x, ground + 1.2, flat.y)
+			await tree.physics_frame
+			await tree.physics_frame
+			await tree.process_frame
+			var clearance: float = player.global_position.y - ground
+			harness.check(
+				clearance > -0.3 and clearance < 2.5,
+				"the player stands on the ground at observation point %s" % flat
+			)
+			harness.check(
+				not registry.area_at(flat).is_empty(),
+				"observation point %s resolves to an area name" % flat
+			)
 
 
 # --- helpers -----------------------------------------------------------------
