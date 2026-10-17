@@ -19,24 +19,24 @@ extends Node
 ##   window and lantern in the village lights up at dusk for free.
 
 const SKY_TOP_NIGHT := Color(0.03, 0.04, 0.10)
-const SKY_TOP_DAY := Color(0.24, 0.44, 0.74)
+const SKY_TOP_DAY := Color(0.18, 0.40, 0.72)
 const SKY_HORIZON_NIGHT := Color(0.08, 0.09, 0.16)
-const SKY_HORIZON_DAY := Color(0.70, 0.78, 0.87)
+const SKY_HORIZON_DAY := Color(0.92, 0.83, 0.68)
 const GROUND_NIGHT := Color(0.04, 0.05, 0.07)
-const GROUND_DAY := Color(0.24, 0.23, 0.20)
+const GROUND_DAY := Color(0.30, 0.27, 0.21)
 
-const SUN_COLOR_HIGH := Color(1.00, 0.96, 0.89)
-const SUN_COLOR_LOW := Color(1.00, 0.50, 0.24)
-const SUN_ENERGY_DAY := 1.30
+const SUN_COLOR_HIGH := Color(1.00, 0.94, 0.84)
+const SUN_COLOR_LOW := Color(1.00, 0.52, 0.22)
+const SUN_ENERGY_DAY := 1.50
 const SUN_ENERGY_NIGHT := 0.05
-const FILL_COLOR_DAY := Color(0.62, 0.72, 0.90)
-const FILL_COLOR_NIGHT := Color(0.30, 0.38, 0.60)
-const FILL_ENERGY_DAY := 0.18
-const FILL_ENERGY_NIGHT := 0.26
-const AMBIENT_ENERGY_DAY := 1.0
-const AMBIENT_ENERGY_NIGHT := 0.26
-const FOG_DENSITY_NIGHT := 0.0055
-const FOG_DENSITY_DAY := 0.0030
+const FILL_COLOR_DAY := Color(0.52, 0.66, 0.92)
+const FILL_COLOR_NIGHT := Color(0.26, 0.34, 0.58)
+const FILL_ENERGY_DAY := 0.22
+const FILL_ENERGY_NIGHT := 0.30
+const AMBIENT_ENERGY_DAY := 0.90
+const AMBIENT_ENERGY_NIGHT := 0.28
+const FOG_DENSITY_NIGHT := 0.0058
+const FOG_DENSITY_DAY := 0.0032
 
 ## Set by `MainWorld` right after the village is built. Optional: without it the
 ## rig simply does not drive the window and lantern glow.
