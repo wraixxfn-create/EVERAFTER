@@ -295,30 +295,27 @@ godot --headless --path . --script res://tests/run_world_tests.gd
 
 ### Verifiche eseguite su questa fase
 
-Questa fase è stata sviluppata in un ambiente **senza un binario Godot**: il motore è stato
-compilato dai sorgenti durante la sessione, ma la build non era terminata al momento di aprire la
-pull request. Quindi, per essere espliciti:
-
-* i controlli **statici** sono stati eseguiti davvero e sono verdi;
-* le due suite **Godot** (`run_tests.gd`, `run_world_tests.gd`) sono scritte e aggiornate, ma in
-  questa fase **non sono state eseguite**: nessun numero di test è riportato come "passato" finché
-  non verrà misurato. I conteggi citati nelle sezioni storiche qui sotto si riferiscono alla fase
-  precedente e sono superati.
+Il motore **Godot 4.7.2-stable** è stato compilato dai sorgenti in questa sessione (build headless
+`linuxbsd`, senza X11, Wayland né driver grafici) e usato per eseguire davvero entrambe le suite.
+Nessun numero qui sotto è stimato.
 
 | Controllo | Strumento | Esito |
 | --- | --- | --- |
 | Sintassi di tutti i 51 script GDScript di `src/` e `tests/` | `gdparse` (gdtoolkit 4.5.0) | **eseguito — OK** |
 | Stile GDScript | `gdlint` (gdtoolkit 4.5.0) | **eseguito — 0 problemi** |
 | Coerenza progetto: scena principale, autoload, `res://`, ext/sub resource, percorsi `$Nodo` degli script rispetto alle scene, azioni di input, `.gitignore` | `tools/check_project.py` | **eseguito — OK** |
-| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **NON eseguita in questa sessione** (motore in compilazione): da lanciare prima del merge |
-| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **NON eseguita in questa sessione** (motore in compilazione): da lanciare prima del merge |
-| Resa visiva su GPU (come *appare* il villaggio e come si muovono le capsule) | — | **NON eseguita**: l'ambiente di verifica non ha GPU |
+| Suite di unità headless (`tests/run_tests.gd`) | Godot 4.7.2 headless | **eseguito — 811 passati, 0 falliti, 0 saltati** |
+| Suite di integrazione (`tests/run_world_tests.gd`) | Godot 4.7.2 headless | **eseguito — 79 passati, 0 falliti, 0 saltati** |
+| Resa visiva su GPU (come *appare* il villaggio e come si muovono le capsule) | — | **NON eseguita**: l'ambiente di verifica non ha GPU. Geometria, materiali e collisioni sono verificati; l'immagine finale no |
 | Prova su Windows con Godot desktop, selezione col mouse e pannello | — | **NON eseguita**: da fare in revisione |
+
+`bash tools/run_checks.sh` esegue tutti e cinque i controlli e termina con
+`All executed checks passed.` (in questa sessione: 811 + 79 asserzioni, zero errori di script).
 
 I controlli statici non sostituiscono l'esecuzione: coprono sintassi, stile, percorsi delle risorse
 e coerenza dei nodi, non il comportamento. La suite di unità contiene le prove di determinismo,
 bisogni, routine, movimento continuo e luoghi; la suite di integrazione contiene le prove di
-selezione, pannello e simulazione senza viste. Vanno eseguite con:
+selezione, pannello e simulazione senza viste.
 
 ```bash
 bash tools/run_checks.sh
@@ -360,6 +357,29 @@ La fase precedente dichiarava i test "scritti ma non eseguiti". Eseguendoli sono
    il guard `max_steps_per_frame = 12` (giustamente) li limita, e l'accumulatore in virgola mobile
    perde il ventesimo tick. Il test ora usa un `tick_seconds` potenza di due e un tetto esplicito,
    e verifica il guard come comportamento proprio.
+
+### Difetti reali trovati eseguendo il motore in questa fase
+
+1. **Un errore di parsing che solo il motore vede.** `npc_route_graph.gd` conteneva
+   `var current := queue.pop_back()`: `pop_back()` restituisce un `Variant` e Godot tratta
+   l'inferenza da `Variant` come errore, quindi il motore rifiutava l'intero script (e a cascata
+   `NpcSimulationSystem`, `Game` e la scena). `gdparse` e `gdlint` non lo segnalano, perché la
+   sintassi è valida: è la prova che i controlli statici non sostituiscono l'esecuzione. Corretto
+   con un tipo esplicito.
+2. **Uno steccato tagliava la strada dei campi.** Il recinto del paddock attraversava la strada
+   sud-ovest con un box di collisione di 3 m: il giocatore non poteva raggiungere i campi e il
+   grafo dei percorsi segnalava `work_field` come irraggiungibile. Il layout ora lascia un cancello
+   aperto sulla carreggiata, e `test_village_layout` verifica che nessuno steccato la ostruisca.
+3. **Precedenza degli operatori in una stringa di log.** `_build_summary()` concatenava due
+   stringhe e applicava `%` solo alla seconda: all'avvio il motore stampava
+   "String formatting error". Ora la stringa viene composta prima di essere formattata.
+4. **Il runner di integrazione non poteva nominare gli autoload.** Il suo script è compilato prima
+   che `Game` e `EventBus` esistano: i riferimenti statici fallivano e la scena si costruiva a
+   metà (niente giocatore, niente presentatore, niente pannello). Ora il modulo di test viene
+   caricato a runtime dopo il primo frame e l'autoload è risolto tramite l'albero.
+5. **`null` in `ARRAY_INDEX`.** Il conteggio dei triangoli del budget chiamava `is_empty()` su
+   `null` per le mesh non indicizzate, generando un errore di script a ogni superficie. Corretto:
+   il conteggio ora include anche quelle superfici.
 
 ## 8. Limiti noti di questa fase
 

@@ -225,13 +225,22 @@ static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> 
 	harness.check(panel != null, "the world contains the observation panel")
 	if system == null or presenter == null or panel == null:
 		return
-	harness.check_equals(
-		system.get_record_count(),
-		mini(Game.config.npc_population_size, NpcRoster.MAX_POPULATION),
-		"the population follows GameConfig.npc_population_size"
-	)
+	# This file is a static dependency of the entry-point runner, which is
+	# compiled before the autoloads are registered: naming `Game` here would be
+	# a compile error. Resolve the singleton through the tree instead.
+	var game := _autoload(tree, "Game")
+	var event_bus := _autoload(tree, "EventBus")
+	var config := _config_from(game)
+	harness.check(game != null, "the Game autoload is available")
+	harness.check(config != null, "the Game autoload exposes the configuration")
+	if config != null:
+		harness.check_equals(
+			system.get_record_count(),
+			mini(config.npc_population_size, NpcRoster.MAX_POPULATION),
+			"the population follows GameConfig.npc_population_size"
+		)
 	harness.check(
-		Game.get_npc_system() == system,
+		game != null and game.call("get_npc_system") == system,
 		"the simulation is registered with Game, not driven by the scene"
 	)
 	var view_ids := presenter.get_view_ids()
@@ -258,14 +267,16 @@ static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> 
 	# Simulated time advances needs without any rendered frame.
 	var watched := system.get_records()[0]
 	var hunger_before := watched.needs.hunger
-	Game.advance_simulation(60)
+	if game != null:
+		game.call("advance_simulation", 60)
 	harness.check(
 		not is_equal_approx(watched.needs.hunger, hunger_before),
 		"needs evolve when the simulation advances"
 	)
 
 	# Hide every view: the records must keep changing.
-	EventBus.npc_selected.emit("")
+	if event_bus != null:
+		event_bus.emit_signal("npc_selected", "")
 	presenter.set_render_distance(0.0)
 	# `process_frame` fires before Node._process, so one await only reaches the
 	# frame in which the views are about to be synchronised. Two awaits guarantee
@@ -274,7 +285,8 @@ static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> 
 	await tree.process_frame
 	harness.check_equals(presenter.get_view_count(), 0, "nobody is rendered at distance 0")
 	var hunger_unrendered := watched.needs.hunger
-	Game.advance_simulation(90)
+	if game != null:
+		game.call("advance_simulation", 90)
 	harness.check(
 		not is_equal_approx(watched.needs.hunger, hunger_unrendered),
 		"the simulation advances while the NPC has no view"
@@ -320,8 +332,11 @@ static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> 
 	)
 	harness.check(not presenter.select_npc("npc_999"), "an unknown id cannot be selected")
 	harness.check_equals(panel.get_selected_id(), target.id, "a failed selection changes nothing")
-	presenter.set_render_distance(Game.config.npc_view_distance)
-	EventBus.npc_selected.emit("")
+	presenter.set_render_distance(
+		config.npc_view_distance if config != null else presenter.render_distance
+	)
+	if event_bus != null:
+		event_bus.emit_signal("npc_selected", "")
 
 
 ## The village has to stay cheap enough for a GTX 1060 class GPU.
@@ -452,10 +467,15 @@ static func _mesh_triangles(mesh: Mesh) -> int:
 	var total := 0
 	for surface in mesh.get_surface_count():
 		var arrays := mesh.surface_get_arrays(surface)
-		if not arrays[Mesh.ARRAY_INDEX].is_empty():
-			total += (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+		# A primitive without an index array has `null` in ARRAY_INDEX, not an
+		# empty PackedInt32Array: calling `is_empty()` on it is a script error.
+		var indices = arrays[Mesh.ARRAY_INDEX]
+		if indices != null and not (indices as PackedInt32Array).is_empty():
+			total += (indices as PackedInt32Array).size() / 3
 		else:
-			total += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+			var vertices = arrays[Mesh.ARRAY_VERTEX]
+			if vertices != null:
+				total += (vertices as PackedVector3Array).size() / 3
 	return total
 
 
@@ -475,3 +495,14 @@ static func check_player_stays_up(harness: TestHarness, min_clearance: float) ->
 		min_clearance < 5.0,
 		"the player never floats away from the terrain (worst clearance %.3f)" % min_clearance
 	)
+
+
+## Resolves an autoload by node name without naming it statically.
+static func _autoload(tree: SceneTree, autoload_name: String) -> Node:
+	return tree.root.get_node_or_null(autoload_name)
+
+
+static func _config_from(game: Node) -> GameConfig:
+	if game == null:
+		return null
+	return game.get("config") as GameConfig

@@ -58,7 +58,7 @@ static func _test_identity_and_individuality(harness: TestHarness) -> void:
 		seen[record.id] = true
 		harness.check(record.position.is_finite(), "the start position is finite")
 		harness.check(not record.home_place_id.is_empty(), "every record has a home")
-	harness.check_equals(
+		harness.check_equals(
 			system.get_record(record.id), record, "records are addressable by id"
 		)
 	harness.check(unique, "no NPC id is duplicated")

@@ -153,17 +153,18 @@ func _publish_area() -> void:
 
 
 func _build_summary() -> String:
-	return (
-		"MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), "
-		+ "%d named areas, %d inhabitants, spawn %s"
-		% [
-			_terrain.size_cells,
-			_terrain.size_cells,
-			_terrain.get_extent(),
-			_terrain.get_extent(),
-			_terrain.get_triangle_count(),
-			_areas.get_area_count(),
-			_npc_system.get_record_count() if _npc_system != null else 0,
-			_player.global_position,
-		]
-	)
+	# Built as two pieces and formatted at the end: `%` binds tighter than `+`,
+	# so formatting an expression of concatenated strings silently feeds the
+	# argument array to the second half only.
+	var message := "MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), "
+	message += "%d named areas, %d inhabitants, spawn %s"
+	return message % [
+		_terrain.size_cells,
+		_terrain.size_cells,
+		_terrain.get_extent(),
+		_terrain.get_extent(),
+		_terrain.get_triangle_count(),
+		_areas.get_area_count(),
+		_npc_system.get_record_count() if _npc_system != null else 0,
+		_player.global_position,
+	]

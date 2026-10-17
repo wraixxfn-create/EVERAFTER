@@ -271,4 +271,9 @@ di ogni luogo reale del villaggio.
 
 Regola di progetto: il livello 3 è obbligatorio per qualunque modifica che tocchi mondo, terreno,
 giocatore o presentazione degli NPC. È il livello che ha trovato i tre bug reali della fase
-precedente.
+precedente e i cinque di questa (inferenza da `Variant`, steccato sulla strada dei campi,
+precedenza degli operatori in una stringa di log, autoload nominati troppo presto dal runner,
+`null` in `ARRAY_INDEX`).
+
+Ultima esecuzione completa: **811 asserzioni di unità e 79 di integrazione, 0 fallite, 0 saltate**
+(`bash tools/run_checks.sh` con Godot 4.7.2 headless compilato dai sorgenti).

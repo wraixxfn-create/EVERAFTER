@@ -11,11 +11,13 @@ extends SceneTree
 ## Exit code is 0 when every check passed, 1 otherwise.
 
 const MAIN_SCENE := "res://src/world/scenes/main_world.tscn"
+const WORLD_TESTS := "res://tests/integration/test_world_scene.gd"
 const SETTLE_FRAMES := 45
 const WATCH_FRAMES := 120
 
 var _harness := TestHarness.new()
 var _world: Node3D = null
+var _tests: GDScript = null
 
 
 func _initialize() -> void:
@@ -43,8 +45,17 @@ func _run() -> void:
 	for _frame in SETTLE_FRAMES:
 		await physics_frame
 
-	TestWorldScene.check_structure(_harness, _world)
-	TestWorldScene.check_player_settles(_harness, _world)
+	# Loaded at runtime, not referenced statically: this entry script is compiled
+	# before the autoloads are registered, and the integration module (and the
+	# scripts it types) use `Game` and `EventBus` by name. A static reference
+	# would make the whole runner fail to compile.
+	_tests = load(WORLD_TESTS)
+	_harness.check(_tests != null, "the integration module compiles: %s" % WORLD_TESTS)
+	if _tests == null:
+		_finish()
+		return
+	_tests.call("check_structure", _harness, _world)
+	_tests.call("check_player_settles", _harness, _world)
 
 	# Let the world run and watch the player's clearance from the ground: this is
 	# the check that catches "the player slowly sinks through the terrain".
@@ -56,14 +67,14 @@ func _run() -> void:
 			await physics_frame
 			var ground := terrain.height_at(player.global_position.x, player.global_position.z)
 			min_clearance = minf(min_clearance, player.global_position.y - ground)
-	TestWorldScene.check_player_stays_up(_harness, min_clearance)
+	_tests.call("check_player_stays_up", _harness, min_clearance)
 
-	TestWorldScene.check_player_collides(_harness, _world)
-	TestWorldScene.check_areas(_harness, _world)
-	TestWorldScene.check_budget(_harness, _world)
-	await TestWorldScene.check_npcs(_harness, _world, self)
-	TestWorldScene.check_terrain_collision(
-		_harness, _world, root.world_3d.direct_space_state
+	_tests.call("check_player_collides", _harness, _world)
+	_tests.call("check_areas", _harness, _world)
+	_tests.call("check_budget", _harness, _world)
+	await _tests.call("check_npcs", _harness, _world, self)
+	_tests.call(
+		"check_terrain_collision", _harness, _world, root.world_3d.direct_space_state
 	)
 	_finish()
 

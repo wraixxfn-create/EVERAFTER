@@ -300,7 +300,7 @@ func _compute_reachable_component() -> void:
 		var queue: Array[int] = [node_id]
 		visited[node_id] = true
 		while not queue.is_empty():
-			var current := queue.pop_back()
+			var current: int = queue.pop_back()
 			component.append(current)
 			for neighbour in _astar.get_point_connections(current):
 				var neighbour_id := int(neighbour)
