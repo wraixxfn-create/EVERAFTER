@@ -173,7 +173,16 @@ func _build_house(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 		"timber", Vector3(1.25, 0.16, 0.2) * scale,
 		_transform(Vector3(0.0, 1.92, depth * 0.5) * scale)
 	)
-	_windows(baker, width, depth, wall_height, 2 + placement.variant, scale)
+	# Stone step in front of the door: grounds the entrance instead of letting
+	# it float on the plaster.
+	baker.add_box(
+		"stone_dark", Vector3(1.35, 0.16, 0.6) * scale,
+		_transform(Vector3(0.0, 0.08, depth * 0.5 + 0.3) * scale)
+	)
+	_windows(
+		baker, width, depth, wall_height, 2 + placement.variant, scale,
+		CLOTH_KEYS[placement.variant % CLOTH_KEYS.size()]
+	)
 	if not two_storey:
 		_chimney(baker, Vector3(width * 0.28, wall_height + roof_rise, -depth * 0.18), scale)
 	else:
@@ -222,7 +231,7 @@ func _build_inn(baker: MeshBaker) -> void:
 		"cloth_red", Vector3(1.2, 0.7, 0.16),
 		_transform(Vector3(width * 0.5, 2.9, depth * 0.5 + 2.02))
 	)
-	_windows(baker, width, depth, wall_height, 6, 1.0)
+	_windows(baker, width, depth, wall_height, 6, 1.0, "cloth_cream")
 	_chimney(baker, Vector3(width * 0.3, wall_height + roof_rise * 0.7, -depth * 0.15), 1.3)
 	baker.add_box(
 		"door", Vector3(1.5, 2.4, 0.16), _transform(Vector3(0.0, 1.2, depth * 0.5))
@@ -256,12 +265,21 @@ func _build_hall(baker: MeshBaker) -> void:
 		)
 	baker.add_box("door", Vector3(2.2, 3.0, 0.18), _transform(Vector3(0.0, 1.7, depth * 0.5)))
 	baker.add_box("stone_dark", Vector3(2.8, 0.5, 0.6), _transform(Vector3(0.0, 3.35, depth * 0.5)))
-	# Tall windows along the south wall.
-	for index in 3:
-		var x := -2.6 + float(index) * 2.6
+	# Tall windows flanking the entrance (the old centre slot collided with the
+	# door and read as a prototype artifact).
+	for x in [-3.5, 3.5]:
 		baker.add_box("window", Vector3(0.9, 2.0, 0.18), _transform(Vector3(x, 2.4, depth * 0.5 + 0.02)))
 		baker.add_box("timber", Vector3(1.1, 0.12, 0.22), _transform(Vector3(x, 3.5, depth * 0.5)))
 		baker.add_box("timber", Vector3(1.1, 0.12, 0.22), _transform(Vector3(x, 1.3, depth * 0.5)))
+	# Civic banners flanking the entrance: one bold colour accent on the stone.
+	for side in [-1.0, 1.0]:
+		baker.add_box(
+			"timber", Vector3(0.95, 0.12, 0.16), _transform(Vector3(side * 2.1, 4.05, depth * 0.5 + 0.1))
+		)
+		baker.add_box(
+			"cloth_red", Vector3(0.75, 2.35, 0.08),
+			_transform(Vector3(side * 2.1, 2.8, depth * 0.5 + 0.1))
+		)
 
 
 func _build_well(baker: MeshBaker) -> void:
@@ -285,6 +303,12 @@ func _build_stall(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 		baker.add_box("timber", Vector3(0.14, 2.2, 0.14), _transform(corner + Vector3(0, 1.1, 0)))
 	baker.add_box("plank", Vector3(2.6, 0.14, 1.5), _transform(Vector3(0.0, 1.05, -0.1)))
 	baker.add_box(cloth_key, Vector3(2.9, 0.1, 2.0), _transform(Vector3(0.0, 2.3, 0.0), -10.0))
+	# Hanging valance along the front edge: turns the flat awning into a stall.
+	for index in 4:
+		baker.add_box(
+			cloth_key, Vector3(0.6, 0.26, 0.07),
+			_transform(Vector3(-1.02 + float(index) * 0.68, 2.15, 1.0))
+		)
 	# Goods on the counter.
 	for index in 3:
 		baker.add_box(
@@ -433,10 +457,21 @@ func _timber_frame(
 				0.0, 0.0, brace_angle * side
 			)
 		)
+	# Vertical studs on the front and back faces: rhythmic shadow lines that
+	# keep large plaster walls from reading as flat boxes.
+	for depth_side in [-1.0, 1.0]:
+		for stud in [-0.22, 0.22]:
+			baker.add_box(
+				"timber", Vector3(0.16, height * 0.96, 0.18) * scale,
+				_transform(
+					Vector3(stud * width, (bottom + top) * 0.5, depth_side * depth * 0.5)
+				)
+			)
 
 
 func _windows(
-	baker: MeshBaker, width: float, depth: float, wall_height: float, count: int, scale: float
+	baker: MeshBaker, width: float, depth: float, wall_height: float, count: int, scale: float,
+	shutter_key: String = "timber_warm"
 ) -> void:
 	var y := (0.42 + wall_height * 0.6) * scale
 	for index in count:
@@ -451,6 +486,13 @@ func _windows(
 			"timber", Vector3(0.9, 0.1, 0.2) * scale,
 			_transform(Vector3(spread, y + 0.5 * scale, side * depth * 0.5))
 		)
+		# Painted shutters beside every street window: the small splash of
+		# colour that makes plaster walls read as inhabited.
+		for shutter_side in [-1.0, 1.0]:
+			baker.add_box(
+				shutter_key, Vector3(0.3, 0.85, 0.1) * scale,
+				_transform(Vector3(spread + shutter_side * 0.56 * scale, y, side * depth * 0.5))
+			)
 	# One window on each gable end.
 	for side in [-1.0, 1.0]:
 		baker.add_box(

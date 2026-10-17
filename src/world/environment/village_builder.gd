@@ -214,14 +214,20 @@ func _bake_plaza_kerb(baker: MeshBaker) -> void:
 func _build_water() -> Node3D:
 	var node := MeshInstance3D.new()
 	node.name = "Water"
-	var quad := QuadMesh.new()
-	quad.size = Vector2(layout.pond_radius * 1.35, layout.pond_radius * 1.35)
-	node.mesh = quad
+	# A flat disc (not a quad) so the pond surface is guaranteed horizontal and
+	# circular; its radius stops just inside the basin rim, so the shoreline is
+	# where the terrain meets the water level instead of a visible square edge.
+	var disc := CylinderMesh.new()
+	disc.top_radius = layout.pond_radius * 0.92
+	disc.bottom_radius = layout.pond_radius * 0.92
+	disc.height = 0.06
+	disc.radial_segments = 24
+	node.mesh = disc
 	node.material_override = materials.get_material("water")
 	var center := layout.pond_center
-	node.position = Vector3(center.x, terrain.height_at(center.x, center.y) + 0.02, center.y)
+	node.position = Vector3(center.x, terrain.get_pond_water_level(), center.y)
 	_mesh_count += 1
-	_triangle_count += 2
+	_triangle_count += 24 * 2 + 24 * 2
 	return node
 
 

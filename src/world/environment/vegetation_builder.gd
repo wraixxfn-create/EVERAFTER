@@ -17,7 +17,7 @@ const LEAF_KEYS := ["leaf_deep", "leaf_mid", "leaf_bright"]
 const TREE_COLLIDER_KINDS := [
 	VillageLayout.KIND_TREE_PINE, VillageLayout.KIND_TREE_OAK, VillageLayout.KIND_TREE_BIRCH
 ]
-const GRASS_COUNT := 2600
+const GRASS_COUNT := 3600
 
 
 var rng := RandomNumberGenerator.new()
@@ -70,8 +70,8 @@ func build_grass(
 	for yaw in [0.0, 90.0]:
 		blade.add_quad(
 			"grass_blade",
-			Vector2(0.34, 0.6),
-			Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(yaw), 0)), Vector3(0, 0.3, 0)),
+			Vector2(0.38, 0.68),
+			Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(yaw), 0)), Vector3(0, 0.34, 0)),
 			Color(1, 1, 1),
 			true
 		)
@@ -98,7 +98,7 @@ func build_grass(
 			continue
 		if layout.pond_weight(x, z) > 0.25:
 			continue
-		var scale := rng.randf_range(0.65, 1.45)
+		var scale := rng.randf_range(0.7, 1.6)
 		var basis := Basis.from_euler(Vector3(0, rng.randf() * TAU, 0)).scaled(Vector3.ONE * scale)
 		transforms.append(
 			Transform3D(basis, Vector3(x, terrain.height_at(x, z) - 0.02, z))
@@ -152,13 +152,13 @@ func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.12))
 	var crown_y := trunk_height + 0.9 * scale
 	baker.add_sphere(
-		leaf_key, 1.7 * scale, 4, 7, _transform(Vector3(0.0, crown_y, 0.0)), tint
+		leaf_key, 1.85 * scale, 4, 7, _transform(Vector3(0.0, crown_y, 0.0)), tint
 	)
 	for _lobe in 2:
 		var angle := rng.randf() * TAU
-		var offset := Vector3(cos(angle), 0.0, sin(angle)) * 1.05 * scale
+		var offset := Vector3(cos(angle), 0.0, sin(angle)) * 1.15 * scale
 		baker.add_sphere(
-			leaf_key, 1.1 * scale, 4, 6,
+			leaf_key, 1.18 * scale, 4, 6,
 			_transform(Vector3(offset.x, crown_y + 0.5 * scale, offset.z)), tint
 		)
 
@@ -219,14 +219,18 @@ func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 
 func _grass_tint() -> Color:
 	var roll := rng.randf()
-	var base := Color(0.62, 0.78, 0.45)
+	# Instance colours multiply the shared blade albedo, so these stay light and
+	# push the hue: deep meadow greens, sun-dried gold and a few pale tips.
+	var base := Color(0.68, 0.82, 0.48)
 	if roll < 0.3:
-		base = Color(0.48, 0.68, 0.34)
+		base = Color(0.52, 0.72, 0.36)
 	elif roll < 0.55:
-		base = Color(0.74, 0.84, 0.52)
+		base = Color(0.80, 0.88, 0.55)
 	elif roll < 0.68:
-		base = Color(0.72, 0.70, 0.40)
-	return base.darkened(rng.randf_range(0.0, 0.18))
+		base = Color(0.78, 0.74, 0.42)
+	elif roll < 0.82:
+		base = Color(0.60, 0.80, 0.44)
+	return base.darkened(rng.randf_range(0.0, 0.2))
 
 
 func _transform(position: Vector3) -> Transform3D:
