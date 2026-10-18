@@ -206,6 +206,87 @@ func add_door_details(
 		)
 
 
+## Two shallow, mesh-only risers align an entrance with the top of its plinth.
+## They are scenery, not collision shapes, so the doorway route stays open.
+func add_door_steps(
+	baker: MeshBaker, door_width: float, wall_depth: float, scale: float,
+	threshold_height: float = 0.42
+) -> void:
+	var upper_height := threshold_height * 0.5
+	var lower_height := upper_height + 0.02
+	baker.add_box(
+		"stone", Vector3(door_width + 0.3, upper_height, 0.5) * scale,
+		_transform(
+			Vector3(0.0, threshold_height - upper_height * 0.5, wall_depth * 0.5 + 0.18)
+				* scale
+		),
+		Color.WHITE, 0.06
+	)
+	baker.add_box(
+		"stone_dark", Vector3(door_width + 0.6, lower_height, 0.5) * scale,
+		_transform(
+			Vector3(0.0, lower_height * 0.5, wall_depth * 0.5 + 0.56) * scale
+		),
+		Color.WHITE, 0.06
+	)
+
+
+## Shared horizontal offset for facade windows and their planters.
+func _window_spread(index: int, count: int, width: float, scale: float) -> float:
+	var pair_count := int(ceil(float(count) / 2.0))
+	var pair_index := floorf(float(index) * 0.5)
+	return (pair_index - float(pair_count - 1) * 0.5) * width * 0.35 * scale
+
+
+## Keep low front openings, their casing, shutters and planters clear of doors.
+func window_location(
+	index: int, count: int, width: float, scale: float, window_y: float,
+	door_width: float, door_height: float
+) -> Vector2:
+	var side := 1.0 if index % 2 == 0 else -1.0
+	var spread := _window_spread(index, count, width, scale)
+	var window_bottom := window_y - 0.425 * scale
+	if side > 0.0 and door_width > 0.0 and window_bottom < door_height * scale:
+		var door_clearance := (door_width * 0.5 + 0.88) * scale
+		if absf(spread) < door_clearance:
+			spread = -door_clearance if spread <= 0.0 else door_clearance
+	return Vector2(spread, side)
+
+
+## Planters under street-facing windows, using the same door-safe placement as
+## the glazed opening above them.
+func add_window_flower_boxes(
+	baker: MeshBaker, width: float, depth: float, wall_height: float, count: int,
+	scale: float, door_width: float = 0.0, door_height: float = 0.0
+) -> void:
+	var y := (0.42 + wall_height * 0.6) * scale
+	var face_z := depth * 0.5 * scale
+	for index in count:
+		if index % 2 != 0 or rng.randf() > 0.55:
+			continue
+		var location := window_location(index, count, width, scale, y, door_width, door_height)
+		var spread := location.x
+		var box_y := y - 0.7 * scale
+		baker.add_box(
+			"plank", Vector3(0.95, 0.28, 0.34) * scale,
+			_transform(Vector3(spread, box_y, face_z + 0.2 * scale)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.08)), 0.04
+		)
+		baker.add_box(
+			"stone_dark", Vector3(0.85, 0.06, 0.26) * scale,
+			_transform(Vector3(spread, box_y + 0.15 * scale, face_z + 0.2 * scale)),
+			Color.WHITE, 0.05
+		)
+		for flower in 4:
+			var offset := (float(flower) - 1.5) * 0.22 * scale
+			var key: String = "cloth_red" if flower % 2 == 0 else "cloth_cream"
+			baker.add_sphere(
+				key, 0.09 * scale, 3, 5,
+				_transform(Vector3(spread + offset, box_y + 0.26 * scale, face_z + 0.2 * scale)),
+				Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
+			)
+
+
 func _add_masonry_row(
 	baker: MeshBaker, length: float, height: float, thickness: float, center: Vector3,
 	along_x: bool, stagger: float, joint: float, scale: float

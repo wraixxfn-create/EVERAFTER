@@ -97,9 +97,15 @@ func add_cylinder(
 
 ## Triangular prism with its ridge along Z: the gable end of a roof.
 ## `width` is the base, `height` the rise, `depth` the length of the ridge.
+##
+## A roof may give the end gables a separate material and narrower width. This
+## lets the plaster/stone gable sit beneath the projecting verge instead of
+## making the entire end of a house look like solid roof tile.
 func add_prism(
 	material_key: String, width: float, height: float, depth: float,
-	xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE
+	xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE,
+	gable_material_key: String = "", gable_width: float = 0.0,
+	gable_tint: Color = Color.WHITE
 ) -> void:
 	var half_width := width * 0.5
 	var half_height := height * 0.5
@@ -107,17 +113,55 @@ func add_prism(
 	var base_left := Vector3(-half_width, -half_height, 0.0)
 	var base_right := Vector3(half_width, -half_height, 0.0)
 	var apex := Vector3(0.0, half_height, 0.0)
-	# Gable ends. The winding that yields +Z is (base_left, apex, base_right).
+	# Gable ends. A narrower facade leaves a slim roof-coloured verge on either
+	# side, just as the roof overhang does in the silhouette.
 	var front := Vector3(0.0, 0.0, half_depth)
 	var back := Vector3(0.0, 0.0, -half_depth)
-	_add_triangle(
-		material_key, xform, base_left + front, apex + front, base_right + front,
-		Vector3(0, 0, 1), tint
-	)
-	_add_triangle(
-		material_key, xform, base_left + back, base_right + back, apex + back,
-		Vector3(0, 0, -1), tint
-	)
+	var end_key := material_key if gable_material_key.is_empty() else gable_material_key
+	var end_tint := tint if gable_material_key.is_empty() else gable_tint
+	var split_gable := not gable_material_key.is_empty() and gable_width > 0.0
+	var gable_half_width := half_width
+	if split_gable:
+		gable_half_width = minf(gable_width * 0.5, half_width)
+		split_gable = gable_half_width < half_width - 0.0001
+	if split_gable:
+		var gable_left := Vector3(-gable_half_width, -half_height, 0.0)
+		var gable_right := Vector3(gable_half_width, -half_height, 0.0)
+		# Front: left verge, plaster/stone gable, right verge.
+		_add_triangle(
+			material_key, xform, base_left + front, apex + front, gable_left + front,
+			Vector3(0, 0, 1), tint
+		)
+		_add_triangle(
+			end_key, xform, gable_left + front, apex + front, gable_right + front,
+			Vector3(0, 0, 1), gable_tint
+		)
+		_add_triangle(
+			material_key, xform, gable_right + front, apex + front, base_right + front,
+			Vector3(0, 0, 1), tint
+		)
+		# Back: reverse each winding so the faces point away from the building.
+		_add_triangle(
+			material_key, xform, base_left + back, gable_left + back, apex + back,
+			Vector3(0, 0, -1), tint
+		)
+		_add_triangle(
+			end_key, xform, gable_left + back, gable_right + back, apex + back,
+			Vector3(0, 0, -1), gable_tint
+		)
+		_add_triangle(
+			material_key, xform, gable_right + back, base_right + back, apex + back,
+			Vector3(0, 0, -1), tint
+		)
+	else:
+		_add_triangle(
+			end_key, xform, base_left + front, apex + front, base_right + front,
+			Vector3(0, 0, 1), end_tint
+		)
+		_add_triangle(
+			end_key, xform, base_left + back, base_right + back, apex + back,
+			Vector3(0, 0, -1), end_tint
+		)
 	# The two slopes. For an outward normal `n` the in-plane axis that satisfies
 	# Godot's winding rule with `v = +Z` is `u = (n.y, -n.x, 0)`.
 	var slope_length := Vector2(half_width, height).length()
@@ -131,8 +175,9 @@ func add_prism(
 			material_key, xform, center - half_slope + back, center + half_slope + back,
 			center + half_slope + front, center - half_slope + front, normal, tint
 		)
-	# Two end triangles plus two slope quads.
-	_triangle_count += 6
+	# Two gable faces plus two slope quads (or six triangles when the gable is
+	# inset and leaves a material-matched verge at both ends).
+	_triangle_count += 10 if split_gable else 6
 
 
 ## UV sphere. `rings` is the number of latitude bands, `segments` the number of

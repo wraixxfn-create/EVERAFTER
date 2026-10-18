@@ -439,7 +439,7 @@ tests/
   run_world_tests.gd           runner di integrazione (avvia la scena, interroga la fisica)
   harness/test_harness.gd      micro harness di asserzioni
   unit/                        clock, loop, day cycle, terreno, config, layout, aree,
-                               materiali, baker, direzione artistica, dati NPC, roster,
+                               materiali, baker, arte e architettura edifici, dati NPC, roster,
                                aspetti visivi NPC/UI (test_npc_visuals), rete di percorso,
                                simulazione NPC, luoghi del villaggio, inventari/transazioni,
                                economia simulata, relazioni e memoria
@@ -457,6 +457,7 @@ docs/
   LIGHTING.md                  illuminazione e atmosfera: problemi, valori, budget, futuro
   WORLD_DETAIL.md              densità ambientale e dettagli del mondo: interventi, regole
   NPC_AND_UI_POLISH.md         rifinitura visiva di NPC, pose procedurali e interfaccia (Polish 05)
+  BUILDING_POLISH_07.md         rifinitura architettonica degli edifici procedurali (Polish 07)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 
