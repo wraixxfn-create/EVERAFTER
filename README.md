@@ -142,18 +142,24 @@ Un villaggio di confine, al mattino del giorno 1 (ore 07:00 simulate):
   deterministico. Le strade e le aree edificate perdono solo le ottave di dettaglio, non le
   colline: i percorsi sono camminabili senza che il paesaggio diventi una trincea piatta.
 * **Piazza del Pozzo** lastricata al centro, con pozzo in pietra, tettoia e secchio, e una
-  coroncina di blocchi di pietra che ne marca il bordo.
+  coroncina di blocchi di pietra che ne marca il bordo. Panchine verso il pozzo e fioriere
+  negli angoli aperti, senza mai invadere le bocche delle strade.
 * **13 case** con sagome diverse: cottage a un piano, case a due piani con tetto ripido, case
   lunghe con portico; intonaco chiaro o ocra, travi a vista, plinti in pietra, comignoli,
-  finestre che si illuminano di notte.
+  finestre che si illuminano di notte, fioriere ai davanzali e piccoli cortili con casse,
+  barili e cataste di legna sui fianchi (mai davanti alle porte).
 * **Locanda del Cervo Bianco**: due piani, ala a L, portico su colonne, insegna appesa.
 * **Sala del Consiglio** con campanile: l'edificio più alto del villaggio.
 * **2 banchi del mercato** con tenda in tessuto e merci sul banco.
-* **Tre strade** che escono dalla piazza verso il nord, il mercato e lo stagno, con 12 lampioni,
-  11 tratti di steccato, carri, casse, barili, cataste di legna e un cartello indicatore.
-* **250 alberi** di tre specie (quercia, pino, betulla) con sagome diverse, 39 cespugli,
-  9 massi, e uno **stagno** con acqua traslucida a nord-est.
-* **2600 ciuffi d'erba** in un unico `MultiMesh`, quindi una sola draw call.
+* **Tre strade** che escono dalla piazza verso il nord, il mercato e lo stagno, con lampioni,
+  tratti di steccato, carri, casse, barili, cataste di legna e un cartello indicatore. I bordi
+  delle strade sono segnati da pietre irregolari fuse nel terreno, con buchi dove i sentieri
+  raggiungono le porte.
+* **250+ alberi** di tre specie (quercia, pino, betulla) con sagome e chiome sempre diverse,
+  cespugli (alcuni fioriti), massi e ciottoli, e uno **stagno** con ninfee, riva con panchina,
+  fioriere e sassi a nord-est.
+* **4200 ciuffi d'erba** in un unico `MultiMesh`, quindi una sola draw call, distribuiti a
+  due scale (uniforme + ciuffi) e tenuti fuori da soglie, recinti e arredi.
 * **Cielo e luce** che seguono l'ora simulata, non quella reale: il sole si sposta, il cielo
   cambia colore, la nebbia si infittisce, le finestre e i lampioni si accendono al tramonto.
   È la dimostrazione visibile che la simulazione ha un orologio proprio.
@@ -332,10 +338,15 @@ ogni esecuzione:
 [INFO] Budget measured: 145 meshes, 149673 triangles, 291 colliders (limits 260 / 260000 / 900)
 ```
 
-Il villaggio non è cambiato in questa fase: cambiano solo le capsule degli abitanti, viste
-temporanee create entro `npc_view_distance` e liberate fuori portata.
+**Nota onesta (Visual Polish 04 — densità ambientale).** I numeri di questa sezione sono la
+misura della fase precedente: il passaggio di rifinitura ambientale (`docs/WORLD_DETAIL.md`) ha
+aggiunto bordi stradali, arredi, cortili e vegetazione, quindi vanno **rimisurati** rieseguendo
+la suite — che li stampa a ogni esecuzione, così la cifra non invecchia in silenzio. Le stime
+del nuovo dettaglio restano ampiamente dentro i limiti (margine stimato ~30% sui triangoli); la
+tabella sotto resta come riferimento della misura precedente, con l'erba portata a 4.200 istanze
+dal codice.
 
-| Voce | Valore misurato |
+| Voce | Valore misurato (fase precedente) |
 | --- | --- |
 | Draw call (mesh + MultiMesh + terreno) | **145** |
 | Triangoli totali | **149.673** (50.562 terreno + 78.311 villaggio + 20.800 erba istanziata) |
@@ -438,6 +449,7 @@ tools/
 docs/
   ARCHITECTURE.md              scelte architetturali e regole di dipendenza
   LIGHTING.md                  illuminazione e atmosfera: problemi, valori, budget, futuro
+  WORLD_DETAIL.md              densità ambientale e dettagli del mondo: interventi, regole
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 

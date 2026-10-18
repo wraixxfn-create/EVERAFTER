@@ -17,7 +17,20 @@ const LEAF_KEYS := ["leaf_deep", "leaf_mid", "leaf_bright"]
 const TREE_COLLIDER_KINDS := [
 	VillageLayout.KIND_TREE_PINE, VillageLayout.KIND_TREE_OAK, VillageLayout.KIND_TREE_BIRCH
 ]
-const GRASS_COUNT := 3600
+const GRASS_COUNT := 4200
+## Kinds whose footprint grass must stay out of: a blade on a stoop or inside a
+## crate is the cheapest way to make a village look unfinished. Trees, shrubs
+## and stones are excluded on purpose — grass grows around those.
+const GRASS_EXCLUSION_KINDS := [
+	VillageLayout.KIND_HOUSE, VillageLayout.KIND_INN, VillageLayout.KIND_HALL,
+	VillageLayout.KIND_WELL, VillageLayout.KIND_STALL, VillageLayout.KIND_CART,
+	VillageLayout.KIND_CRATE, VillageLayout.KIND_BARREL, VillageLayout.KIND_LOGPILE,
+	VillageLayout.KIND_FENCE, VillageLayout.KIND_FLOWER_BOX, VillageLayout.KIND_BENCH
+]
+## Blades per meadow clump and clump footprint, for the two-scale grass scatter.
+const GRASS_CLUMPS := 240
+const GRASS_CLUMP_RADIUS := 3.6
+const GRASS_CLUMP_CHANCE := 0.45
 
 
 var rng := RandomNumberGenerator.new()
@@ -61,7 +74,9 @@ func colliders_for(placement: VillageLayout.Placement) -> Array:
 	return shapes
 
 
-## Ground cover as a single `MultiMeshInstance3D`.
+## Ground cover as a single `MultiMeshInstance3D`. Two scales of scatter: a
+## uniform wash plus loose clumps, so the meadow reads as tufts and clearings
+## instead of a noise field of evenly spaced blades.
 func build_grass(
 	layout: VillageLayout, terrain: TerrainGenerator, materials: VillageMaterials,
 	count: int = GRASS_COUNT
@@ -86,17 +101,34 @@ func build_grass(
 	multi_mesh.mesh = mesh
 	multi_mesh.instance_count = 0
 
+	var half := terrain.get_half_extent()
+	var clumps: Array[Vector2] = []
+	for index in GRASS_CLUMPS:
+		clumps.append(Vector2(rng.randf_range(-half, half), rng.randf_range(-half, half)))
 	var transforms: Array[Transform3D] = []
 	var colors := PackedColorArray()
 	var attempts := 0
 	var limit := maxi(count, 1) * 6
 	while transforms.size() < count and attempts < limit:
 		attempts += 1
-		var x := rng.randf_range(-terrain.get_half_extent(), terrain.get_half_extent())
-		var z := rng.randf_range(-terrain.get_half_extent(), terrain.get_half_extent())
+		var x := 0.0
+		var z := 0.0
+		if rng.randf() < GRASS_CLUMP_CHANCE:
+			var clump := clumps[rng.randi_range(0, clumps.size() - 1)]
+			var angle := rng.randf() * TAU
+			var radius := rng.randf() * GRASS_CLUMP_RADIUS
+			x = clump.x + cos(angle) * radius
+			z = clump.y + sin(angle) * radius
+		else:
+			x = rng.randf_range(-half, half)
+			z = rng.randf_range(-half, half)
+		if absf(x) > half or absf(z) > half:
+			continue
 		if layout.plaza_weight(x, z) > 0.05 or layout.road_weight(x, z) > 0.15:
 			continue
 		if layout.pond_weight(x, z) > 0.25:
+			continue
+		if _inside_prop_footprint(layout, x, z):
 			continue
 		var scale := rng.randf_range(0.7, 1.6)
 		var basis := Basis.from_euler(Vector3(0, rng.randf() * TAU, 0)).scaled(Vector3.ONE * scale)
@@ -133,11 +165,15 @@ func _build_pine(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var tiers := 3 + placement.variant % 2
 	for tier in tiers:
 		var t := float(tier) / float(tiers)
-		var radius := lerpf(1.5, 0.45, t) * scale
+		# Per-tier jitter: a conifer whose every cone has the same radius reads
+		# as a traffic cone, not as a tree.
+		var radius := lerpf(1.5, 0.45, t) * scale * rng.randf_range(0.85, 1.15)
 		var height := lerpf(2.0, 1.3, t) * scale
 		var y := lerpf(trunk_height * 0.75, trunk_height + 2.6 * scale, t)
+		var lean := Vector3(rng.randf_range(-0.12, 0.12), 0.0, rng.randf_range(-0.12, 0.12)) * scale
 		baker.add_cylinder(
-			"pine", 0.0, radius, height, 7, _transform(Vector3(0.0, y, 0.0)),
+			"pine", 0.0, radius, height, 7,
+			_transform(Vector3(lean.x, y, lean.z)),
 			tint.lightened(t * 0.1), 0.035
 		)
 
@@ -153,14 +189,17 @@ func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var leaf_key: String = LEAF_KEYS[placement.variant % LEAF_KEYS.size()]
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.12))
 	var crown_y := trunk_height + 0.9 * scale
+	# Crown size and lobe placement vary per tree: the silhouette is what the
+	# player reads at distance, so that is where the variety has to live.
+	var crown_radius := 1.85 * scale * rng.randf_range(0.88, 1.14)
 	baker.add_sphere(
-		leaf_key, 1.85 * scale, 4, 7, _transform(Vector3(0.0, crown_y, 0.0)), tint
+		leaf_key, crown_radius, 4, 7, _transform(Vector3(0.0, crown_y, 0.0)), tint
 	)
 	for _lobe in 2:
 		var angle := rng.randf() * TAU
 		var offset := Vector3(cos(angle), 0.0, sin(angle)) * 1.15 * scale
 		baker.add_sphere(
-			leaf_key, 1.18 * scale, 4, 6,
+			leaf_key, 1.18 * scale * rng.randf_range(0.85, 1.12), 4, 6,
 			_transform(Vector3(offset.x, crown_y + 0.5 * scale, offset.z)), tint
 		)
 
@@ -196,12 +235,48 @@ func _build_bush(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 			(0.7 - float(index) * 0.2) * scale, 4, 6,
 			_transform(Vector3(offset.x, 0.45 * scale, offset.z)), tint
 		)
+	# Variant 2 is a flowering shrub: a handful of bright heads on the green,
+	# in the same palette as awnings and shutters, so the meadow edge and the
+	# pond shore get a seasonal accent without a single new material.
+	if placement.variant == 2:
+		var flower_keys := ["cloth_cream", "cloth_red", "cloth_cream"]
+		for flower in 4:
+			var angle := rng.randf() * TAU
+			var spread := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.25, 0.6)
+			var key: String = flower_keys[flower % flower_keys.size()]
+			baker.add_sphere(
+				key, 0.11 * scale, 3, 5,
+				_transform(Vector3(spread.x, (0.55 + rng.randf() * 0.45) * scale, spread.z)),
+				Color.WHITE.darkened(rng.randf_range(0.0, 0.08))
+			)
 
 
 func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
 	var rock_key := "rock_wet" if placement.variant == 2 else "rock"
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.18))
+	if scale < 0.55:
+		# Pebble cluster: three little stones in a loose triangle. A single
+		# scaled-down boulder reads as a marble; a knot of them reads as a
+		# shore or a path edge. Walkable, so no collider is added for these.
+		for pebble in 3:
+			var angle := rng.randf() * TAU
+			var spread := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.18, 0.42)
+			var squash := Vector3(
+				rng.randf_range(0.85, 1.25), rng.randf_range(0.55, 0.8), rng.randf_range(0.85, 1.25)
+			)
+			var pebble_basis := Basis.from_euler(
+				Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3))
+			).scaled(squash)
+			baker.add_sphere(
+				rock_key, rng.randf_range(0.22, 0.34), 3, 5,
+				_origin * Transform3D(
+					pebble_basis,
+					Vector3(spread.x, 0.12, spread.z)
+				),
+				tint.lightened(rng.randf_range(0.0, 0.06)), true
+			)
+		return
 	var squash := Vector3(
 		rng.randf_range(0.8, 1.3), rng.randf_range(0.6, 0.95), rng.randf_range(0.8, 1.3)
 	)
@@ -226,6 +301,18 @@ func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 
 
 # --- helpers -----------------------------------------------------------------
+
+
+## True where a blade would poke through a solid prop or stand on a doorstep.
+func _inside_prop_footprint(layout: VillageLayout, x: float, z: float) -> bool:
+	var point := Vector2(x, z)
+	for placement in layout.placements:
+		if not GRASS_EXCLUSION_KINDS.has(placement.kind):
+			continue
+		var radius: float = placement.footprint_radius * placement.scale + 0.7
+		if point.distance_to(placement.position) < radius:
+			return true
+	return false
 
 
 func _grass_tint() -> Color:
