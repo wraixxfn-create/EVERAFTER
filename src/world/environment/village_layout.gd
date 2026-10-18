@@ -376,7 +376,7 @@ func _build_homestead_details() -> void:
 		var yaw := deg_to_rad(placement.rotation_deg)
 		var facing := Vector2(sin(yaw), cos(yaw))
 		var right := Vector2(cos(yaw), -sin(yaw))
-		var radius := placement.footprint_radius * placement.scale
+		var radius: float = placement.footprint_radius * placement.scale
 		var side := 1.0 if _rng.randf() < 0.5 else -1.0
 		var roll := _rng.randf()
 		var kind := KIND_CRATE
@@ -386,8 +386,8 @@ func _build_homestead_details() -> void:
 			kind = KIND_LOGPILE
 		elif roll < 0.62:
 			kind = KIND_FLOWER_BOX
-		var lateral := radius + _rng.randf_range(1.0, 2.0)
-		var along := _rng.randf_range(-0.45, 0.15) * radius
+		var lateral: float = radius + _rng.randf_range(1.0, 2.0)
+		var along: float = _rng.randf_range(-0.45, 0.15) * radius
 		_add_placement(
 			kind,
 			placement.position + right * lateral * side + facing * along,
@@ -399,7 +399,7 @@ func _build_homestead_details() -> void:
 		# A second container at the back: kitchens need somewhere to put things.
 		if placement.kind != KIND_HOUSE or _rng.randf() < 0.45:
 			var back_kind := KIND_BARREL if _rng.randf() < 0.5 else KIND_CRATE
-			var back := radius + _rng.randf_range(0.7, 1.6)
+			var back: float = radius + _rng.randf_range(0.7, 1.6)
 			_add_placement(
 				back_kind,
 				placement.position - facing * back + right * _rng.randf_range(-1.2, 1.2),
@@ -557,7 +557,7 @@ func _build_forest() -> void:
 		var grove_center := Vector2(cos(grove_angle), sin(grove_angle)) * grove_distance
 		if road_distance(grove_center.x, grove_center.y) < 6.0:
 			continue
-		var species := [KIND_TREE_OAK, KIND_TREE_PINE, KIND_TREE_BIRCH][grove % 3]
+		var species: String = [KIND_TREE_OAK, KIND_TREE_PINE, KIND_TREE_BIRCH][grove % 3]
 		for member in _rng.randi_range(3, 5):
 			var spread := _rng.randf() * TAU
 			var offset := Vector2(cos(spread), sin(spread)) * _rng.randf_range(1.8, 4.2)
