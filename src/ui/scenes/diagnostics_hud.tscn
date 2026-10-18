@@ -1,26 +1,49 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/ui/diagnostics_hud.gd" id="1_hud"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_diag"]
+content_margin_left = 14.0
+content_margin_top = 12.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+bg_color = Color(0.07, 0.06, 0.05, 0.9)
+border_width_left = 1
+border_width_top = 2
+border_width_right = 1
+border_width_bottom = 2
+border_color = Color(0.66, 0.53, 0.3, 0.85)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+shadow_color = Color(0, 0, 0, 0.38)
+shadow_size = 6
+shadow_offset = Vector2(0, 2)
 
 [node name="DiagnosticsHud" type="CanvasLayer"]
 layer = 10
 script = ExtResource("1_hud")
 
 [node name="Panel" type="PanelContainer" parent="."]
-layout_mode = 0
-offset_left = 16.0
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -210.0
 offset_top = 16.0
-offset_right = 400.0
-offset_bottom = 286.0
+offset_right = 210.0
+offset_bottom = 264.0
+grow_horizontal = 2
 mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_diag")
 
 [node name="Margins" type="MarginContainer" parent="Panel"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/margin_left = 14
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 14
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_left = 2
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 2
+theme_override_constants/margin_bottom = 0
 
 [node name="Lines" type="VBoxContainer" parent="Panel/Margins"]
 layout_mode = 2
@@ -30,53 +53,58 @@ theme_override_constants/separation = 3
 [node name="TitleLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 24
-text = "EVERAFTER"
+theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
+theme_override_font_sizes/font_size = 16
+text = "EVERAFTER · DIAGNOSTICA"
 
 [node name="DayLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 18
-theme_override_colors/font_color = Color(0.93, 0.87, 0.66, 1)
+theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 1)
+theme_override_font_sizes/font_size = 14
 text = "Giorno simulato: 1"
 
 [node name="TimeLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.88, 0.84, 0.76, 1)
+theme_override_font_sizes/font_size = 13
 text = "Ora del mondo: 00:00"
 
 [node name="SimLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.84, 0.82, 0.74, 1)
+theme_override_font_sizes/font_size = 13
 text = "Tick: 0  ·  Velocità: x1"
 
 [node name="PhaseLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.84, 0.82, 0.74, 1)
+theme_override_font_sizes/font_size = 13
 text = "Fase: Notte"
 
 [node name="PerfLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.76, 0.84, 0.68, 1)
+theme_override_font_sizes/font_size = 13
 text = "FPS: 0"
 
 [node name="StatusLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.7, 0.82, 0.68, 1)
+theme_override_colors/font_color = Color(0.62, 0.84, 0.52, 1)
+theme_override_font_sizes/font_size = 13
 text = "Avvio in corso…"
 
 [node name="HelpLabel" type="Label" parent="Panel/Margins/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 13
-theme_override_colors/font_color = Color(0.76, 0.78, 0.72, 1)
+theme_override_colors/font_color = Color(0.72, 0.7, 0.62, 1)
+theme_override_font_sizes/font_size = 11
 autowrap_mode = 2
-text = "WASD / frecce: muoversi · Shift: correre · Spazio: saltare
-Mouse: guardarsi · Clic: cattura il mouse · Esc: libera il mouse
-P: pausa · + / -: velocità simulazione · F1: nascondi questo pannello"
+text = "WASD/frecce: muoversi · Shift: correre · Spazio: saltare
+Clic: seleziona / cattura mouse · Esc: libera mouse · C: Cronache
+P: pausa · +/-: velocità · F1: chiudi diagnostica"

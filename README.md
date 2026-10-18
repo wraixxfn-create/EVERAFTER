@@ -187,13 +187,15 @@ mercato se aperti, altrimenti la dispensa di casa), riposo quando l'energia scen
 in piazza, alla locanda o allo stagno. Non ci sono numeri casuali: lo stesso stato iniziale e lo
 stesso numero di tick producono lo stesso risultato su qualunque macchina.
 
-Gli abitanti sono rappresentati da capsule colorate per mestiere, con il nome sopra la testa. Le
-capsule vengono create solo entro `npc_view_distance` (70 unità, configurabile) e distrutte quando
-si allontanano: **la simulazione non si ferma mai** per un NPC non disegnato. Il pannello in basso
-a destra mostra la scheda dell'abitante selezionato (nome, età, professione, attività, obiettivo,
-tre barre dei bisogni, riepilogo, tre relazioni principali e tre ricordi). Si può selezionare
-cliccando la capsula oppure scegliendo il nome dall'elenco: l'elenco funziona anche per chi è fuori
-portata visiva.
+Gli abitanti sono rappresentati da modelli procedurali articolati (`NpcVisualFactory` + `NpcPresenter`,
+alti ~1,72 m in scala con le porte delle case da 1,85 m), con abiti, copricapi e accessori distinti per
+mestiere, pose procedurali interpolate per attività e il nome sopra la testa. Le viste 3D
+vengono create solo entro `npc_view_distance` (70 unità, configurabile) e distrutte quando
+si allontanano: **la simulazione non si ferma mai** per un NPC non disegnato. Il pannello a
+destra resta compatto finché non si seleziona un abitante e, alla selezione, mostra la scheda
+completa (nome, età, professione, indole, attività, obiettivo, tre barre dei bisogni, riepilogo,
+tre relazioni principali e tre ricordi). Si può selezionare cliccando l'abitante oppure scegliendo
+il nome dall'elenco: l'elenco funziona anche per chi è fuori portata visiva.
 
 Il pannello e le capsule leggono soltanto i record; non li modificano. La simulazione vive in
 `src/npcs/`, `src/economy/` e `src/social/` e non conosce né la scena 3D né l'interfaccia.
@@ -410,7 +412,8 @@ src/
     player_explorer.gd           esploratore in prima persona (CharacterBody3D)
     npcs/
       village_npc_places.gd      dal piano del villaggio ai luoghi della simulazione
-      npc_presenter.gd           capsule, nomi, selezione con raycast, culling
+      npc_visual_factory.gd      rig procedurale articolato, abiti di mestiere e pose
+      npc_presenter.gd           viste 3D, transizioni di posa, selezione con raycast, culling
     areas/area_registry.gd       regioni nominate, pura dati
     environment/
       village_layout.gd          il piano del villaggio: strade, lotti, pesi del terreno
@@ -421,22 +424,25 @@ src/
       village_builder.gd         assembla il villaggio: mesh, collider, acqua
       sky_rig.gd                 sole, cielo, nebbia, bagliore notturno
   ui/
-    scenes/world_hud.tscn        interfaccia discreta: titolo, giorno, area
+    ui_theme.gd                  tema medievale condiviso (palette, tipografia, stili, tooltip)
+    scenes/world_hud.tscn        interfaccia discreta: titolo, giorno, fase, velocità, area
     world_hud.gd
-    scenes/diagnostics_hud.tscn  pannello diagnostico (F1)
+    scenes/diagnostics_hud.tscn  pannello diagnostico centrato (F1)
     diagnostics_hud.gd
-    scenes/npc_panel.tscn        scheda dell'abitante selezionato
+    scenes/npc_panel.tscn        scheda dell'abitante selezionato (compatta a riposo)
     npc_panel.gd
     scenes/economy_panel.tscn    pannello economico del villaggio
     economy_panel.gd
+    save_load_panel.gd           pannello Cronache e salvataggio (C)
 tests/
   run_tests.gd                 runner di unità (exit code 0/1)
   run_world_tests.gd           runner di integrazione (avvia la scena, interroga la fisica)
   harness/test_harness.gd      micro harness di asserzioni
   unit/                        clock, loop, day cycle, terreno, config, layout, aree,
                                materiali, baker, direzione artistica, dati NPC, roster,
-                               rete di percorso, simulazione NPC, luoghi del villaggio,
-                               inventari/transazioni, economia simulata, relazioni e memoria
+                               aspetti visivi NPC/UI (test_npc_visuals), rete di percorso,
+                               simulazione NPC, luoghi del villaggio, inventari/transazioni,
+                               economia simulata, relazioni e memoria
                                (test_social_relationships, test_social_simulation), illuminazione
                                (test_sky_rig)
   integration/
@@ -450,6 +456,7 @@ docs/
   ARCHITECTURE.md              scelte architetturali e regole di dipendenza
   LIGHTING.md                  illuminazione e atmosfera: problemi, valori, budget, futuro
   WORLD_DETAIL.md              densità ambientale e dettagli del mondo: interventi, regole
+  NPC_AND_UI_POLISH.md         rifinitura visiva di NPC, pose procedurali e interfaccia (Polish 05)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 
