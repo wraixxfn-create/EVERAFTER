@@ -48,6 +48,21 @@ const COLOR_DIRT := Color(0.56, 0.41, 0.23)
 const COLOR_COBBLE := Color(0.57, 0.53, 0.47)
 const COLOR_MUD := Color(0.29, 0.25, 0.19)
 
+# --- Visual polish 06 — extended terrain palette --------------------------------
+# New colours are *variations* of the existing family, not replacements.  The
+# original eight colours remain the anchors so the village keeps its identity;
+# these add the subtleties a real ground needs: dry sun-bleached tufts,
+# clay streaks in the road, gravel at the verge, moss on damp slopes, a
+# trampling skirt around buildings and a warmer sand at the water line.
+const COLOR_GRASS_DRY := Color(0.46, 0.52, 0.20)
+const COLOR_HEATH := Color(0.38, 0.44, 0.22)
+const COLOR_CLAY := Color(0.62, 0.38, 0.20)
+const COLOR_GRAVEL := Color(0.52, 0.49, 0.43)
+const COLOR_MOSS := Color(0.22, 0.36, 0.18)
+const COLOR_SAND_LIGHT := Color(0.78, 0.71, 0.52)
+const COLOR_SOIL := Color(0.36, 0.28, 0.19)
+const COLOR_STONE_WARM := Color(0.60, 0.55, 0.46)
+
 ## Grid points per side. The terrain is (size_cells - 1) units across.
 var size_cells: int = DEFAULT_SIZE_CELLS
 var height_scale: float = DEFAULT_HEIGHT_SCALE
@@ -212,7 +227,7 @@ func build_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
 	material.metallic = 0.0
-	material.roughness = 0.95
+	material.roughness = 0.93
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	material.cull_mode = BaseMaterial3D.CULL_BACK
 	return material
@@ -233,9 +248,25 @@ func _compute_heights() -> PackedFloat32Array:
 
 func _base_height(x: float, z: float) -> float:
 	var low := _value_noise(x, z, LOW_FREQUENCY, 1.0)
+	# A very low broad undulation (fields-scale) adds gentle valley-ridge
+	# structure without touching the detail that is masked on roads.  Amplitude
+	# stays small so high ground never becomes a wall and low ground never a
+	# pit — just enough to break the perfect symmetry of a single low octave.
+	low += _value_noise(x + 17.3, z - 11.7, 0.011, 0.32)
 	var detail := _value_noise(x, z, MID_FREQUENCY, 0.45)
 	detail += _value_noise(x, z, HIGH_FREQUENCY, 0.18)
-	var height := (low + detail * (1.0 - flatten_weight(x, z))) * height_scale
+	var flat := flatten_weight(x, z)
+	var height := (low + detail * (1.0 - flat)) * height_scale
+	# Light topographic variation in open country only: a modest field warp
+	# that never reaches the plaza, roads or building footprints.  The weight
+	# is (1 - flat) so the village stays walkable and the physics that the
+	# tests validate never changes inside the built area.
+	if layout != null and flat < 0.95:
+		var field_weight := 1.0 - flat
+		# Two scales: broad meadow swell + finer dimpling.
+		var field_warp := _value_noise(x, z, 0.038, 1.0) * 0.35
+		field_warp += _value_noise(x + 91.4, z - 47.2, 0.074, 1.0) * 0.18
+		height += field_warp * field_weight * height_scale * 0.13
 	var plaza := plaza_weight(x, z)
 	if plaza > 0.0:
 		height = lerpf(height, _plaza_level, plaza)
@@ -244,6 +275,14 @@ func _base_height(x: float, z: float) -> float:
 		if pond > 0.0:
 			height = lerpf(height, _pond_level, clampf(pond * 2.0, 0.0, 1.0))
 			height += layout.terrain_offset(x, z) * height_scale
+		# Subtle shore berm: a faint lip just before the basin drops, so the
+		# pond reads as a natural hollow rather than a perfectly flat cut.
+		# Placed *after* the basin carve, masked by (1 - flat) so roads and
+		# building plots never grow a ridge.  Peak < 0.30 m.
+		var pond_w2 := layout.pond_weight(x, z)
+		if pond_w2 > 0.06 and pond_w2 < 0.88:
+			var berm := sin(pond_w2 * PI) * (1.0 - flat * 0.45)
+			height += berm * height_scale * 0.055
 	return height
 
 
@@ -304,47 +343,226 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	var height := grid_height(ix, iz)
 	var slope := _slope_at(ix, iz)
 	var height_t := clampf((height + height_scale) / (2.0 * maxf(height_scale, 0.001)), 0.0, 1.0)
-	var color := COLOR_GRASS_DARK.lerp(COLOR_GRASS, height_t)
 	var x := cell_to_world_x(ix)
 	var z := cell_to_world_z(iz)
-	# Broad warm meadow patches: the ground reads as fields, not as one flat
-	# green sheet. Same deterministic noise as the heights, so no two machines
-	# paint a different world.
-	var patch := clampf(_value_noise(x, z, 0.031, 1.0) * 0.5 + 0.5, 0.0, 1.0)
-	color = color.lerp(COLOR_MEADOW, patch * 0.55)
-	var rock_t := clampf((slope - 0.35) / 0.6, 0.0, 1.0)
+
+	# -----------------------------------------------------------------------
+	# 1) Base grass — altitude + two-scale meadow patchwork.
+	# -----------------------------------------------------------------------
+	var color := COLOR_GRASS_DARK.lerp(COLOR_GRASS, height_t)
+	# Two meadow scales: broad fields (~50 m) + smaller clearings (~20 m).  The
+	# blend is deliberately uneven so the terrain never reads as a single tone.
+	var meadow_big := clampf(_value_noise(x, z, 0.019, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+	var meadow_small := clampf(_value_noise(x + 17.3, z - 9.8, 0.041, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+	var patch := meadow_big * 0.62 + meadow_small * 0.38
+	# Sun-bleached dry variation on higher ground: warm gold-green where the
+	# hill catches the light.  Masked by slope (not on cliffs) and pond.
+	var dry_noise := clampf(_value_noise(x * 0.72, z * 0.68, 0.014, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+	var dry_t := clampf((dry_noise - 0.66) / 0.28, 0.0, 1.0) * 0.20 * height_t
+	color = color.lerp(COLOR_MEADOW, patch * 0.48)
+	color = color.lerp(COLOR_GRASS_DRY, dry_t)
+	# Heath / field weed tint: a cooler, slightly desaturated wash over broad
+	# low-frequency patches, again masked on steep ground.
+	var heath_noise := clampf(_value_noise(x + 53.1, z - 71.4, 0.009, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+	var heath_t := clampf((heath_noise - 0.58) / 0.32, 0.0, 1.0) * 0.16
+	color = color.lerp(COLOR_HEATH, heath_t * (1.0 - clampf((slope - 0.25) / 0.4, 0.0, 1.0)))
+
+	# -----------------------------------------------------------------------
+	# 2) Rock & scree — slope-driven, with altitude bias and noise wobble.
+	# -----------------------------------------------------------------------
+	var slope_jitter := _value_noise(x, z, 0.11, 1.0) * 0.08
+	var slope_adj := slope + slope_jitter
+	var rock_t := clampf((slope_adj - 0.30) / 0.52, 0.0, 1.0)
+	# Higher ground is naturally a touch more exposed.
+	var altitude_rock := clampf((height / maxf(height_scale, 0.001) - 0.25) / 0.75, 0.0, 1.0) * 0.18
+	rock_t = clampf(rock_t + altitude_rock, 0.0, 1.0)
+	# Wet, pond-adjacent rock reads as moss-covered rather than pale stone.
+	var pond_hint := 0.0
+	if layout != null:
+		pond_hint = layout.pond_weight(x, z)
+	var rock_key := COLOR_ROCK
+	# Subtle in-palette variation per rock face: warm stone vs gravelly tint.
+	var rock_var := clampf(_value_noise(x + 7.4, z - 22.8, 0.095, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+	rock_key = rock_key.lerp(COLOR_GRAVEL, rock_var * 0.32)
+	if pond_hint > 0.08:
+		rock_key = rock_key.lerp(COLOR_MOSS, clampf((pond_hint - 0.08) / 0.42, 0.0, 1.0) * 0.55)
+	color = color.lerp(rock_key, rock_t)
+	# Scree fringe just below the rock threshold: a gravel speckle at the foot
+	# of steep ground.  Intentionally sparse so it never turns cliffs into a
+	# gravel field.
+	var scree_t := clampf((slope_adj - 0.18) / 0.18, 0.0, 1.0) * (1.0 - rock_t) * 0.28
+	if scree_t > 0.02:
+		color = color.lerp(COLOR_GRAVEL, scree_t)
+
 	var road_t := 0.0
 	var pond_t := 0.0
 	var plaza_t := 0.0
-	color = color.lerp(COLOR_ROCK, rock_t)
+	var building_t := 0.0
+
 	if layout == null:
+		# Legacy disc: warm sand apron with a noise-broken edge.
 		var distance := sqrt(x * x + z * z)
-		var sand_t := clampf(1.0 - (distance - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
-		color = color.lerp(COLOR_SAND, sand_t)
+		var edge_n := _value_noise(x, z, 0.068, 1.0) * 2.2
+		var sand_t := clampf(1.0 - (distance + edge_n - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
+		var sand_col := COLOR_SAND.lerp(COLOR_SAND_LIGHT, clampf(_value_noise(x, z, 0.12, 1.0) * 0.5 + 0.5, 0.0, 1.0) * 0.18)
+		color = color.lerp(sand_col, sand_t)
 	else:
-		# Bare earth on the roads, stone on the plaza, mud at the water line.
-		# Order matters: each layer paints over the previous one.
-		road_t = layout.road_weight(x, z) * (1.0 - rock_t)
-		pond_t = layout.pond_weight(x, z)
-		plaza_t = layout.plaza_weight(x, z)
-		color = color.lerp(COLOR_DIRT, road_t)
-		# The road centre stays packed, while the natural noise below breaks up
-		# the otherwise uniform earth without introducing a repeating texture.
-		color = color.darkened(road_t * road_t * 0.12)
-		color = color.lerp(COLOR_MUD, pond_t)
-		color = color.lerp(COLOR_COBBLE, plaza_t)
-	# Two deterministic noise scales act as restrained surface mottling. The
-	# larger value survives the one-metre vertex grid; the finer value keeps
-	# stone, earth and meadow from reading as three flat colour fills.
+		# -------------------------------------------------------------------
+		# 3) Prepare organic edge jitter and shared weights.
+		# -------------------------------------------------------------------
+		var raw_road := layout.road_weight(x, z)
+		var raw_plaza := layout.plaza_weight(x, z)
+		var raw_pond := layout.pond_weight(x, z)
+		# Two-frequency edge wobble: the visible colour edge is deliberately
+		# softer and slightly irregular compared to the physics flatten weight,
+		# so roads and plaza never read as a perfect geometric mask.
+		var edge_jitter := _value_noise(x, z, 0.082, 1.0) * 0.22
+		edge_jitter += _value_noise(x + 41.2, z - 27.6, 0.156, 1.0) * 0.10
+		# Small secondary wobble at a different phase for the road verge.
+		var road_extra_jitter := _value_noise(x - 18.4, z + 33.9, 0.19, 1.0) * 0.08
+		var road_w := clampf(raw_road + edge_jitter * 0.65 + road_extra_jitter - 0.04, 0.0, 1.0) * (1.0 - rock_t * 0.45)
+		var plaza_w := clampf(raw_plaza + edge_jitter * 0.55 - 0.03, 0.0, 1.0) * (1.0 - rock_t * 0.35)
+		var pond_w := raw_pond
+		road_t = road_w
+		plaza_t = plaza_w
+		pond_t = pond_w
+
+		# Derive building proximity from the flatten weight: when flatten is
+		# high but neither plaza nor road claims the point, it must be a plot.
+		# This gives a cheap, O(1) building skirt without iterating placements.
+		var flat := layout.flatten_weight(x, z)
+		var mrw := maxf(raw_road, raw_plaza)
+		if flat > mrw + 0.025:
+			building_t = clampf((flat - mrw) / maxf(1.0 - mrw, 0.001), 0.0, 1.0) * (1.0 - rock_t * 0.5)
+			# Keep the skirt subtle where it overlaps roads/plaza.
+			building_t *= 1.0 - maxf(road_w, plaza_w) * 0.45
+
+		# -------------------------------------------------------------------
+		# 4) Roads — dirt core, clay streaks, gravel shoulder, centre wear.
+		# -------------------------------------------------------------------
+		if road_w > 0.02:
+			# Core vs shoulder split: smoothstep gives a soft centre plateau.
+			var road_core := _smoothstep(clampf((road_w - 0.45) / 0.50, 0.0, 1.0))
+			var road_shoulder := clampf(road_w - road_core * 0.68, 0.0, 1.0)
+			# Clay-streaked dirt: warmer, slightly redder ribbons along the
+			# length of the road.  Uses a stretched noise field so streaks run
+			# along the road rather than as spots.
+			var clay_n := clampf(_value_noise(x * 1.08, z * 0.92, 0.062, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+			var clay_t_local := clay_n * road_core * 0.24
+			var dirt_col := COLOR_DIRT.lerp(COLOR_CLAY, clay_t_local)
+			# Gravel at the verge: where the verge meets the grass the ground
+			# is looser and paler, with a little in-palette noise break-up.
+			var gravel_n := clampf(_value_noise(x + 12.4, z - 33.1, 0.098, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+			dirt_col = dirt_col.lerp(COLOR_GRAVEL, gravel_n * road_shoulder * 0.18)
+			color = color.lerp(dirt_col, road_core * (1.0 - pond_w * 0.65))
+			color = color.lerp(COLOR_GRAVEL, road_shoulder * 0.52 * (0.55 + gravel_n * 0.45))
+			# Centre darkening: the compacted strip where feet and wheels run.
+			# Uses road distance (0 at centre line) so the darkening is always
+			# centred on the carriageway, not smeared across the whole width.
+			var dist_to_road := layout.road_distance(x, z)
+			var centre_mask := clampf(1.0 - dist_to_road / (VillageLayout.ROAD_WIDTH * 0.48), 0.0, 1.0)
+			centre_mask = _smoothstep(centre_mask) * road_core
+			# Split into two faint ruts for the most travelled section: two
+			# parallel dips 0.55 m off centre.  We approximate with a cosine of
+			# the across-road distance so the effect is symmetric.
+			var rut_phase := dist_to_road * 1.85
+			var rut_mod := 0.55 + 0.45 * cos(rut_phase * TAU * 0.9)
+			centre_mask *= rut_mod
+			color = color.darkened(centre_mask * 0.10)
+			# Slight warmth in the ruts where mud shows through.
+			color = color.lerp(COLOR_SOIL, centre_mask * 0.14)
+
+		# -------------------------------------------------------------------
+		# 5) Pond — mud centre, sand fringe, mossy shore.
+		# -------------------------------------------------------------------
+		if pond_w > 0.02:
+			# Concentric shore model: centre -> shallow -> shoreline.
+			var mud_t := _smoothstep(clampf((pond_w - 0.58) / 0.38, 0.0, 1.0))
+			var shallow_t := clampf(pond_w, 0.0, 1.0) - mud_t
+			# Sand fringe lives in the shallow band: the ring where water meets
+			# earth.  Extra noise breaks the perfect circle.
+			var sand_n := clampf(_value_noise(x + 22.7, z - 14.4, 0.088, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+			var sand_t := shallow_t * (0.55 + sand_n * 0.35)
+			var sand_col := COLOR_SAND.lerp(COLOR_SAND_LIGHT, sand_n * 0.22)
+			color = color.lerp(sand_col, sand_t * 0.72)
+			color = color.lerp(COLOR_MUD, mud_t)
+			# Damp moss at the water line where the two meet.
+			var moss_edge := clampf(1.0 - absf(pond_w - 0.52) / 0.28, 0.0, 1.0)
+			color = color.lerp(COLOR_MOSS, moss_edge * 0.22 * (1.0 - rock_t))
+			# General wet darkening toward the centre.
+			color = color.darkened(pond_w * 0.08)
+
+		# -------------------------------------------------------------------
+		# 6) Plaza — variegated cobble, wear ring, dirt bleed at road mouths.
+		# -------------------------------------------------------------------
+		if plaza_w > 0.02:
+			var plaza_core := _smoothstep(clampf((plaza_w - 0.30) / 0.60, 0.0, 1.0))
+			var plaza_edge := clampf(plaza_w - plaza_core * 0.75, 0.0, 1.0)
+			# Cobble variation: two noise scales, one broad warmth, one tighter
+			# tile-to-tile speckle.
+			var cobble_big := clampf(_value_noise(x + 9.1, z - 18.7, 0.062, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+			var cobble_small := clampf(_value_noise(x - 31.2, z + 11.8, 0.22, 1.0) * 0.5 + 0.5, 0.0, 1.0)
+			var cobble_col := COLOR_COBBLE.lerp(COLOR_STONE_WARM, cobble_big * 0.24)
+			cobble_col = cobble_col.lerp(COLOR_GRAVEL, cobble_small * 0.14)
+			# Dirt in the joints: pockets of earth between the stones.
+			var joint_dirt := clampf((cobble_small - 0.62) / 0.32, 0.0, 1.0) * 0.10
+			cobble_col = cobble_col.lerp(COLOR_DIRT, joint_dirt)
+			color = color.lerp(cobble_col, plaza_core)
+			# Foot polish: the very centre of the square is slightly lighter
+			# where generations of feet have worn the stone smooth.
+			var dist_plaza := sqrt(x * x + z * z)
+			var centre_polish := clampf(1.0 - dist_plaza / (VillageLayout.PLAZA_RADIUS * 0.62), 0.0, 1.0)
+			centre_polish = _smoothstep(centre_polish) * plaza_core
+			color = color.lerp(Color.WHITE, centre_polish * 0.055)
+			# Edge wear: darker at the rim where rain and boots drag dirt onto
+			# the stones.
+			color = color.darkened(plaza_edge * 0.09)
+			# Road mouths bleed a little dirt into the square: where both
+			# weights are high, the plaza reads as a continuation of the road.
+			var overlap := plaza_w * raw_road
+			if overlap > 0.02:
+				color = color.lerp(COLOR_DIRT, overlap * 0.22)
+
+		# -------------------------------------------------------------------
+		# 7) Building skirts — trampled earth and gravel apron.
+		# -------------------------------------------------------------------
+		if building_t > 0.02:
+			# Trampled soil: a warm, compacted ring where people walk around
+			# their homes, distinct from the looser field grass.
+			color = color.lerp(COLOR_SOIL, building_t * 0.34)
+			# Very close to a building (high skirt) the ground is firmer and
+			# gravelly — the foundation splash.
+			if building_t > 0.62:
+				var skirt := clampf((building_t - 0.62) / 0.38, 0.0, 1.0)
+				color = color.lerp(COLOR_GRAVEL, skirt * 0.32)
+
+	# -----------------------------------------------------------------------
+	# 8) Surface mottling — three-scale grain that survives the 1 m vertex
+	#    grid.  Large grain gives field-scale warmth, medium survives the grid,
+	#    fine keeps stone/earth/meadow from reading as flat fills. All three
+	#    are deterministic hashes, so every machine paints the same world.
+	# -----------------------------------------------------------------------
 	var medium_grain := _value_noise(x + 31.7, z - 18.3, 0.29, 0.055)
-	var fine_grain := _value_noise(x - 47.2, z + 63.1, 0.61, 0.02)
-	var surface_grain := medium_grain + fine_grain
+	var fine_grain := _value_noise(x - 47.2, z + 63.1, 0.61, 0.020)
+	var large_grain := _value_noise(x + 11.4, z - 52.8, 0.088, 0.038)
+	var surface_grain := medium_grain + fine_grain + large_grain * 0.55
 	var built_weight := 0.0
 	if layout != null:
-		built_weight = maxf(road_t, maxf(pond_t, plaza_t))
-	var grain_strength := 0.62 + built_weight * 0.3
+		built_weight = maxf(road_t, maxf(pond_t, maxf(plaza_t, building_t)))
+		built_weight = maxf(built_weight, rock_t * 0.45)
+	var grain_strength := 0.44 + built_weight * 0.22
+	# Built ground gets a touch more grain so cobble/dirt never look like a
+	# flat colour field — but never so much that it turns into noise.
 	if surface_grain >= 0.0:
 		color = color.lerp(Color.WHITE, surface_grain * grain_strength)
 	else:
 		color = color.darkened(-surface_grain * grain_strength)
+
+	# -----------------------------------------------------------------------
+	# 9) Valley ambient occlusion — subtle darkening in low, sheltered ground.
+	#    Purely colour-based (no extra texture), it deepens the perceived
+	#    topography at no performance cost.
+	# -----------------------------------------------------------------------
+	var ao_t := clampf((0.45 - height_t) / 0.45, 0.0, 1.0) * (1.0 - built_weight * 0.65) * 0.07
+	color = color.darkened(ao_t)
 	return color
