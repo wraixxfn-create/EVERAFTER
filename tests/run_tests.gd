@@ -39,6 +39,7 @@ func _initialize() -> void:
 	TestVillageMaterials.run_tests(harness)
 	TestMeshBaker.run_tests(harness)
 	TestVillageArt.run_tests(harness)
+	TestBuildingArchitecture.run_tests(harness)
 	TestSkyRig.run_tests(harness)
 	TestNpcData.run_tests(harness)
 	TestNpcRoster.run_tests(harness)
