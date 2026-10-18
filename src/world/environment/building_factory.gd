@@ -172,8 +172,11 @@ func _build_house(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	# placement scale exactly once to both size and offset.
 	var width := 4.4 if not long_body else 5.8
 	var depth := 4.0 if not long_body else 3.4
-	var wall_height := 4.2 if two_storey else 2.6
-	var roof_rise := 1.9 if two_storey else 1.6
+	# Structural correction 11: credible floor heights — single 3.0 (was 2.6,
+	# too squat), two-storey 4.2 preserves collider 4.62. Roof pitches
+	# corrected: steeper on narrow/long bodies to avoid flat-cap silhouette.
+	var wall_height := 4.2 if two_storey else 3.0
+	var roof_rise := 2.2 if two_storey else (2.1 if long_body else 1.95)
 	var wall_key: String = WALL_KEYS[
 		(placement.variant + rng.randi_range(0, 1)) % WALL_KEYS.size()
 	]
@@ -183,40 +186,52 @@ func _build_house(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	_body(baker, wall_key, roof_key, roof_tint, width, depth, wall_height, roof_rise, scale)
 	_timber_frame(baker, width, depth, wall_height, scale, 0.95, two_storey)
 	# Door on the +Z face, which the layout turns towards the road.
+	# Structural correction 11: doors raised to 2.05 (was 1.85, 13 cm clearance
+	# for a 1.72 NPC is not a doorway, it is a crawlspace).
 	baker.add_box(
-		"door", Vector3(0.95, 1.85, 0.14) * scale,
-		_transform(Vector3(0.0, 0.92, depth * 0.5) * scale)
+		"door", Vector3(0.95, 2.05, 0.14) * scale,
+		_transform(Vector3(0.0, 1.02, depth * 0.5) * scale)
 	)
-	_surface_details.add_door_details(baker, 0.0, 0.92, 0.95, 1.85, depth * 0.5, scale)
+	_surface_details.add_door_details(baker, 0.0, 1.02, 0.95, 2.05, depth * 0.5, scale)
 	# Two shallow stone risers connect the door threshold to the flattened plot.
 	# They are baked scenery, not colliders, so the road-facing approach stays open.
 	_surface_details.add_door_steps(baker, 0.95, depth, scale)
+	# Structural correction 11: taller, narrower windows (0.68×1.12, was
+	# 0.72×0.85 square) and two rows for two-storey houses so the lower
+	# floor is no longer a blank wall.
 	_windows(
 		baker, width, depth, wall_height, 2 + placement.variant, scale,
-		CLOTH_KEYS[placement.variant % CLOTH_KEYS.size()], 0.95, 1.85
+		CLOTH_KEYS[placement.variant % CLOTH_KEYS.size()], 0.95, 2.05
 	)
 	_surface_details.add_window_flower_boxes(
-		baker, width, depth, wall_height, 2 + placement.variant, scale, 0.95, 1.85
+		baker, width, depth, wall_height, 2 + placement.variant, scale, 0.95, 2.05
 	)
-	if not two_storey:
+	# Massing correction: break the cube+hat silhouette — lean-to pantry on
+	# the rear for cottage/long, dormer on two-storey gable.
+	if long_body:
+		_annex_lean_to(baker, width, depth, wall_height, scale)
+		_porch(baker, width, depth, scale)
+	elif two_storey:
 		_chimney(
-			baker, Vector3(width * 0.28, wall_height + roof_rise, -depth * 0.18),
+			baker, Vector3(width * 0.3, wall_height + roof_rise * 0.55, -depth * 0.2),
 			scale, scale
 		)
+		_dormer(baker, width, depth, wall_height, roof_rise, scale)
 	else:
 		_chimney(
-			baker, Vector3(width * 0.3, wall_height + roof_rise * 0.6, -depth * 0.2),
+			baker, Vector3(width * 0.28, wall_height + roof_rise * 0.92, -depth * 0.18),
 			scale, scale
 		)
-	if long_body:
-		_porch(baker, width, depth, scale)
+		_annex_lean_to(baker, width, depth, wall_height, scale)
 
 
 func _build_inn(baker: MeshBaker) -> void:
 	var width := 8.2
 	var depth := 5.6
 	var wall_height := 5.0
-	var roof_rise := 2.4
+	# Structural correction 11: inn roof was 28° shallow for a 8.2 m span,
+	# now 3.4 rise → 37°, credible tile pitch for a tall inn.
+	var roof_rise := 3.4
 	_body(baker, "wall_ochre", "roof_shingle", Color.WHITE, width, depth, wall_height, roof_rise, 1.0)
 	_timber_frame(baker, width, depth, wall_height, 1.0, 1.5)
 	# A second, lower wing gives the inn an L shaped silhouette.
@@ -275,8 +290,9 @@ func _build_inn(baker: MeshBaker) -> void:
 func _build_hall(baker: MeshBaker) -> void:
 	var width := 9.4
 	var depth := 5.4
-	var wall_height := 3.8
-	# Long stone body with a roof whose gable faces the plaza.
+	var wall_height := 4.2
+	# Structural correction 11: hall was too squat (3.8 on 9.4 span); raised
+	# to 4.2 with steeper roof 2.6 (was 2.1, 33°→ 39°), reads as civic scale.
 	baker.add_box(
 		"stone_dark", Vector3(width + 0.6, 0.5, depth + 0.6),
 		_transform(Vector3(0.0, 0.25, 0.0)), Color.WHITE, 0.08
@@ -284,17 +300,17 @@ func _build_hall(baker: MeshBaker) -> void:
 	_surface_details.add_masonry_plinth(baker, width, depth, 0.5)
 	baker.add_box(
 		"stone", Vector3(width, wall_height, depth),
-		_transform(Vector3(0.0, 2.4, 0.0)), Color.WHITE, 0.06
+		_transform(Vector3(0.0, 0.5 + wall_height * 0.5, 0.0)), Color.WHITE, 0.06
 	)
 	_surface_details.add_stone_wall_courses(baker, width, depth, wall_height, 0.5)
-	var roof_center := _transform(Vector3(0.0, wall_height + 1.55, 0.0), 90.0)
+	var roof_center := _transform(Vector3(0.0, wall_height + 1.3, 0.0), 90.0)
 	var roof_width := depth + 1.0
 	var roof_depth := width + 1.0
 	baker.add_prism(
-		"roof_slate", roof_width, 2.1, roof_depth, roof_center, Color.WHITE, "stone", depth
+		"roof_slate", roof_width, 2.6, roof_depth, roof_center, Color.WHITE, "stone", depth
 	)
 	_surface_details.add_roof_details(
-		baker, "roof_slate", Color.WHITE, roof_width, roof_depth, 2.1,
+		baker, "roof_slate", Color.WHITE, roof_width, roof_depth, 2.6,
 		0.5 + wall_height, roof_center, 1.0
 	)
 	# Bell tower on the west end: the tallest thing in the village. Its block
@@ -770,8 +786,22 @@ func _timber_frame(
 				),
 				Color.WHITE, 0.035
 			)
+		# Intermediate studs: break the blank wall between corners so the
+		# half-timber reads as construction, not as a texture on a box.
+		# Two studs per long elevation, one per short, spaced around windows.
+		for stud_index in 2:
+			var stud_x := (float(stud_index) - 0.5) * scaled_width * 0.42
+			baker.add_box(
+				"timber", Vector3(0.14 * scale, frame_height * 0.88, 0.14 * scale),
+				_transform(Vector3(stud_x, (bottom + top) * 0.5, scaled_depth * 0.5)),
+				Color.WHITE, 0.032
+			)
+			baker.add_box(
+				"timber", Vector3(0.14 * scale, frame_height * 0.88, 0.14 * scale),
+				_transform(Vector3(stud_x, (bottom + top) * 0.5, -scaled_depth * 0.5)),
+				Color.WHITE, 0.032
+			)
 		# Short knee braces sit on the side elevations, outside the central window.
-		# The old Z-axis rotation leaned them out through the wall rather than along it.
 		var brace_vertical := minf(wall_height * 0.22, 0.9)
 		var brace_depth := depth * 0.24
 		var brace_length := Vector2(brace_vertical, brace_depth).length() * scale
@@ -812,14 +842,23 @@ func _timber_frame(
 					Color.WHITE, 0.035
 				)
 	# A single string course gives the two-storey cottage a readable floor line.
+	# Structural correction 11: now with joist ends protruding slightly to read
+	# as real beam ends, not a painted line.
 	if floor_split:
-		var floor_beam_y := bottom + frame_height * 0.38
+		var floor_beam_y := bottom + frame_height * 0.45
 		for depth_side in [-1.0, 1.0]:
 			baker.add_box(
 				"timber", Vector3(scaled_width, 0.08 * scale, 0.22 * scale),
 				_transform(Vector3(0.0, floor_beam_y, depth_side * scaled_depth * 0.5)),
 				Color.WHITE, 0.035
 			)
+			for joist in 3:
+				var joist_x := (float(joist) - 1.0) * scaled_width * 0.32
+				baker.add_box(
+					"timber", Vector3(0.09 * scale, 0.07 * scale, 0.32 * scale),
+					_transform(Vector3(joist_x, floor_beam_y, depth_side * (scaled_depth * 0.5 + 0.06 * scale))),
+					Color.WHITE, 0.03
+				)
 
 
 
@@ -828,73 +867,49 @@ func _windows(
 	shutter_key: String = "timber_warm", door_width: float = 0.0,
 	door_height: float = 0.0
 ) -> void:
-	var y := (0.42 + wall_height * 0.6) * scale
-	for index in count:
-		var window_location := _surface_details.window_location(
-			index, count, width, scale, y, door_width, door_height
-		)
-		var side := window_location.y
-		var spread := window_location.x
-		var face_z := side * depth * 0.5 * scale
-		var trim_z := face_z + side * 0.08 * scale
-		# Front and back windows get a deep timber frame, divided light, and a
-		# projecting sill. The muntins sit forward of the glass so they read at
-		# village scale instead of disappearing into the wall.
-		baker.add_box(
-			"window", Vector3(0.72, 0.85, 0.14) * scale,
-			_transform(Vector3(spread, y, face_z))
-		)
-		for jamb_side in [-1.0, 1.0]:
-			baker.add_box(
-				"timber", Vector3(0.09, 0.94, 0.18) * scale,
-				_transform(Vector3(spread + jamb_side * 0.4 * scale, y, trim_z)),
-				Color.WHITE, 0.035
-			)
-		baker.add_box(
-			"timber", Vector3(0.96, 0.12, 0.2) * scale,
-			_transform(Vector3(spread, y + 0.49 * scale, trim_z)),
-			Color.WHITE, 0.035
-		)
-		baker.add_box(
-			"stone", Vector3(1.0, 0.12, 0.24) * scale,
-			_transform(Vector3(spread, y - 0.49 * scale, trim_z)),
-			Color.WHITE.darkened(0.04), 0.06
-		)
-		baker.add_box(
-			"timber", Vector3(0.045, 0.76, 0.045) * scale,
-			_transform(Vector3(spread, y, face_z + side * 0.105 * scale)),
-			Color.WHITE, 0.035
-		)
-		baker.add_box(
-			"timber", Vector3(0.72, 0.045, 0.045) * scale,
-			_transform(Vector3(spread, y, face_z + side * 0.105 * scale)),
-			Color.WHITE, 0.035
-		)
-		# Painted shutter leaves with two restrained battens, not blank coloured
-		# blocks pasted beside each opening.
-		for shutter_side in [-1.0, 1.0]:
-			var shutter_x: float = spread + shutter_side * 0.56 * scale
-			baker.add_box(
-				shutter_key, Vector3(0.3, 0.85, 0.1) * scale,
-				_transform(Vector3(shutter_x, y, trim_z)),
-				Color.WHITE.darkened(rng.randf_range(0.0, 0.045)), 0.025
-			)
-			for batten_side in [-1.0, 1.0]:
-				baker.add_box(
-					"timber", Vector3(0.3, 0.04, 0.04) * scale,
-					_transform(Vector3(
-						shutter_x, y + batten_side * 0.24 * scale,
-						trim_z + side * 0.07 * scale
-					)),
-					Color.WHITE, 0.025
+	# Structural correction 11: windows now 0.68×1.18 (was 0.72×0.85) —
+	# taller than wide, credible medieval proportion, readable from distance.
+	var is_two_storey := wall_height > 3.5
+	var window_h := 1.18
+	var window_w := 0.68
+	var y_for_side := 0.0
+	if is_two_storey:
+		# Two-storey: lower row at 1.45 m, upper at ~3.2 m, both clear of string course.
+		var lower_y := (0.42 + 1.05) * scale
+		var upper_y := (0.42 + wall_height * 0.72) * scale
+		for row_y in [lower_y, upper_y]:
+			var row_count := maxi(2, count - 1) if row_y == lower_y else count
+			for index in row_count:
+				var window_location := _surface_details.window_location(
+					index, row_count, width, scale, row_y, door_width, door_height
 				)
+				var side := window_location.y
+				var spread := window_location.x
+				var face_z := side * depth * 0.5 * scale
+				var trim_z := face_z + side * 0.08 * scale
+				_emit_window(baker, spread, row_y, face_z, trim_z, side, window_w, window_h, shutter_key, scale)
+		y_for_side = upper_y
+	else:
+		var y := (0.42 + wall_height * 0.55) * scale
+		y_for_side = y
+		for index in count:
+			var window_location := _surface_details.window_location(
+				index, count, width, scale, y, door_width, door_height
+			)
+			var side := window_location.y
+			var spread := window_location.x
+			var face_z := side * depth * 0.5 * scale
+			var trim_z := face_z + side * 0.08 * scale
+			_emit_window(baker, spread, y, face_z, trim_z, side, window_w, window_h, shutter_key, scale)
 	# Small framed windows on the side elevations balance the street-facing openings.
+	# Structural correction 11: side windows also taller (0.14×1.0×0.6 was 0.7)
+	var side_y := y_for_side * 0.88 if y_for_side > 0.0 else (0.42 + wall_height * 0.55) * scale * 0.88
 	for side in [-1.0, 1.0]:
 		var end_x: float = side * width * 0.5 * scale
 		var end_trim_x: float = end_x + side * 0.08 * scale
-		var end_y := y * 0.95
+		var end_y := side_y
 		baker.add_box(
-			"window", Vector3(0.14, 0.7, 0.6) * scale,
+			"window", Vector3(0.14, 1.0, 0.62) * scale,
 			_transform(Vector3(end_x, end_y, 0.0))
 		)
 		for end_side in [-1.0, 1.0]:
@@ -912,37 +927,180 @@ func _windows(
 		)
 
 
+func _emit_window(
+	baker: MeshBaker, spread: float, y: float, face_z: float, trim_z: float,
+	side: float, window_w: float, window_h: float, shutter_key: String, scale: float
+) -> void:
+	# Helper: emits one tall window with proper jamb/lintel/sill/muntin/shutter
+	# proportions (11.1). Window-h 1.18 vs old 0.85 = +39% height.
+	baker.add_box(
+		"window", Vector3(window_w, window_h, 0.14) * scale,
+		_transform(Vector3(spread, y, face_z))
+	)
+	for jamb_side in [-1.0, 1.0]:
+		baker.add_box(
+			"timber", Vector3(0.09, window_h + 0.10, 0.18) * scale,
+			_transform(Vector3(spread + jamb_side * (window_w * 0.5 + 0.04) * scale, y, trim_z)),
+			Color.WHITE, 0.035
+		)
+	baker.add_box(
+		"timber", Vector3(window_w + 0.24, 0.12, 0.2) * scale,
+		_transform(Vector3(spread, y + window_h * 0.5 + 0.04 * scale, trim_z)),
+		Color.WHITE, 0.035
+	)
+	baker.add_box(
+		"stone", Vector3(window_w + 0.28, 0.12, 0.24) * scale,
+		_transform(Vector3(spread, y - window_h * 0.5 - 0.02 * scale, trim_z)),
+		Color.WHITE.darkened(0.04), 0.06
+	)
+	# Cross muntins centred on glass
+	baker.add_box(
+		"timber", Vector3(0.045, window_h * 0.92, 0.045) * scale,
+		_transform(Vector3(spread, y, face_z + side * 0.105 * scale)),
+		Color.WHITE, 0.035
+	)
+	baker.add_box(
+		"timber", Vector3(window_w * 0.96, 0.045, 0.045) * scale,
+		_transform(Vector3(spread, y, face_z + side * 0.105 * scale)),
+		Color.WHITE, 0.035
+	)
+	for shutter_side in [-1.0, 1.0]:
+		var shutter_x: float = spread + shutter_side * (window_w * 0.5 + 0.22) * scale
+		baker.add_box(
+			shutter_key, Vector3(0.28, window_h, 0.1) * scale,
+			_transform(Vector3(shutter_x, y, trim_z)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.045)), 0.025
+		)
+		for batten_side in [-1.0, 1.0]:
+			baker.add_box(
+				"timber", Vector3(0.28, 0.04, 0.04) * scale,
+				_transform(Vector3(
+					shutter_x, y + batten_side * (window_h * 0.32) * scale,
+					trim_z + side * 0.07 * scale
+				)),
+				Color.WHITE, 0.025
+			)
+
+
 func _chimney(
 	baker: MeshBaker, position: Vector3, size_scale: float, position_scale: float = 1.0
 ) -> void:
 	var scaled_position := position * position_scale
+	# Structural correction 11: chimney now tapers, has corbel course
+	# and two clay pots vs flat block+seal.
+	var h := 2.6 * size_scale
 	baker.add_box(
-		"stone", Vector3(0.75, 2.4, 0.75) * size_scale,
-		_transform(scaled_position), Color.WHITE, 0.08
+		"stone", Vector3(0.72, h * 0.68, 0.72) * size_scale,
+		_transform(scaled_position + Vector3(0, h * 0.34, 0) * size_scale), Color.WHITE, 0.08
 	)
 	baker.add_box(
-		"stone_dark", Vector3(0.95, 0.2, 0.95) * size_scale,
-		_transform(scaled_position + Vector3(0.0, 1.2, 0.0) * size_scale),
+		"stone", Vector3(0.62, h * 0.32, 0.62) * size_scale,
+		_transform(scaled_position + Vector3(0, h * 0.84, 0) * size_scale), Color.WHITE, 0.07
+	)
+	baker.add_box(
+		"stone_dark", Vector3(0.85, 0.14, 0.85) * size_scale,
+		_transform(scaled_position + Vector3(0.0, h * 0.92, 0.0) * size_scale),
 		Color.WHITE, 0.06
 	)
-	# A dark, shallow flue mouth keeps the cap from reading as a sealed block.
-	baker.add_box(
-		"iron", Vector3(0.34, 0.01, 0.34) * size_scale,
-		_transform(scaled_position + Vector3(0.0, 1.305, 0.0) * size_scale)
-	)
+	for pot_side in [-1.0, 1.0]:
+		baker.add_cylinder(
+			"stone_dark", 0.11, 0.13, 0.42, 8,
+			_transform(scaled_position + Vector3(pot_side * 0.13, h + 0.12, 0.0) * size_scale),
+			Color.WHITE.darkened(0.06), 0.04
+		)
+		baker.add_cylinder(
+			"iron", 0.04, 0.04, 0.02, 6,
+			_transform(scaled_position + Vector3(pot_side * 0.13, h + 0.33, 0.0) * size_scale)
+		)
 
 
 func _porch(baker: MeshBaker, width: float, depth: float, scale: float) -> void:
+	# Structural correction 11: porch roof now has rafter tails and fascia,
+	# not a single slab.
 	for side in [-1.0, 1.0]:
 		baker.add_box(
-			"timber", Vector3(0.2, 2.3, 0.2) * scale,
-			_transform(Vector3(side * width * 0.3, 1.15, depth * 0.5 + 1.0) * scale),
+			"timber", Vector3(0.2, 2.4, 0.2) * scale,
+			_transform(Vector3(side * width * 0.3, 1.18, depth * 0.5 + 1.05) * scale),
 			Color.WHITE, 0.04
 		)
+		baker.add_box(
+			"timber", Vector3(0.04, 0.04, 1.7) * scale,
+			_transform(Vector3(side * width * 0.3, 2.38, depth * 0.5 + 0.85) * scale),
+			Color.WHITE, 0.03
+		)
 	baker.add_box(
-		"roof_shingle", Vector3(width * 0.8, 0.14, 1.6) * scale,
-		_transform(Vector3(0.0, 2.35, depth * 0.5 + 0.6) * scale, 0.0, 8.0),
+		"timber", Vector3(width * 0.88, 0.09, 0.12) * scale,
+		_transform(Vector3(0.0, 2.42, depth * 0.5 + 1.85) * scale),
+		Color.WHITE, 0.04
+	)
+	baker.add_box(
+		"roof_shingle", Vector3(width * 0.88, 0.14, 1.75) * scale,
+		_transform(Vector3(0.0, 2.48, depth * 0.5 + 0.75) * scale, 0.0, 11.0),
 		Color.WHITE, 0.06
+	)
+	# Rafter tails under eave
+	for rafter in 5:
+		var rx := (float(rafter) - 2.0) * width * 0.16 * scale
+		baker.add_box(
+			"timber", Vector3(0.06, 0.06, 1.72) * scale,
+			_transform(Vector3(rx, 2.41, depth * 0.5 + 0.75) * scale, 0.0, 11.0),
+			Color.WHITE, 0.03
+		)
+
+
+func _annex_lean_to(baker: MeshBaker, width: float, depth: float, wall_height: float, scale: float) -> void:
+	# Small rear pantry/bakehouse lean-to: breaks the perfect rectangular
+	# cube+hat silhouette at medium distance. Low, against back wall.
+	var annex_w := 2.0 * scale
+	var annex_d := 1.4 * scale
+	var annex_h := 1.9 * scale
+	var y0 := 0.42 * scale
+	baker.add_box(
+		"stone_dark", Vector3(annex_w + 0.2, 0.22, annex_d + 0.2) * scale,
+		_transform(Vector3(width * 0.32, 0.11, -depth * 0.5 - annex_d * 0.45) * scale)
+	)
+	baker.add_box(
+		"wall_ash", Vector3(annex_w, annex_h, annex_d) * scale,
+		_transform(Vector3(width * 0.32, y0 + annex_h * 0.5, -depth * 0.5 - annex_d * 0.45) * scale),
+		Color.WHITE.darkened(rng.randf_range(0.0, 0.05))
+	)
+	var annex_roof_center := _transform(Vector3(width * 0.32, y0 + annex_h + 0.32, -depth * 0.5 - annex_d * 0.45) * scale, 0.0, 14.0)
+	baker.add_box(
+		"roof_shingle", Vector3(annex_w + 0.3, 0.12, annex_d + 0.3) * scale,
+		annex_roof_center, Color.WHITE, 0.05
+	)
+	# Tiny window on annex side
+	baker.add_box(
+		"window", Vector3(0.12, 0.48, 0.36) * scale,
+		_transform(Vector3(width * 0.32 + annex_w * 0.5 + 0.04 * scale, y0 + annex_h * 0.55, -depth * 0.5 - annex_d * 0.45) * scale)
+	)
+
+
+func _dormer(baker: MeshBaker, width: float, depth: float, wall_height: float, roof_rise: float, scale: float) -> void:
+	# Small gabled dormer on front roof slope: adds roof complexity without
+	# changing footprint; visible at medium/aerial.
+	var wall_top := (0.42 + wall_height) * scale
+	var half_width := (width + 0.7) * 0.5 * scale
+	var dormer_w := 1.1 * scale
+	var dormer_h := 0.95 * scale
+	var dormer_d := 1.0 * scale
+	# Position ~1/3 down the slope, centered
+	var slope_t := 0.38
+	var slope_x := half_width * (1.0 - slope_t * 1.4) * 0.55
+	var slope_y := wall_top + roof_rise * scale * (1.0 - slope_t) * 0.85
+	baker.add_box(
+		"wall_cream", Vector3(dormer_w, dormer_h, dormer_d) * scale,
+		_transform(Vector3(0.0, slope_y - 0.1 * scale, depth * 0.5 * scale * 0.52)),
+		Color.WHITE.darkened(0.02)
+	)
+	var dormer_roof_center := _transform(Vector3(0.0, slope_y + dormer_h * 0.5 + 0.28 * scale, depth * 0.5 * scale * 0.52))
+	baker.add_prism(
+		"roof_tile", dormer_w + 0.25 * scale, 0.55 * scale, dormer_d + 0.3 * scale,
+		dormer_roof_center, Color.WHITE
+	)
+	baker.add_box(
+		"window", Vector3(0.48, 0.52, 0.10) * scale,
+		_transform(Vector3(0.0, slope_y + 0.02 * scale, depth * 0.5 * scale * 0.52 + 0.52 * scale))
 	)
 
 

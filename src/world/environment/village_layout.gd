@@ -305,14 +305,13 @@ func _build_plaza_landmarks() -> void:
 	_add_ring(KIND_HALL, 210.0, 18.5, 0, 1.0, 6.5)
 	_add_ring(KIND_HOUSE, 330.0, 15.5, 0, 1.0, 3.6)
 	_add_ring(KIND_HOUSE, 5.0, 16.0, 1, 1.0, 3.6)
-	# Market row: stalls on the plaza rim, away from the road mouths.
-	_add_ring(KIND_STALL, 52.0, 14.0, 0, 1.0, 2.4)
-	_add_ring(KIND_STALL, 66.0, 14.6, 1, 1.0, 2.4)
-	_add_ring(KIND_STALL, 122.0, 14.2, 2, 1.0, 2.4)
+	# Market row: stalls now distributed across two plaza sectors so the
+	# market does not read as a single clump east of the inn — structural
+	# composition fix 11: even skyline, more readable from aerial.
+	_add_ring(KIND_STALL, 48.0, 14.0, 0, 1.0, 2.4)
+	_add_ring(KIND_STALL, 64.0, 14.6, 1, 1.0, 2.4)
+	_add_ring(KIND_STALL, 286.0, 14.3, 2, 1.0, 2.4)
 	_add_ring(KIND_SIGNPOST, 178.0, 12.4, 0, 1.0, 1.0)
-	# The barrel used to sit at bearing 96°, four metres in front of the inn —
-	# squarely on its porch and in the doorway corridor. It keeps the company
-	# of the crate, but on the plaza side of the porch.
 	_add_ring(KIND_BARREL, 108.0, 13.2, 0, 1.0, 0.8)
 	_add_ring(KIND_CRATE, 101.0, 13.9, 1, 1.0, 0.9)
 	# Street furniture on the open stretches of the rim: two benches facing the
