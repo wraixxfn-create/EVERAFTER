@@ -21,6 +21,8 @@ const ALL_KINDS := [
 	VillageLayout.KIND_BARREL,
 	VillageLayout.KIND_LOGPILE,
 	VillageLayout.KIND_SIGNPOST,
+	VillageLayout.KIND_FLOWER_BOX,
+	VillageLayout.KIND_BENCH,
 	VillageLayout.KIND_TREE_PINE,
 	VillageLayout.KIND_TREE_OAK,
 	VillageLayout.KIND_TREE_BIRCH,
@@ -91,6 +93,19 @@ static func run_tests(harness: TestHarness) -> void:
 			# the engine says so loudly at exit.
 			(shape as CollisionShape3D).free()
 	harness.check_equals(blocking, 4, "every building kind has at least one collider")
+
+	# Pure scenery must never stop the player: planters and benches are
+	# decoration the walk passes through, not physics walls.
+	var decorative_shapes := 0
+	for kind in [VillageLayout.KIND_FLOWER_BOX, VillageLayout.KIND_BENCH]:
+		var placement := VillageLayout.Placement.new()
+		placement.kind = kind
+		placement.variant = 0
+		placement.scale = 1.0
+		decorative_shapes += buildings.colliders_for(placement).size()
+	harness.check_equals(
+		decorative_shapes, 0, "flower boxes and benches have no colliders"
+	)
 
 
 static func _is_emissive(key: String) -> bool:

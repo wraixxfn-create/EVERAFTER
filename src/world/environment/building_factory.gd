@@ -144,6 +144,10 @@ func append_prop(
 			_build_logpile(baker)
 		VillageLayout.KIND_SIGNPOST:
 			_build_signpost(baker)
+		VillageLayout.KIND_FLOWER_BOX:
+			_build_flower_box(baker, placement)
+		VillageLayout.KIND_BENCH:
+			_build_bench(baker)
 	_origin = Transform3D.IDENTITY
 
 
@@ -184,6 +188,7 @@ func _build_house(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 		baker, width, depth, wall_height, 2 + placement.variant, scale,
 		CLOTH_KEYS[placement.variant % CLOTH_KEYS.size()]
 	)
+	_window_flower_boxes(baker, width, depth, wall_height, 2 + placement.variant, scale)
 	if not two_storey:
 		_chimney(
 			baker, Vector3(width * 0.28, wall_height + roof_rise, -depth * 0.18),
@@ -244,6 +249,11 @@ func _build_inn(baker: MeshBaker) -> void:
 		_transform(Vector3(width * 0.5, 2.9, depth * 0.5 + 2.02))
 	)
 	_windows(baker, width, depth, wall_height, 6, 1.0, "cloth_cream")
+	_window_flower_boxes(baker, width, depth, wall_height, 6, 1.0)
+	# Lived-in porch: a bench against the wall beside the door and a barrel by
+	# the far post. Both clear the entrance corridor and the L shaped wing.
+	_build_bench(baker, Vector3(2.85, 0.0, depth * 0.5 + 0.55))
+	_build_barrel(baker, Vector3(-2.9, 0.0, depth * 0.5 + 1.3))
 	_chimney(baker, Vector3(width * 0.3, wall_height + roof_rise * 0.7, -depth * 0.15), 1.3)
 	baker.add_box(
 		"door", Vector3(1.5, 2.4, 0.16), _transform(Vector3(0.0, 1.2, depth * 0.5))
@@ -351,6 +361,20 @@ func _build_hall(baker: MeshBaker) -> void:
 			"cloth_red", Vector3(0.75, 2.35, 0.08),
 			_transform(Vector3(side * 2.1, 2.8, depth * 0.5 + 0.1))
 		)
+	# A lantern over the entrance arch: the door the village looks for after
+	# dark. `SkyRig` lights the shared lantern material at dusk.
+	baker.add_box(
+		"iron", Vector3(0.1, 0.1, 0.55),
+		_transform(Vector3(0.0, 3.95, depth * 0.5 + 0.28))
+	)
+	baker.add_box(
+		"lantern", Vector3(0.32, 0.42, 0.32),
+		_transform(Vector3(0.0, 3.62, depth * 0.5 + 0.5))
+	)
+	baker.add_cylinder(
+		"iron", 0.02, 0.22, 0.14, 4,
+		_transform(Vector3(0.0, 3.9, depth * 0.5 + 0.5))
+	)
 
 
 func _build_well(baker: MeshBaker) -> void:
@@ -393,6 +417,17 @@ func _build_well(baker: MeshBaker) -> void:
 	)
 	baker.add_box("timber", Vector3(2.2, 0.16, 0.16), _transform(Vector3(0.0, 2.6, 0.0)))
 	baker.add_box("plank", Vector3(0.6, 0.6, 0.6), _transform(Vector3(0.0, 1.9, 0.0)))
+	# A bucket on the stones beside the basin: the well is used, not staged.
+	# It sits outside the well collider (r 1.15), so it never blocks the ring.
+	var bucket_turn := rng.randf_range(0.0, 360.0)
+	baker.add_cylinder(
+		"plank", 0.26, 0.21, 0.34, 8,
+		_transform(Vector3(1.55, 0.17, 0.85), bucket_turn), Color.WHITE, 0.06
+	)
+	baker.add_cylinder(
+		"iron", 0.27, 0.27, 0.05, 8,
+		_transform(Vector3(1.55, 0.36, 0.85), bucket_turn)
+	)
 
 
 func _build_stall(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
@@ -551,16 +586,16 @@ func _build_crate(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 		)
 
 
-func _build_barrel(baker: MeshBaker) -> void:
+func _build_barrel(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
 	var turn := rng.randf_range(0.0, 360.0)
-	var barrel_transform := _transform(Vector3(0.0, 0.52, 0.0), turn)
+	var barrel_transform := _transform(offset + Vector3(0.0, 0.52, 0.0), turn)
 	baker.add_cylinder(
 		"plank", 0.42, 0.46, 1.05, 10, barrel_transform, Color.WHITE, 0.07
 	)
 	for height in [0.25, 0.8]:
 		baker.add_cylinder(
 			"iron", 0.47, 0.47, 0.08, 10,
-			_transform(Vector3(0.0, height, 0.0), turn), Color.WHITE, 0.035
+			_transform(offset + Vector3(0.0, height, 0.0), turn), Color.WHITE, 0.035
 		)
 
 
@@ -583,6 +618,70 @@ func _build_signpost(baker: MeshBaker) -> void:
 		"plank", Vector3(1.4, 0.32, 0.1), _transform(Vector3(-0.5, 1.7, 0.0), 0.0, 0.0, -6.0)
 	)
 	baker.add_cylinder("iron", 0.0, 0.14, 0.3, 4, _transform(Vector3(0.0, 2.6, 0.0)))
+
+
+## Standing planter: a half-barrel tub of flowers. Decorative by design — no
+## collider and no NPC obstacle — so a square can be dressed without ever
+## narrowing a walk.
+func _build_flower_box(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
+	var scale := placement.scale
+	var turn := rng.randf_range(0.0, 360.0)
+	baker.add_cylinder(
+		"plank", 0.52, 0.42, 0.52, 10,
+		_transform(Vector3(0.0, 0.26, 0.0) * scale, turn),
+		Color.WHITE.darkened(rng.randf_range(0.0, 0.07)), 0.05
+	)
+	for hoop in [0.12, 0.44]:
+		baker.add_cylinder(
+			"iron", 0.53, 0.53, 0.05, 10,
+			_transform(Vector3(0.0, hoop, 0.0) * scale, turn)
+		)
+	baker.add_cylinder(
+		"stone_dark", 0.46, 0.46, 0.06, 10,
+		_transform(Vector3(0.0, 0.5, 0.0) * scale, turn), Color.WHITE, 0.05
+	)
+	for flower in 7:
+		var angle := rng.randf() * TAU
+		var spread := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.08, 0.34)
+		var key: String = ["cloth_red", "cloth_cream", "leaf_bright"][flower % 3]
+		baker.add_sphere(
+			key, rng.randf_range(0.08, 0.13), 3, 5,
+			_transform(
+				Vector3(spread.x, 0.56 + rng.randf() * 0.2, spread.z) * scale
+			),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
+		)
+
+
+## Park bench: stone feet, plank legs, a slatted seat and a leaning back.
+## Faces +Z, so the placement yaw aims it at whatever is worth sitting for.
+## Decorative: no collider, so it never blocks the player or an NPC walk.
+func _build_bench(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
+	for side in [-1.0, 1.0]:
+		baker.add_box(
+			"stone_dark", Vector3(0.34, 0.16, 0.5),
+			_transform(offset + Vector3(side * 0.72, 0.08, 0.0)), Color.WHITE, 0.06
+		)
+		baker.add_box(
+			"timber_warm", Vector3(0.14, 0.42, 0.42),
+			_transform(offset + Vector3(side * 0.72, 0.32, 0.0)), Color.WHITE, 0.04
+		)
+		baker.add_box(
+			"timber_warm", Vector3(0.12, 0.62, 0.12),
+			_transform(offset + Vector3(side * 0.72, 0.72, -0.22), 0.0, -8.0),
+			Color.WHITE, 0.04
+		)
+	for plank in 3:
+		baker.add_box(
+			"plank", Vector3(1.75, 0.05, 0.15),
+			_transform(offset + Vector3(0.0, 0.56, -0.16 + float(plank) * 0.16)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.05)), 0.04
+		)
+	baker.add_box(
+		"plank", Vector3(1.75, 0.18, 0.05),
+		_transform(offset + Vector3(0.0, 0.96, -0.28), 0.0, -8.0),
+		Color.WHITE.darkened(0.03), 0.04
+	)
 
 
 # --- shared parts ------------------------------------------------------------
@@ -670,18 +769,58 @@ func _timber_frame(
 
 
 
+## Horizontal offset of window [param index] of [param count] on a face of
+## [param width]. Shared by the window builder and by the planters under the
+## street windows, so a flower box can never drift off its window.
+func _window_spread(index: int, count: int, width: float, scale: float) -> float:
+	var pair_count := int(ceil(float(count) / 2.0))
+	var pair_index := floorf(float(index) * 0.5)
+	return (pair_index - float(pair_count - 1) * 0.5) * width * 0.35 * scale
+
+
+## Window planters under the street-facing windows: the cheapest "people live
+## here" signal a facade can carry. A plank box on the sill line, a dark soil
+## board and a few flower heads in the shared palette — no new materials.
+func _window_flower_boxes(
+	baker: MeshBaker, width: float, depth: float, wall_height: float, count: int, scale: float
+) -> void:
+	var y := (0.42 + wall_height * 0.6) * scale
+	var face_z := depth * 0.5 * scale
+	for index in count:
+		if index % 2 != 0:
+			continue
+		if rng.randf() > 0.55:
+			continue
+		var spread := _window_spread(index, count, width, scale)
+		var box_y := y - 0.7 * scale
+		baker.add_box(
+			"plank", Vector3(0.95, 0.28, 0.34) * scale,
+			_transform(Vector3(spread, box_y, face_z + 0.2 * scale)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.08)), 0.04
+		)
+		baker.add_box(
+			"stone_dark", Vector3(0.85, 0.06, 0.26) * scale,
+			_transform(Vector3(spread, box_y + 0.15 * scale, face_z + 0.2 * scale)),
+			Color.WHITE, 0.05
+		)
+		for flower in 4:
+			var offset := (float(flower) - 1.5) * 0.22 * scale
+			var key: String = "cloth_red" if flower % 2 == 0 else "cloth_cream"
+			baker.add_sphere(
+				key, 0.09 * scale, 3, 5,
+				_transform(Vector3(spread + offset, box_y + 0.26 * scale, face_z + 0.2 * scale)),
+				Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
+			)
+
+
 func _windows(
 	baker: MeshBaker, width: float, depth: float, wall_height: float, count: int, scale: float,
 	shutter_key: String = "timber_warm"
 ) -> void:
 	var y := (0.42 + wall_height * 0.6) * scale
-	var pair_count := int(ceil(float(count) / 2.0))
 	for index in count:
 		var side := 1.0 if index % 2 == 0 else -1.0
-		var pair_index := floorf(float(index) * 0.5)
-		var spread := (
-			pair_index - float(pair_count - 1) * 0.5
-		) * width * 0.35 * scale
+		var spread := _window_spread(index, count, width, scale)
 		var face_z := side * depth * 0.5 * scale
 		var trim_z := face_z + side * 0.08 * scale
 		# Front and back windows get a deep timber frame, divided light, and a

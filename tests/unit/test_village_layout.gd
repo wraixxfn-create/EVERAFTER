@@ -97,6 +97,27 @@ static func run_tests(harness: TestHarness) -> void:
 	var overlapping := _count_overlaps(layout)
 	harness.check_equals(overlapping, 0, "no two props overlap")
 
+	# --- world detail ---------------------------------------------------------
+	# The environmental-detail pass adds furnishings and yard clutter. What it
+	# must never do is the thing the player feels first: fill a doorway. The
+	# check re-derives the corridor rule from the public placement list, so it
+	# stays honest even if the placer's internal guard changes.
+	harness.check_equals(
+		_count_blocked_doorways(layout), 0, "no prop stands in a doorway corridor"
+	)
+	harness.check(
+		layout.get_placements_of_kind(VillageLayout.KIND_FLOWER_BOX).size() >= 4,
+		"the village carries standing planters"
+	)
+	harness.check(
+		layout.get_placements_of_kind(VillageLayout.KIND_BENCH).size() >= 3,
+		"the village carries benches at the plaza and the pond"
+	)
+	harness.check(
+		_count_furnished_houses(layout) >= 3,
+		"yard clutter dresses at least three houses"
+	)
+
 	# --- ground weights ------------------------------------------------------
 	harness.check_almost(
 		layout.flatten_weight(0.0, 0.0), 1.0, 0.001, "the plaza centre is level ground"
@@ -181,3 +202,50 @@ static func _count_overlaps(layout: VillageLayout) -> int:
 			if left.position.distance_to(right.position) < needed - 0.0001:
 				overlaps += 1
 	return overlaps
+
+
+## Independent re-derivation of the doorway corridor rule: every prop whose
+## radius reaches into the door strip of a house, inn or hall counts once.
+static func _count_blocked_doorways(layout: VillageLayout) -> int:
+	var blocked := 0
+	var door_kinds := [
+		VillageLayout.KIND_HOUSE, VillageLayout.KIND_INN, VillageLayout.KIND_HALL
+	]
+	for host in layout.placements:
+		if not door_kinds.has(host.kind):
+			continue
+		var yaw := deg_to_rad(host.rotation_deg)
+		var reach := host.footprint_radius * host.scale + VillageLayout.DOOR_CORRIDOR_REACH
+		for other in layout.placements:
+			if other == host:
+				continue
+			var delta := other.position - host.position
+			var local_z := delta.x * sin(yaw) + delta.y * cos(yaw)
+			if local_z <= 0.0 or local_z > reach:
+				continue
+			var local_x := delta.x * cos(yaw) - delta.y * sin(yaw)
+			var half_width := (
+				VillageLayout.DOOR_CORRIDOR_HALF_WIDTH
+				+ other.footprint_radius * other.scale * 0.5
+			)
+			if absf(local_x) < half_width:
+				blocked += 1
+	return blocked
+
+
+## How many houses carry at least one piece of yard clutter within a few metres.
+static func _count_furnished_houses(layout: VillageLayout) -> int:
+	var clutter_kinds := [
+		VillageLayout.KIND_CRATE, VillageLayout.KIND_BARREL,
+		VillageLayout.KIND_LOGPILE, VillageLayout.KIND_FLOWER_BOX
+	]
+	var furnished := 0
+	for house in layout.get_placements_of_kind(VillageLayout.KIND_HOUSE):
+		var reach := house.footprint_radius * house.scale + 3.5
+		for placement in layout.placements:
+			if not clutter_kinds.has(placement.kind):
+				continue
+			if placement.position.distance_to(house.position) <= reach:
+				furnished += 1
+				break
+	return furnished

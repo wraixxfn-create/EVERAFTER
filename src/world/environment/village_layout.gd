@@ -32,12 +32,22 @@ const KIND_CRATE := "crate"
 const KIND_BARREL := "barrel"
 const KIND_LOGPILE := "logpile"
 const KIND_SIGNPOST := "signpost"
+## Decorative furnishings: standing planters and benches. Pure scenery — no
+## collider, no NPC obstacle — so they can dress a square or a shore without
+## ever blocking a walk.
+const KIND_FLOWER_BOX := "flower_box"
+const KIND_BENCH := "bench"
 ## Kinds understood by `VegetationBuilder`.
 const KIND_TREE_PINE := "tree_pine"
 const KIND_TREE_OAK := "tree_oak"
 const KIND_TREE_BIRCH := "tree_birch"
 const KIND_BUSH := "bush"
 const KIND_ROCK := "rock"
+
+## Buildings with a doorway on their +Z face. `BuildingFactory.is_structure()`
+## stays the authority on what gets its own node; this list only says which
+## placements cast a door corridor that nothing may stand in.
+const DOOR_BUILDING_KINDS := [KIND_HOUSE, KIND_INN, KIND_HALL]
 
 ## Kinds that level the ground around themselves, so a building never ends up
 ## half buried in a slope or floating above it.
@@ -48,13 +58,19 @@ const GROUND_LEVELLING_KINDS := [
 ## they are placed right at the kerb on purpose.
 const ROAD_CLEARING_KINDS := [
 	KIND_HOUSE, KIND_INN, KIND_HALL, KIND_WELL, KIND_STALL, KIND_CART, KIND_CRATE,
-	KIND_BARREL, KIND_LOGPILE, KIND_SIGNPOST, KIND_TREE_PINE, KIND_TREE_OAK,
-	KIND_TREE_BIRCH, KIND_BUSH, KIND_ROCK
+	KIND_BARREL, KIND_LOGPILE, KIND_SIGNPOST, KIND_FLOWER_BOX, KIND_BENCH,
+	KIND_TREE_PINE, KIND_TREE_OAK, KIND_TREE_BIRCH, KIND_BUSH, KIND_ROCK
 ]
 
 const PLAZA_RADIUS := 11.0
 const PLAZA_FALLOFF := 4.5
 const ROAD_WIDTH := 3.6
+## Half width of the doorway corridor in front of a building: nothing may stand
+## in it, so doors, stoops and paths to the road stay open for the player and
+## for the NPC door anchors.
+const DOOR_CORRIDOR_HALF_WIDTH := 1.5
+## How far past a building's footprint the door corridor is kept clear.
+const DOOR_CORRIDOR_REACH := 1.5
 ## Half a fence is 1.5 m long; the extra margin keeps the gate wider than the
 ## fence module so a 0.4 m player capsule and a 0.42 m NPC never clip a post.
 const FENCE_GATE_MARGIN := 1.6
@@ -109,6 +125,7 @@ func _init(initial_seed: int = 0, initial_half_extent: float = 63.5) -> void:
 	_build_roads()
 	_build_plaza_landmarks()
 	_build_road_plots()
+	_build_homestead_details()
 	_build_road_details()
 	_build_pond()
 	_build_field_fence()
@@ -293,8 +310,18 @@ func _build_plaza_landmarks() -> void:
 	_add_ring(KIND_STALL, 66.0, 14.6, 1, 1.0, 2.4)
 	_add_ring(KIND_STALL, 122.0, 14.2, 2, 1.0, 2.4)
 	_add_ring(KIND_SIGNPOST, 178.0, 12.4, 0, 1.0, 1.0)
-	_add_ring(KIND_BARREL, 96.0, 13.6, 0, 1.0, 0.8)
+	# The barrel used to sit at bearing 96°, four metres in front of the inn —
+	# squarely on its porch and in the doorway corridor. It keeps the company
+	# of the crate, but on the plaza side of the porch.
+	_add_ring(KIND_BARREL, 108.0, 13.2, 0, 1.0, 0.8)
 	_add_ring(KIND_CRATE, 101.0, 13.9, 1, 1.0, 0.9)
+	# Street furniture on the open stretches of the rim: two benches facing the
+	# well and two planters dressing the market edge and the road to the hall.
+	# All four sit between the road mouths, so the carriageways stay open.
+	_add_ring(KIND_BENCH, 172.0, 10.6, 0, 1.0, 1.1)
+	_add_ring(KIND_BENCH, 252.0, 10.4, 0, 1.0, 1.1)
+	_add_ring(KIND_FLOWER_BOX, 58.0, 10.8, 0, 1.0, 0.9)
+	_add_ring(KIND_FLOWER_BOX, 135.0, 11.8, 0, 1.0, 0.9)
 
 
 ## Houses along the roads, alternating sides, always facing the road.
@@ -311,7 +338,10 @@ func _build_road_plots() -> void:
 			var outward := Vector2(-along.y, along.x) * side
 			side = -side
 			for fraction in [0.32, 0.72]:
+				# A small along-track jitter keeps the row from reading as a
+				# measured colonnade of identical plots.
 				var at := start + span * float(fraction)
+				at += along * _rng.randf_range(-1.4, 1.4)
 				var depth := _rng.randf_range(3.4, 5.0)
 				var position := at + outward * (ROAD_WIDTH * 0.5 + depth * 0.5 + 1.6)
 				if position.length() > half_extent - 10.0:
@@ -332,6 +362,54 @@ func _build_road_plots() -> void:
 				)
 
 
+## Small yard clutter beside every building: a crate stack by the wall, a
+## barrel at the back corner, a log pile for the hearth, an occasional planter.
+## Everything is placed on the flanks or behind the building — the door
+## corridor on the +Z face is never used, so entrances and the walk to the road
+## stay open.
+func _build_homestead_details() -> void:
+	# Snapshot: the pass appends clutter to `placements`, and a plain for-in
+	# would walk those newcomers too.
+	for placement in placements.duplicate():
+		if not DOOR_BUILDING_KINDS.has(placement.kind):
+			continue
+		var yaw := deg_to_rad(placement.rotation_deg)
+		var facing := Vector2(sin(yaw), cos(yaw))
+		var right := Vector2(cos(yaw), -sin(yaw))
+		var radius := placement.footprint_radius * placement.scale
+		var side := 1.0 if _rng.randf() < 0.5 else -1.0
+		var roll := _rng.randf()
+		var kind := KIND_CRATE
+		if roll < 0.3:
+			kind = KIND_BARREL
+		elif roll < 0.5:
+			kind = KIND_LOGPILE
+		elif roll < 0.62:
+			kind = KIND_FLOWER_BOX
+		var lateral := radius + _rng.randf_range(1.0, 2.0)
+		var along := _rng.randf_range(-0.45, 0.15) * radius
+		_add_placement(
+			kind,
+			placement.position + right * lateral * side + facing * along,
+			_rng.randf_range(0.0, 360.0),
+			_rng.randi_range(0, 1),
+			_rng.randf_range(0.85, 1.1),
+			0.9 if kind != KIND_LOGPILE else 1.4
+		)
+		# A second container at the back: kitchens need somewhere to put things.
+		if placement.kind != KIND_HOUSE or _rng.randf() < 0.45:
+			var back_kind := KIND_BARREL if _rng.randf() < 0.5 else KIND_CRATE
+			var back := radius + _rng.randf_range(0.7, 1.6)
+			_add_placement(
+				back_kind,
+				placement.position - facing * back + right * _rng.randf_range(-1.2, 1.2),
+				_rng.randf_range(0.0, 360.0),
+				_rng.randi_range(0, 1),
+				_rng.randf_range(0.85, 1.1),
+				0.9
+			)
+
+
 func _build_road_details() -> void:
 	for road in roads:
 		var side := 1.0
@@ -344,23 +422,55 @@ func _build_road_details() -> void:
 			var along := span.normalized()
 			var outward := Vector2(-along.y, along.x)
 			side = -side
-			var position := start + span * 0.5 + outward * (ROAD_WIDTH * 0.5 + 1.1) * side
-			if position.length() > half_extent - 8.0:
-				continue
-			_add_placement(KIND_LAMP, position, 0.0, 0, 1.0, 0.7)
+			# Lamps drift along the segment and towards the verge instead of
+			# standing at the exact midpoint of every stretch: the old rhythm
+			# read as a ruler, not as street furniture.
+			if _rng.randf() < 0.8:
+				var lamp_t := _rng.randf_range(0.3, 0.7)
+				var lamp_out := ROAD_WIDTH * 0.5 + _rng.randf_range(0.9, 1.5)
+				var position := start + span * lamp_t + outward * lamp_out * side
+				if position.length() <= half_extent - 8.0:
+					_add_placement(KIND_LAMP, position, 0.0, 0, 1.0, 0.7)
 			if _rng.randf() < 0.3:
-				var near := start + span * 0.15 - outward * (ROAD_WIDTH * 0.5 + 1.3) * side
-				_add_placement(
-					KIND_CART if _rng.randf() < 0.5 else KIND_BARREL,
-					near,
-					_rng.randf_range(0.0, 360.0),
-					_rng.randi_range(0, 1),
-					_rng.randf_range(0.9, 1.1),
-					1.4
-				)
+				var near_t := _rng.randf_range(0.08, 0.28)
+				if _rng.randf() < 0.5:
+					near_t = _rng.randf_range(0.72, 0.92)
+				var near := start + span * near_t - outward * (ROAD_WIDTH * 0.5 + 1.3) * side
+				if near.length() <= half_extent - 8.0:
+					_add_placement(
+						KIND_CART if _rng.randf() < 0.5 else KIND_BARREL,
+						near,
+						_rng.randf_range(0.0, 360.0),
+						_rng.randi_range(0, 1),
+						_rng.randf_range(0.9, 1.1),
+						1.4
+					)
 
 
 func _build_pond() -> void:
+	# The bench first, so the shore dressing around it is placed *around* it
+	# instead of on top of it. It faces the water and is nudged sideways off
+	# the line between the pond and the plaza, where the NPC shore anchor is,
+	# so nobody stands inside the seat.
+	var shore_dir := (Vector2.ZERO - pond_center).normalized()
+	var bank := pond_center + shore_dir * (pond_radius + 3.2)
+	var alongshore := Vector2(-shore_dir.y, shore_dir.x)
+	bank += alongshore * 3.5
+	_add_placement(
+		KIND_BENCH,
+		bank,
+		rad_to_deg(atan2(pond_center.x - bank.x, pond_center.y - bank.y)),
+		0, 1.0, 1.1
+	)
+	# Two planters flanking the seat: a small shore terrace, and the guaranteed
+	# standing greenery of the village (the plaza pair is the other half).
+	for side in [-1.0, 1.0]:
+		_add_placement(
+			KIND_FLOWER_BOX,
+			bank + alongshore * 2.6 * side + shore_dir * 0.9,
+			_rng.randf_range(0.0, 360.0),
+			0, 1.0, 0.9
+		)
 	# Reeds and stones around the water: no collider, so the shore stays open.
 	for index in 14:
 		var angle := _rng.randf() * TAU
@@ -373,6 +483,16 @@ func _build_pond() -> void:
 			index % 3,
 			_rng.randf_range(0.5, 1.0),
 			0.8
+		)
+	# Pebbles at the water line: the small stones the shore is missing between
+	# the bigger rocks, all walkable, all under the knee.
+	for index in 8:
+		var angle := _rng.randf() * TAU
+		var distance := pond_radius * _rng.randf_range(0.85, 1.15)
+		var position := pond_center + Vector2(cos(angle), sin(angle)) * distance
+		_add_placement(
+			KIND_ROCK, position, _rng.randf_range(0.0, 360.0), _rng.randi_range(0, 1),
+			_rng.randf_range(0.32, 0.5), 0.5
 		)
 
 
@@ -401,7 +521,7 @@ func _build_field_fence() -> void:
 
 
 func _build_forest() -> void:
-	var target := int(half_extent * 3.2)
+	var target := int(half_extent * 3.5)
 	var placed := 0
 	var attempts := 0
 	while placed < target and attempts < target * 12:
@@ -429,6 +549,31 @@ func _build_forest() -> void:
 			1.6
 		)
 		placed += 1
+	# A few tight groves inside the ring: uniform scatter reads as noise, real
+	# woods grow in knots of one species with an understorey between them.
+	for grove in 3:
+		var grove_angle := _rng.randf() * TAU
+		var grove_distance := lerpf(half_extent * 0.46, half_extent * 0.6, _rng.randf())
+		var grove_center := Vector2(cos(grove_angle), sin(grove_angle)) * grove_distance
+		if road_distance(grove_center.x, grove_center.y) < 6.0:
+			continue
+		var species := [KIND_TREE_OAK, KIND_TREE_PINE, KIND_TREE_BIRCH][grove % 3]
+		for member in _rng.randi_range(3, 5):
+			var spread := _rng.randf() * TAU
+			var offset := Vector2(cos(spread), sin(spread)) * _rng.randf_range(1.8, 4.2)
+			var position := grove_center + offset
+			if absf(position.x) > half_extent - 3.0 or absf(position.y) > half_extent - 3.0:
+				continue
+			if _overlaps(position, 2.4):
+				continue
+			_add_placement(
+				species,
+				position,
+				_rng.randf_range(0.0, 360.0),
+				_rng.randi_range(0, 2),
+				_rng.randf_range(0.7, 1.2),
+				1.5
+			)
 	# Shrubs filling the edge between the fields and the wood.
 	for index in int(half_extent * 0.7):
 		var angle := _rng.randf() * TAU
@@ -447,22 +592,35 @@ func _build_forest() -> void:
 
 
 func _build_scatter() -> void:
-	# A few lone trees and rocks inside the village so it does not read as a
-	# bare stage set, plus boulders out in the fields.
-	for index in 26:
+	# Lone trees, shrubs and rocks inside the village so it does not read as a
+	# bare stage set, plus boulders out in the fields. The mix matters as much
+	# as the count: three tree species, flowering shrubs and stone break the
+	# "oak or nothing" pattern the old scatter had.
+	for index in 44:
 		var angle := _rng.randf() * TAU
-		var distance := _rng.randf_range(PLAZA_RADIUS + 6.0, half_extent * 0.55)
+		var distance := _rng.randf_range(PLAZA_RADIUS + 7.0, half_extent * 0.58)
 		var position := Vector2(cos(angle), sin(angle)) * distance
-		if _overlaps(position, 3.0):
+		var roll := _rng.randf()
+		var kind := KIND_TREE_OAK
+		var footprint := 1.8
+		if roll < 0.22:
+			kind = KIND_TREE_PINE
+		elif roll < 0.38:
+			kind = KIND_TREE_BIRCH
+		elif roll < 0.58:
+			kind = KIND_BUSH
+			footprint = 1.1
+		elif roll < 0.72:
+			kind = KIND_ROCK
+		if _overlaps(position, footprint):
 			continue
-		var kind := KIND_TREE_OAK if index % 4 != 0 else KIND_ROCK
 		_add_placement(
 			kind,
 			position,
 			_rng.randf_range(0.0, 360.0),
 			_rng.randi_range(0, 2),
-			_rng.randf_range(0.8, 1.25),
-			1.8
+			_rng.randf_range(0.75, 1.25),
+			footprint
 		)
 
 
@@ -493,6 +651,10 @@ func _add_placement(
 	var extent := footprint_radius * scale
 	if _overlaps(position, extent):
 		return
+	# Doors and stoops stay open: the placer rejects anything that would stand
+	# in the doorway corridor of a building, whichever pass wanted it there.
+	if _blocks_a_doorway(position, extent):
+		return
 	if ROAD_CLEARING_KINDS.has(kind):
 		# Keep the carriageway walkable.
 		if distance_to_roads(position) < ROAD_WIDTH * 0.5 + extent * 0.6:
@@ -520,6 +682,29 @@ func _overlaps(position: Vector2, radius: float) -> bool:
 	for index in _occupied.size():
 		var clearance: float = _occupied_radius[index]
 		if position.distance_to(_occupied[index]) < (radius + clearance) * 0.92:
+			return true
+	return false
+
+
+## True when a prop of the given radius would stand in the doorway corridor of
+## a building: the strip on the +Z (door) face, from just outside the wall to
+## [constant DOOR_CORRIDOR_REACH] past the footprint, half as wide as
+## [constant DOOR_CORRIDOR_HALF_WIDTH] plus half the prop. The corridor faces
+## the road by construction (houses are yawed towards it), so keeping it clear
+## keeps the walk from every door open for the player and for the NPC door
+## anchors.
+func _blocks_a_doorway(position: Vector2, extent: float) -> bool:
+	for placement in placements:
+		if not DOOR_BUILDING_KINDS.has(placement.kind):
+			continue
+		var yaw := deg_to_rad(placement.rotation_deg)
+		var delta := position - placement.position
+		var local_z := delta.x * sin(yaw) + delta.y * cos(yaw)
+		var reach := placement.footprint_radius * placement.scale + DOOR_CORRIDOR_REACH
+		if local_z <= 0.0 or local_z > reach:
+			continue
+		var local_x := delta.x * cos(yaw) - delta.y * sin(yaw)
+		if absf(local_x) < DOOR_CORRIDOR_HALF_WIDTH + extent * 0.5:
 			return true
 	return false
 
