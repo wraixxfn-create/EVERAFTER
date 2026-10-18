@@ -17,7 +17,9 @@ const TAG := "World"
 ## Gap between the terrain surface and the centre of the player capsule.
 const SPAWN_CLEARANCE := 1.0
 const SPAWN_ROAD_INDEX := 2
-const SPAWN_DISTANCE := 30.0
+# Structural correction 11: spawn was 30 u out, hiding the skyline at
+# medium distance. Now 22 u: plaza, inn, hall and pond all in first frame.
+const SPAWN_DISTANCE := 22.0
 
 var _terrain: TerrainGenerator = null
 var _layout: VillageLayout = null

@@ -155,72 +155,102 @@ func build_grass(
 
 func _build_pine(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
-	var trunk_height := 2.2 * scale
+	# Structural correction 11: trunk lean, height variation and irregular tiers
+	# so pines no longer read as identical traffic cones.
+	var trunk_height := (2.0 + rng.randf_range(0.0, 0.6)) * scale
+	var trunk_lean := Vector3(rng.randf_range(-0.08, 0.08), 0.0, rng.randf_range(-0.08, 0.08)) * scale
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.1))
 	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.09))
 	baker.add_cylinder(
-		"trunk", 0.14 * scale, 0.26 * scale, trunk_height, 6,
-		_transform(Vector3(0.0, trunk_height * 0.5, 0.0)), bark_tint, 0.055
+		"trunk", 0.13 * scale, 0.26 * scale, trunk_height, 6,
+		_transform(Vector3(trunk_lean.x, trunk_height * 0.5, trunk_lean.z), 0.0, 0.0, rng.randf_range(-1.5, 1.5)),
+		bark_tint, 0.055
 	)
-	var tiers := 3 + placement.variant % 2
+	var tiers := 3 + placement.variant % 2 + (1 if rng.randf() < 0.35 else 0)
 	for tier in tiers:
 		var t := float(tier) / float(tiers)
-		# Per-tier jitter: a conifer whose every cone has the same radius reads
-		# as a traffic cone, not as a tree.
-		var radius := lerpf(1.5, 0.45, t) * scale * rng.randf_range(0.85, 1.15)
-		var height := lerpf(2.0, 1.3, t) * scale
-		var y := lerpf(trunk_height * 0.75, trunk_height + 2.6 * scale, t)
-		var lean := Vector3(rng.randf_range(-0.12, 0.12), 0.0, rng.randf_range(-0.12, 0.12)) * scale
+		var radius := lerpf(1.55, 0.42, t) * scale * rng.randf_range(0.78, 1.22)
+		var height := lerpf(2.1, 1.15, t) * scale * rng.randf_range(0.88, 1.12)
+		var y := lerpf(trunk_height * 0.68, trunk_height + 2.7 * scale, t) + rng.randf_range(-0.08, 0.08) * scale
+		var lean := Vector3(rng.randf_range(-0.22, 0.22), 0.0, rng.randf_range(-0.22, 0.22)) * scale
+		# Slight trunk taper per tier: larger base tiers branch wider
+		var twist := rng.randf_range(0.0, 360.0)
 		baker.add_cylinder(
-			"pine", 0.0, radius, height, 7,
-			_transform(Vector3(lean.x, y, lean.z)),
-			tint.lightened(t * 0.1), 0.035
+			"pine", 0.0, radius, height, 7 if tier % 2 == 0 else 6,
+			_transform(Vector3(lean.x + trunk_lean.x * (1.0 - t), y, lean.z + trunk_lean.z * (1.0 - t)), twist),
+			tint.lightened(t * 0.12 + rng.randf_range(-0.03, 0.03)), 0.035
 		)
 
 
 func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
-	var trunk_height := (2.0 + float(placement.variant) * 0.4) * scale
+	var trunk_height := (1.9 + float(placement.variant) * 0.45 + rng.randf_range(-0.15, 0.22)) * scale
+	var trunk_tilt := Vector3(rng.randf_range(-0.12, 0.12), 0.0, rng.randf_range(-0.10, 0.10)) * scale
 	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.1))
 	baker.add_cylinder(
-		"trunk", 0.2 * scale, 0.34 * scale, trunk_height, 6,
-		_transform(Vector3(0.0, trunk_height * 0.5, 0.0)), bark_tint, 0.06
+		"trunk", 0.19 * scale, 0.34 * scale, trunk_height, 6,
+		_transform(Vector3(trunk_tilt.x, trunk_height * 0.5, trunk_tilt.z), rng.randf_range(-2.0, 2.0)),
+		bark_tint, 0.06
 	)
 	var leaf_key: String = LEAF_KEYS[placement.variant % LEAF_KEYS.size()]
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.12))
-	var crown_y := trunk_height + 0.9 * scale
-	# Crown size and lobe placement vary per tree: the silhouette is what the
-	# player reads at distance, so that is where the variety has to live.
-	var crown_radius := 1.85 * scale * rng.randf_range(0.88, 1.14)
+	var crown_y := trunk_height + 0.85 * scale + rng.randf_range(-0.12, 0.18) * scale
+	# Structural correction 11: crown asymmetry — squash, tilt, lobe count
+	# varied so oak line no longer a field of identical lollipops.
+	var crown_radius := 1.85 * scale * rng.randf_range(0.82, 1.22)
+	var crown_squash := Vector3(rng.randf_range(1.05, 1.18), rng.randf_range(0.78, 0.92), rng.randf_range(0.95, 1.12))
+	var crown_basis := Basis.from_euler(Vector3(rng.randf_range(-0.15, 0.15), rng.randf() * TAU, rng.randf_range(-0.12, 0.12))).scaled(crown_squash)
 	baker.add_sphere(
-		leaf_key, crown_radius, 4, 7, _transform(Vector3(0.0, crown_y, 0.0)), tint
+		leaf_key, crown_radius, 4, 7,
+		_origin * Transform3D(crown_basis, Vector3(trunk_tilt.x, crown_y, trunk_tilt.z)), tint
 	)
-	for _lobe in 2:
+	var lobe_count := 2 + (1 if rng.randf() < 0.42 else 0)
+	for _lobe in lobe_count:
 		var angle := rng.randf() * TAU
-		var offset := Vector3(cos(angle), 0.0, sin(angle)) * 1.15 * scale
+		var dist := rng.randf_range(0.85, 1.35) * scale
+		var offset := Vector3(cos(angle), 0.0, sin(angle)) * dist
+		var lobe_r := 1.08 * scale * rng.randf_range(0.78, 1.18)
+		var lobe_y := crown_y + rng.randf_range(0.15, 0.68) * scale
+		var lobe_squash := Vector3(rng.randf_range(0.92, 1.08), rng.randf_range(0.85, 1.0), rng.randf_range(0.92, 1.08))
+		var lobe_basis := Basis.IDENTITY.scaled(lobe_squash)
 		baker.add_sphere(
-			leaf_key, 1.18 * scale * rng.randf_range(0.85, 1.12), 4, 6,
-			_transform(Vector3(offset.x, crown_y + 0.5 * scale, offset.z)), tint
+			leaf_key, lobe_r, 4, 6,
+			_origin * Transform3D(lobe_basis, Vector3(offset.x + trunk_tilt.x, lobe_y, offset.z + trunk_tilt.z)), tint.lightened(rng.randf_range(-0.04, 0.06))
 		)
 
 
 func _build_birch(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
-	var trunk_height := (3.0 + float(placement.variant) * 0.5) * scale
+	var trunk_height := (2.9 + float(placement.variant) * 0.55 + rng.randf_range(-0.18, 0.24)) * scale
+	var trunk_tilt := Vector3(rng.randf_range(-0.14, 0.14), 0.0, rng.randf_range(-0.08, 0.08)) * scale
 	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
 	baker.add_cylinder(
-		"trunk_birch", 0.13 * scale, 0.2 * scale, trunk_height, 6,
-		_transform(Vector3(0.0, trunk_height * 0.5, 0.0)), bark_tint, 0.08
+		"trunk_birch", 0.12 * scale, 0.20 * scale, trunk_height, 6,
+		_transform(Vector3(trunk_tilt.x, trunk_height * 0.5, trunk_tilt.z), rng.randf_range(-3.0, 3.0)),
+		bark_tint, 0.08
 	)
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.08))
+	# Structural correction 11: birch canopy less columnar — 3 main clusters
+	# plus 1 occasional side puff, varied height/radius, trunk lean.
 	for index in 3:
-		var angle := rng.randf() * TAU
-		var radius := (0.9 - float(index) * 0.18) * scale
-		var y := trunk_height - 0.2 * scale + float(index) * 0.85 * scale
-		var offset := Vector3(cos(angle), 0.0, sin(angle)) * 0.5 * scale
+		var angle := rng.randf() * TAU + trunk_tilt.x * 0.5
+		var radius := (0.95 - float(index) * 0.16) * scale * rng.randf_range(0.88, 1.15)
+		var y := trunk_height - 0.15 * scale + float(index) * 0.82 * scale + rng.randf_range(-0.08, 0.12) * scale
+		var offset := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.35, 0.72) * scale
 		baker.add_sphere(
 			"leaf_autumn" if placement.variant == 2 else "leaf_bright",
-			radius, 4, 6, _transform(Vector3(offset.x, y, offset.z)), tint
+			radius, 4, 6,
+			_transform(Vector3(offset.x + trunk_tilt.x * 0.5, y, offset.z + trunk_tilt.z * 0.5)),
+			tint.lightened(rng.randf_range(-0.03, 0.04))
+		)
+	if rng.randf() < 0.38:
+		var angle := rng.randf() * TAU
+		var y := trunk_height + rng.randf_range(0.45, 0.95) * scale
+		var offset := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.42, 0.85) * scale
+		baker.add_sphere(
+			"leaf_bright", 0.55 * scale * rng.randf_range(0.8, 1.1), 4, 6,
+			_transform(Vector3(offset.x + trunk_tilt.x * 0.3, y, offset.z + trunk_tilt.z * 0.3)),
+			tint
 		)
 
 

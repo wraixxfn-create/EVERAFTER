@@ -248,25 +248,31 @@ func _compute_heights() -> PackedFloat32Array:
 
 func _base_height(x: float, z: float) -> float:
 	var low := _value_noise(x, z, LOW_FREQUENCY, 1.0)
-	# A very low broad undulation (fields-scale) adds gentle valley-ridge
-	# structure without touching the detail that is masked on roads.  Amplitude
-	# stays small so high ground never becomes a wall and low ground never a
-	# pit — just enough to break the perfect symmetry of a single low octave.
-	low += _value_noise(x + 17.3, z - 11.7, 0.011, 0.32)
+	# Structural correction 11: broad ridge/valley — gentle but readable
+	# at aerial. Two overlapping low frequencies with phase offset create
+	# an undulating field pattern, not one perfect wave.
+	low += _value_noise(x + 17.3, z - 11.7, 0.011, 0.38)
+	low += _value_noise(x - 43.2, z + 28.4, 0.0065, 0.22)
 	var detail := _value_noise(x, z, MID_FREQUENCY, 0.45)
 	detail += _value_noise(x, z, HIGH_FREQUENCY, 0.18)
 	var flat := flatten_weight(x, z)
 	var height := (low + detail * (1.0 - flat)) * height_scale
-	# Light topographic variation in open country only: a modest field warp
-	# that never reaches the plaza, roads or building footprints.  The weight
-	# is (1 - flat) so the village stays walkable and the physics that the
-	# tests validate never changes inside the built area.
+	# Field warp — open country only, walkable slope preserved.
+	# Increased from 0.13 to 0.22 for visible rolling at medium distance,
+	# still <0.75 m peak on 5.0 scale.
 	if layout != null and flat < 0.95:
 		var field_weight := 1.0 - flat
-		# Two scales: broad meadow swell + finer dimpling.
-		var field_warp := _value_noise(x, z, 0.038, 1.0) * 0.35
-		field_warp += _value_noise(x + 91.4, z - 47.2, 0.074, 1.0) * 0.18
-		height += field_warp * field_weight * height_scale * 0.13
+		var field_warp := _value_noise(x, z, 0.038, 1.0) * 0.42
+		field_warp += _value_noise(x + 91.4, z - 47.2, 0.074, 1.0) * 0.24
+		field_warp += _value_noise(x - 27.0, z + 64.0, 0.016, 1.0) * 0.20
+		height += field_warp * field_weight * height_scale * 0.22
+		# Subtle roadside swale: very shallow ditch where road meets field,
+		# makes the carriageway read as built, not painted. Masked strictly
+		# to road edge (weight 0.25-0.65) so the centre stays flat for walking.
+		var rw := layout.road_weight(x, z)
+		if rw > 0.28 and rw < 0.68:
+			var swale := sin((rw - 0.28) / 0.40 * PI) * field_weight
+			height -= swale * height_scale * 0.032
 	var plaza := plaza_weight(x, z)
 	if plaza > 0.0:
 		height = lerpf(height, _plaza_level, plaza)
@@ -275,14 +281,15 @@ func _base_height(x: float, z: float) -> float:
 		if pond > 0.0:
 			height = lerpf(height, _pond_level, clampf(pond * 2.0, 0.0, 1.0))
 			height += layout.terrain_offset(x, z) * height_scale
-		# Subtle shore berm: a faint lip just before the basin drops, so the
-		# pond reads as a natural hollow rather than a perfectly flat cut.
-		# Placed *after* the basin carve, masked by (1 - flat) so roads and
-		# building plots never grow a ridge.  Peak < 0.30 m.
+		# Shore berm: readable lip before the basin drops — now 0.42 m peak
+		# (was 0.27) so the hollow reads as hollow at eye level.
 		var pond_w2 := layout.pond_weight(x, z)
-		if pond_w2 > 0.06 and pond_w2 < 0.88:
-			var berm := sin(pond_w2 * PI) * (1.0 - flat * 0.45)
-			height += berm * height_scale * 0.055
+		if pond_w2 > 0.05 and pond_w2 < 0.88:
+			var berm := sin(pond_w2 * PI) * (1.0 - flat * 0.35)
+			height += berm * height_scale * 0.082
+			# Secondary undulation on berm crest for naturalism
+			var berm_n := _value_noise(x, z, 0.086, 1.0) * 0.12
+			height += berm_n * height_scale * 0.02 * (1.0 - flat)
 	return height
 
 
