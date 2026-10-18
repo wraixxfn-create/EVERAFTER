@@ -142,6 +142,7 @@ func _build_props() -> Node3D:
 	_bake_plaza_kerb(baker)
 	_bake_road_kerb(baker)
 	_bake_pond_lilies(baker)
+	_bake_pond_shore_pebbles(baker)
 	for placement in layout.placements:
 		if BuildingFactory.is_structure(placement.kind):
 			continue
@@ -201,6 +202,9 @@ func _build_vegetation() -> Node3D:
 
 ## A low stone kerb around the plaza: the cheapest possible way to make the
 ## square read as built ground rather than a patch of yellow grass.
+## Visual polish 06 slightly varies each segment length and height so the ring
+## never reads as a perfect extruded torus — a few centimetres of irregularity
+## are enough to suggest hand-laid stone.
 func _bake_plaza_kerb(baker: MeshBaker) -> void:
 	var step := TAU / float(PLAZA_KERB_SEGMENTS)
 	for index in PLAZA_KERB_SEGMENTS:
@@ -209,14 +213,18 @@ func _bake_plaza_kerb(baker: MeshBaker) -> void:
 		var z := sin(angle) * PLAZA_KERB_RADIUS
 		var yaw := rad_to_deg(atan2(x, z))
 		var height := terrain.height_at(x, z)
-		var tint := Color.WHITE.darkened(0.06 * float(index % 3))
+		var tint := Color.WHITE.darkened(0.05 + _detail_rng.randf_range(0.0, 0.08) + 0.02 * float(index % 2))
+		var length := _detail_rng.randf_range(1.75, 2.05)
+		var h := _detail_rng.randf_range(0.26, 0.30)
 		baker.add_box(
 			"cobble",
-			Vector3(1.9, 0.28, 0.7),
+			Vector3(length, h, 0.66 + _detail_rng.randf_range(-0.06, 0.06)),
 			Transform3D(
-				Basis.from_euler(Vector3(0, deg_to_rad(yaw), 0)), Vector3(x, height + 0.12, z)
+				Basis.from_euler(Vector3(0, deg_to_rad(yaw + _detail_rng.randf_range(-2.0, 2.0)), 0)),
+				Vector3(x, height + 0.11 + _detail_rng.randf_range(-0.015, 0.015), z)
 			),
-			tint
+			tint,
+			0.06
 		)
 
 
@@ -293,6 +301,78 @@ func _bake_pond_lilies(baker: MeshBaker) -> void:
 			tint,
 			true
 		)
+
+
+## Pebble-and-gravel ring at the water line: small, flat stones that hide the
+## hard circular cut between the water disc and the terrain mesh.  No collider —
+## the player steps over them — and merged into the prop mesh so they cost no
+## extra draw call.  Visual polish 06: makes the shore read as shore, not as a
+## texture edge.
+func _bake_pond_shore_pebbles(baker: MeshBaker) -> void:
+	var center := layout.pond_center
+	var ring := layout.pond_radius
+	for index in 18:
+		var angle := TAU * (float(index) + _detail_rng.randf_range(-0.25, 0.25)) / 18.0
+		# Two concentric rings: the inner one half-buried in the mud, the outer
+		# one on the grass verge.  Jitter keeps them from forming a ruler.
+		for band in [0.88, 1.06]:
+			if _detail_rng.randf() < 0.18:
+				continue
+			var dist := ring * (band + _detail_rng.randf_range(-0.07, 0.07))
+			var point := center + Vector2(cos(angle), sin(angle)) * dist
+			if layout.road_weight(point.x, point.y) > 0.15:
+				continue
+			if _near_structure(point, 0.6):
+				continue
+			var h := terrain.height_at(point.x, point.y)
+			var size := Vector3(
+				_detail_rng.randf_range(0.55, 0.95),
+				_detail_rng.randf_range(0.12, 0.18),
+				_detail_rng.randf_range(0.45, 0.75)
+			)
+			var yaw := _detail_rng.randf_range(0.0, 360.0)
+			var key := "rock" if _detail_rng.randf() < 0.55 else "stone"
+			var tint := Color.WHITE.darkened(_detail_rng.randf_range(0.04, 0.16))
+			baker.add_box(
+				key,
+				size,
+				Transform3D(
+					Basis.from_euler(Vector3(0, deg_to_rad(yaw), deg_to_rad(_detail_rng.randf_range(-4.0, 4.0)))),
+					Vector3(point.x, h + 0.06, point.y)
+				),
+				tint,
+				0.08
+			)
+		# Occasional reed clump just outside the water — two crossed quads,
+		# purely decorative, very cheap.
+		if _detail_rng.randf() < 0.42:
+			var dist := ring * _detail_rng.randf_range(1.02, 1.22)
+			var point := center + Vector2(cos(angle), sin(angle)) * dist
+			if layout.road_weight(point.x, point.y) > 0.08:
+				continue
+			var h := terrain.height_at(point.x, point.y)
+			var reed_h := _detail_rng.randf_range(0.55, 0.85)
+			var reed_tint := Color.WHITE.darkened(_detail_rng.randf_range(0.02, 0.10))
+			baker.add_quad(
+				"leaf_deep",
+				Vector2(0.12, reed_h),
+				Transform3D(
+					Basis.from_euler(Vector3(0, _detail_rng.randf() * TAU, deg_to_rad(8.0))),
+					Vector3(point.x, h + reed_h * 0.5, point.y)
+				),
+				reed_tint,
+				true
+			)
+			baker.add_quad(
+				"leaf_deep",
+				Vector2(0.12, reed_h * 0.9),
+				Transform3D(
+					Basis.from_euler(Vector3(0, _detail_rng.randf() * TAU + PI * 0.5, deg_to_rad(8.0))),
+					Vector3(point.x, h + reed_h * 0.45, point.y)
+				),
+				reed_tint.lightened(0.06),
+				true
+			)
 
 
 func _build_water() -> Node3D:
