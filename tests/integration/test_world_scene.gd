@@ -319,8 +319,19 @@ static func check_npcs(harness: TestHarness, world: Node3D, tree: SceneTree) -> 
 	harness.check(presenter.select_npc(target.id), "selecting a known NPC succeeds")
 	harness.check_equals(presenter.get_selected_id(), target.id, "the presenter remembers it")
 	harness.check_equals(panel.get_selected_id(), target.id, "the panel receives the event")
-	harness.check(presenter.get_view_node(target.id) != null, "the selected NPC has a view")
+	var target_view := presenter.get_view_node(target.id)
+	harness.check(target_view != null, "the selected NPC has a view")
 	await tree.process_frame
+	if target_view != null:
+		harness.check(
+			target_view.get_node_or_null("BodyRig") != null,
+			"the NPC view uses the articulated BodyRig"
+		)
+		var ring := target_view.get_node_or_null("SelectedRing") as Node3D
+		harness.check(
+			ring != null and ring.visible,
+			"the selected NPC displays its selection ring"
+		)
 	harness.check_equals(panel.get_displayed_name(), target.display_name, "the panel shows the name")
 	harness.check_equals(
 		panel.get_selector_item_count(), system.get_record_count() + 1, "the selector lists everyone"

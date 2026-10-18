@@ -1,18 +1,16 @@
 extends CanvasLayer
-## DiagnosticsHud — the minimal diagnostic overlay required by this phase.
+## DiagnosticsHud — the diagnostic overlay toggled with `F1`.
 ##
-## It shows the project name and the simulated day (plus the world clock, the
-## tick counter, the simulation speed, the day phase and the FPS), and nothing
-## else. It is read-only by design: the HUD never mutates the simulation, it
-## only reads the `Game` autoload and listens to `EventBus`.
-##
-## Everything is plain `Label` nodes in `scenes/diagnostics_hud.tscn`, so it can
-## be replaced by a real UI later without touching any other module.
+## Positioned at the top-centre of the screen so it never overlaps `WorldHud`
+## or `EconomyPanel` on the left, nor `NpcPanel` on the right. Read-only by
+## design: it never mutates the simulation, it only reads the `Game` autoload
+## and listens to `EventBus`.
 
 const TITLE_FORMAT := "%s  ·  %s"
 
 var _status_text := "Avvio in corso…"
 
+@onready var _panel: PanelContainer = $Panel
 @onready var _title_label: Label = $Panel/Margins/Lines/TitleLabel
 @onready var _day_label: Label = $Panel/Margins/Lines/DayLabel
 @onready var _time_label: Label = $Panel/Margins/Lines/TimeLabel
@@ -23,6 +21,8 @@ var _status_text := "Avvio in corso…"
 
 
 func _ready() -> void:
+	_panel.theme = UiTheme.shared_theme()
+	UiTheme.style_title_label(_title_label, 15)
 	EventBus.day_advanced.connect(_on_day_advanced)
 	EventBus.time_scale_changed.connect(_on_time_scale_changed)
 	EventBus.simulation_paused_changed.connect(_on_paused_changed)
@@ -30,8 +30,6 @@ func _ready() -> void:
 	_refresh()
 
 
-## Text refresh is cheap (seven labels) and keeps the HUD honest: it always
-## mirrors the current state instead of caching values that could go stale.
 func _process(_delta: float) -> void:
 	_refresh()
 

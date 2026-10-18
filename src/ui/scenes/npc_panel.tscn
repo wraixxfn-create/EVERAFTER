@@ -3,44 +3,56 @@
 [ext_resource type="Script" path="res://src/ui/npc_panel.gd" id="1_npcpanel"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(0.07, 0.06, 0.05, 0.85)
+content_margin_left = 14.0
+content_margin_top = 12.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+bg_color = Color(0.08, 0.065, 0.055, 0.9)
 border_width_left = 1
-border_width_top = 1
+border_width_top = 2
 border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.5, 0.4, 0.22, 0.75)
+border_width_bottom = 2
+border_color = Color(0.66, 0.53, 0.3, 0.86)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
+shadow_color = Color(0, 0, 0, 0.38)
+shadow_size = 6
+shadow_offset = Vector2(0, 2)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bar_bg"]
-bg_color = Color(0.12, 0.11, 0.1, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
+bg_color = Color(0.13, 0.11, 0.095, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.42, 0.34, 0.22, 0.52)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_energy"]
-bg_color = Color(0.42, 0.68, 0.35, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
+bg_color = Color(0.42, 0.7, 0.36, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hunger"]
 bg_color = Color(0.82, 0.58, 0.28, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wellbeing"]
-bg_color = Color(0.42, 0.6, 0.78, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
+bg_color = Color(0.4, 0.64, 0.8, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [node name="NpcPanel" type="CanvasLayer"]
 layer = 6
@@ -60,87 +72,100 @@ layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -392.0
-offset_top = 18.0
+offset_left = -384.0
+offset_top = 16.0
 offset_right = -20.0
-offset_bottom = 726.0
+offset_bottom = 180.0
 grow_horizontal = 0
 grow_vertical = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="Margin" type="MarginContainer" parent="Root/Panel"]
 layout_mode = 2
-theme_override_constants/margin_left = 14
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 14
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_left = 2
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 2
+theme_override_constants/margin_bottom = 0
 
 [node name="Lines" type="VBoxContainer" parent="Root/Panel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 5
 
 [node name="HeaderLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
+theme_override_font_sizes/font_size = 15
 text = "ABITANTI"
 
 [node name="Selector" type="OptionButton" parent="Root/Panel/Margin/Lines"]
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
+tooltip_text = "Seleziona un abitante del villaggio (anche se lontano) o chiudi la scheda."
 fit_to_longest_item = false
 
 [node name="Separator" type="HSeparator" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(0, 6)
 layout_mode = 2
 
 [node name="NameLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.92, 0.82, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.96, 0.92, 0.82, 1)
+theme_override_font_sizes/font_size = 20
 text = "Nessun abitante selezionato"
 
 [node name="ProfessionLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.76, 0.78, 0.68, 1)
+theme_override_colors/font_color = Color(0.84, 0.8, 0.68, 1)
 theme_override_font_sizes/font_size = 13
 text = "—"
+
+[node name="TraitsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.74, 0.66, 1)
+theme_override_font_sizes/font_size = 12
+text = ""
 
 [node name="ActivityLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.88, 0.8, 1)
-theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 1)
+theme_override_font_sizes/font_size = 13
 text = "Attività: —"
 
 [node name="GoalLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.76, 0.8, 0.76, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.78, 0.82, 0.76, 1)
+theme_override_font_sizes/font_size = 12
 text = "Obiettivo: —"
 
 [node name="NeedsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
+theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
 theme_override_font_sizes/font_size = 12
-text = "BISOGNI"
+text = "BISOGNI VITALI"
 
 [node name="NeedsGrid" type="GridContainer" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 theme_override_constants/h_separation = 8
-theme_override_constants/v_separation = 4
+theme_override_constants/v_separation = 5
 columns = 3
 
 [node name="EnergyLabel" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
+mouse_filter = 1
+tooltip_text = "Energia (100 = riposato; ≤ 28 cerca riposo; ≤ 7 esausto)"
+theme_override_colors/font_color = Color(0.9, 0.88, 0.8, 1)
+theme_override_font_sizes/font_size = 12
 text = "Energia"
 
 [node name="EnergyBar" type="ProgressBar" parent="Root/Panel/Margin/Lines/NeedsGrid"]
-custom_minimum_size = Vector2(150, 12)
+custom_minimum_size = Vector2(168, 14)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 4
+tooltip_text = "Energia (100 = riposato; ≤ 28 cerca riposo)"
 max_value = 100.0
 is_ratio_exp = false
 show_percentage = false
@@ -148,21 +173,27 @@ theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
 theme_override_styles/fill = SubResource("StyleBoxFlat_energy")
 
 [node name="EnergyValue" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
-custom_minimum_size = Vector2(30, 0)
+custom_minimum_size = Vector2(34, 0)
 layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 1)
 theme_override_font_sizes/font_size = 12
 text = "—"
 horizontal_alignment = 2
 
 [node name="HungerLabel" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
+mouse_filter = 1
+tooltip_text = "Fame (0 = sazio; ≥ 62 cerca un pasto; ≥ 88 fame urgente)"
+theme_override_colors/font_color = Color(0.9, 0.88, 0.8, 1)
+theme_override_font_sizes/font_size = 12
 text = "Fame"
 
 [node name="HungerBar" type="ProgressBar" parent="Root/Panel/Margin/Lines/NeedsGrid"]
-custom_minimum_size = Vector2(150, 12)
+custom_minimum_size = Vector2(168, 14)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 4
+tooltip_text = "Fame (0 = sazio; ≥ 62 cerca un pasto)"
 max_value = 100.0
 is_ratio_exp = false
 show_percentage = false
@@ -170,21 +201,27 @@ theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
 theme_override_styles/fill = SubResource("StyleBoxFlat_hunger")
 
 [node name="HungerValue" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
-custom_minimum_size = Vector2(30, 0)
+custom_minimum_size = Vector2(34, 0)
 layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 1)
 theme_override_font_sizes/font_size = 12
 text = "—"
 horizontal_alignment = 2
 
 [node name="WellbeingLabel" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
+mouse_filter = 1
+tooltip_text = "Benessere (100 = sereno; influenzato da pasti, riposo e relazioni sociali)"
+theme_override_colors/font_color = Color(0.9, 0.88, 0.8, 1)
+theme_override_font_sizes/font_size = 12
 text = "Benessere"
 
 [node name="WellbeingBar" type="ProgressBar" parent="Root/Panel/Margin/Lines/NeedsGrid"]
-custom_minimum_size = Vector2(150, 12)
+custom_minimum_size = Vector2(168, 14)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 4
+tooltip_text = "Benessere (100 = sereno)"
 max_value = 100.0
 is_ratio_exp = false
 show_percentage = false
@@ -192,57 +229,55 @@ theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
 theme_override_styles/fill = SubResource("StyleBoxFlat_wellbeing")
 
 [node name="WellbeingValue" type="Label" parent="Root/Panel/Margin/Lines/NeedsGrid"]
-custom_minimum_size = Vector2(30, 0)
+custom_minimum_size = Vector2(34, 0)
 layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 1)
 theme_override_font_sizes/font_size = 12
 text = "—"
 horizontal_alignment = 2
 
 [node name="SummaryTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
+theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
 theme_override_font_sizes/font_size = 12
-text = "RIEPILOGO"
+text = "STATO ATTUALE"
 
 [node name="SummaryLabel" type="Label" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.8, 0.82, 0.84, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.86, 0.84, 0.78, 1)
+theme_override_font_sizes/font_size = 12
 text = "Scegli un nome dall'elenco o clicca un abitante nel villaggio."
 
 [node name="RelationsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
+theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
 theme_override_font_sizes/font_size = 12
-text = "RELAZIONI"
+text = "LEGAMI SOCIALI"
 
 [node name="RelationsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 62)
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.82, 0.84, 0.86, 1)
+theme_override_colors/font_color = Color(0.88, 0.86, 0.8, 1)
 theme_override_font_sizes/font_size = 12
 text = "Nessuna relazione conosciuta."
 
 [node name="MemoriesTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.87, 0.62, 1)
+theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
 theme_override_font_sizes/font_size = 12
-text = "RICORDI"
+text = "MEMORIA PERSONALE"
 
 [node name="MemoriesLabel" type="Label" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.76, 0.8, 0.78, 1)
+theme_override_colors/font_color = Color(0.82, 0.84, 0.78, 1)
 theme_override_font_sizes/font_size = 12
 text = "Nessun ricordo rilevante."
 
 [node name="HintLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
-theme_override_font_sizes/font_size = 12
-text = "Clic sinistro su un abitante, oppure scegli dall'elenco. I dati continuano ad aggiornarsi anche fuori vista."
+theme_override_colors/font_color = Color(0.68, 0.66, 0.58, 1)
+theme_override_font_sizes/font_size = 11
+text = "Clic sinistro su un abitante o scegli dall'elenco. La simulazione prosegue anche fuori vista."

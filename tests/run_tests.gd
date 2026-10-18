@@ -42,6 +42,7 @@ func _initialize() -> void:
 	TestSkyRig.run_tests(harness)
 	TestNpcData.run_tests(harness)
 	TestNpcRoster.run_tests(harness)
+	TestNpcVisuals.run_tests(harness)
 	TestNpcRouteGraph.run_tests(harness)
 	TestNpcSimulation.run_tests(harness)
 	TestVillageNpcPlaces.run_tests(harness)

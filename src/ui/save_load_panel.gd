@@ -9,13 +9,23 @@ extends CanvasLayer
 ## * A scrollable chronicle list of real entries from `ChronicleBook`, with a
 ##   category filter and a day filter (all / current day).
 ##
-## Built entirely in code to avoid .tscn churn and stay aligned with the rest
-## of the UI's lightweight style. The panel never drives the simulation; it
-## only calls `Game.request_save()` and reads state from Game/ChronicleBook.
+## Styled with [UiTheme] to match the medieval village aesthetic. The panel
+## never drives the simulation; it only calls `Game.request_save()` and reads
+## state from `Game` / `ChronicleBook`.
 
-const PANEL_WIDTH := 520
-const PANEL_HEIGHT := 620
+const PANEL_WIDTH := 560
+const PANEL_HEIGHT := 640
 const ENTRIES_PER_PAGE := 200
+
+const CATEGORY_COLORS := {
+	ChronicleEntry.Category.PRODUCTION: Color(0.62, 0.82, 0.48, 1.0),
+	ChronicleEntry.Category.SHORTAGE: Color(0.90, 0.52, 0.40, 1.0),
+	ChronicleEntry.Category.HELP: Color(0.58, 0.74, 0.90, 1.0),
+	ChronicleEntry.Category.RELATIONSHIP: Color(0.80, 0.68, 0.86, 1.0),
+	ChronicleEntry.Category.PROJECT: Color(0.94, 0.80, 0.44, 1.0),
+	ChronicleEntry.Category.MILESTONE: Color(0.92, 0.86, 0.66, 1.0),
+	ChronicleEntry.Category.SYSTEM: Color(0.70, 0.68, 0.64, 1.0),
+}
 
 var _visible: bool = false
 var _category_filter: int = -1
@@ -57,6 +67,10 @@ func toggle() -> void:
 		_show_panel()
 
 
+func is_panel_open() -> bool:
+	return _visible
+
+
 func _show_panel() -> void:
 	_visible = true
 	_root.visible = true
@@ -74,22 +88,19 @@ func _hide_panel() -> void:
 
 
 func _build_ui() -> void:
-	# Background dimmer.
 	_root = Control.new()
 	_root.name = "Root"
+	_root.theme = UiTheme.shared_theme()
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.02, 0.02, 0.03, 0.55)
+	bg.color = Color(0.02, 0.02, 0.02, 0.62)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	bg.gui_input.connect(_on_background_input)
 	_root.add_child(bg)
 	add_child(_root)
-	# Panel: sized explicitly and centered via anchors. On a viewport
-	# smaller than PANEL_WIDTH x PANEL_HEIGHT the panel overflows (same
-	# approach used by EconomyPanel in this project); on a 1600x900 window
-	# it is centred.
+
 	_panel = PanelContainer.new()
 	_panel.anchor_left = 0.5
 	_panel.anchor_top = 0.5
@@ -100,49 +111,59 @@ func _build_ui() -> void:
 	_panel.offset_right = PANEL_WIDTH * 0.5
 	_panel.offset_bottom = PANEL_HEIGHT * 0.5
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var box_style := StyleBoxFlat.new()
-	box_style.bg_color = Color(0.07, 0.06, 0.05, 0.92)
-	box_style.border_width_left = 1
-	box_style.border_width_top = 1
-	box_style.border_width_right = 1
-	box_style.border_width_bottom = 1
-	box_style.border_color = Color(0.52, 0.42, 0.24, 0.8)
-	box_style.corner_radius_top_left = 8
-	box_style.corner_radius_top_right = 8
-	box_style.corner_radius_bottom_right = 8
-	box_style.corner_radius_bottom_left = 8
-	_panel.add_theme_stylebox_override("panel", box_style)
+	_panel.add_theme_stylebox_override(
+		"panel",
+		UiTheme.make_panel_style(
+			UiTheme.BG_MODAL, UiTheme.BORDER_GOLD_BRIGHT, 8, 18.0, 16.0
+		)
+	)
 	_root.add_child(_panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_top", 14)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_bottom", 14)
-	_panel.add_child(margin)
+
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
-	margin.add_child(vbox)
-	# Title row.
+	vbox.add_theme_constant_override("separation", 10)
+	_panel.add_child(vbox)
+
+	_build_header_section(vbox)
+	_build_filter_row(vbox)
+	_build_chronicle_area(vbox)
+	_build_footer_buttons(vbox)
+
+	_confirm_dialog = ConfirmationDialog.new()
+	_confirm_dialog.title = "Conferma operazione"
+	_confirm_dialog.dialog_text = "Sei sicuro?"
+	_confirm_dialog.confirmed.connect(_on_confirm)
+	_root.add_child(_confirm_dialog)
+	_root.visible = false
+	_ensure_action_exists("open_menu", [KEY_C])
+
+
+func _build_header_section(vbox: VBoxContainer) -> void:
 	var title := Label.new()
-	title.text = "CRONACHE E SALVATAGGIO"
-	title.add_theme_color_override("font_color", Color(0.95, 0.87, 0.62, 1.0))
-	title.add_theme_font_size_override("font_size", 16)
+	title.text = "CRONACHE DEL VILLAGGIO E SALVATAGGIO"
+	UiTheme.style_title_label(title, 17)
 	vbox.add_child(title)
+
 	_save_status_label = Label.new()
 	_save_status_label.add_theme_font_size_override("font_size", 12)
-	_save_status_label.add_theme_color_override("font_color", Color(0.78, 0.74, 0.62, 1.0))
+	_save_status_label.add_theme_color_override("font_color", UiTheme.TEXT_SECONDARY)
 	_save_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(_save_status_label)
-	# Filter row.
+	vbox.add_child(HSeparator.new())
+
+
+func _build_filter_row(vbox: VBoxContainer) -> void:
 	var filter_row := HBoxContainer.new()
-	filter_row.add_theme_constant_override("separation", 8)
+	filter_row.add_theme_constant_override("separation", 10)
 	vbox.add_child(filter_row)
 	var cat_label := Label.new()
 	cat_label.text = "Categoria:"
 	cat_label.add_theme_font_size_override("font_size", 12)
+	cat_label.add_theme_color_override("font_color", UiTheme.TEXT_GOLD)
 	filter_row.add_child(cat_label)
+
 	_category_button = OptionButton.new()
-	_category_button.add_item("Tutte")
+	_category_button.tooltip_text = "Filtra le voci della cronaca per argomento."
+	_category_button.add_item("Tutte le voci")
 	_category_button.set_item_metadata(0, -1)
 	_category_button.add_item("Produzione")
 	_category_button.set_item_metadata(1, ChronicleEntry.Category.PRODUCTION)
@@ -160,62 +181,75 @@ func _build_ui() -> void:
 	_category_button.set_item_metadata(7, ChronicleEntry.Category.SYSTEM)
 	_category_button.item_selected.connect(_on_category_selected)
 	filter_row.add_child(_category_button)
+
 	var day_label := Label.new()
-	day_label.text = "Giorno:"
+	day_label.text = "Periodo:"
 	day_label.add_theme_font_size_override("font_size", 12)
+	day_label.add_theme_color_override("font_color", UiTheme.TEXT_GOLD)
 	filter_row.add_child(day_label)
+
 	_day_button = OptionButton.new()
-	_day_button.add_item("Tutti")
+	_day_button.tooltip_text = "Mostra l'intera cronaca oppure soltanto il giorno in corso."
+	_day_button.add_item("Tutti i giorni")
 	_day_button.set_item_metadata(0, 0)
 	_day_button.add_item("Giorno corrente")
 	_day_button.set_item_metadata(1, -1)
 	_day_button.item_selected.connect(_on_day_selected)
 	filter_row.add_child(_day_button)
-	filter_row.add_child(Control.new()) # spacer
-	# Chronicle scroll.
+
+
+func _build_chronicle_area(vbox: VBoxContainer) -> void:
+	var ledger_box := PanelContainer.new()
+	ledger_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ledger_box.add_theme_stylebox_override(
+		"panel", UiTheme.make_inset_style(UiTheme.BG_INSET, UiTheme.BORDER_SUBTLE, 6, 10.0, 8.0)
+	)
+	vbox.add_child(ledger_box)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	vbox.add_child(scroll)
+	ledger_box.add_child(scroll)
+
 	_entries_container = VBoxContainer.new()
 	_entries_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_entries_container.add_theme_constant_override("separation", 3)
+	_entries_container.add_theme_constant_override("separation", 5)
 	scroll.add_child(_entries_container)
+
 	_message_label = Label.new()
-	_message_label.add_theme_font_size_override("font_size", 12)
-	_message_label.add_theme_color_override("font_color", Color(0.8, 0.75, 0.65, 0.9))
+	_message_label.add_theme_font_size_override("font_size", 13)
+	_message_label.add_theme_color_override("font_color", UiTheme.TEXT_GOLD)
 	_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(_message_label)
-	# Button row.
+
+
+func _build_footer_buttons(vbox: VBoxContainer) -> void:
 	var btn_row := HBoxContainer.new()
 	btn_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(btn_row)
 	_save_button = Button.new()
 	_save_button.text = "Salva adesso"
+	_save_button.tooltip_text = "Salva subito lo stato del villaggio, degli abitanti e della cronaca."
 	_save_button.pressed.connect(_on_save_pressed)
 	btn_row.add_child(_save_button)
 	_load_button = Button.new()
 	_load_button.text = "Carica salvataggio"
+	_load_button.tooltip_text = "Ripristina l'ultimo salvataggio disponibile su disco."
 	_load_button.pressed.connect(_on_load_pressed)
 	btn_row.add_child(_load_button)
 	_new_button = Button.new()
 	_new_button.text = "Nuovo mondo"
+	_new_button.tooltip_text = "Elimina il file di salvataggio per ricominciare da zero al riavvio."
 	_new_button.pressed.connect(_on_new_pressed)
 	btn_row.add_child(_new_button)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_row.add_child(spacer)
 	var close_button := Button.new()
-	close_button.text = "Chiudi"
+	close_button.text = "Chiudi (Esc)"
+	close_button.tooltip_text = "Chiude il pannello e torna al villaggio."
 	close_button.pressed.connect(_hide_panel)
 	btn_row.add_child(close_button)
-	# Confirmation dialog (shared for destructive actions).
-	_confirm_dialog = ConfirmationDialog.new()
-	_confirm_dialog.title = "Conferma"
-	_confirm_dialog.dialog_text = "Sei sicuro?"
-	_confirm_dialog.confirmed.connect(_on_confirm)
-	_root.add_child(_confirm_dialog)
-	_root.visible = false
-	# Register the open_menu action if missing from project.godot — safe no-op
-	# if already present.
-	_ensure_action_exists("open_menu", [KEY_C])
 
 
 func _refresh() -> void:
@@ -238,7 +272,6 @@ func _refresh() -> void:
 	var count := book.count() if book != null else 0
 	parts.append("%d voci di cronaca." % count)
 	_save_status_label.text = " · ".join(parts)
-	# Load button only enabled when a save exists.
 	if _load_button != null:
 		_load_button.disabled = not bool(info.get("exists", false))
 	_refresh_entries()
@@ -256,14 +289,12 @@ func _refresh_entries() -> void:
 	if day_filter == -1:
 		day_filter = Game.get_day()
 	var entries := book.query(8, day_filter, _category_filter, ENTRIES_PER_PAGE)
-	# Newest first is the order returned by query(); we reverse to show
-	# oldest on top for narrative reading.
 	entries.reverse()
 	if entries.is_empty():
 		var empty := Label.new()
-		empty.text = "Nessun evento da mostrare con questi filtri."
-		empty.add_theme_font_size_override("font_size", 12)
-		empty.add_theme_color_override("font_color", Color(0.65, 0.62, 0.55, 0.8))
+		empty.text = "Nessun evento registrato per i filtri selezionati."
+		empty.add_theme_font_size_override("font_size", 13)
+		empty.add_theme_color_override("font_color", UiTheme.TEXT_MUTED)
 		_entries_container.add_child(empty)
 		return
 	for e in entries:
@@ -272,33 +303,29 @@ func _refresh_entries() -> void:
 		line.add_theme_font_size_override("font_size", 12)
 		var color := _color_for_category(e.category)
 		line.add_theme_color_override("font_color", color)
+		var row_style := StyleBoxFlat.new()
+		row_style.bg_color = Color(0.15, 0.12, 0.095, 0.55)
+		row_style.border_width_left = 3
+		row_style.border_color = color
+		row_style.corner_radius_top_right = 4
+		row_style.corner_radius_bottom_right = 4
+		row_style.content_margin_left = 8.0
+		row_style.content_margin_right = 6.0
+		row_style.content_margin_top = 4.0
+		row_style.content_margin_bottom = 4.0
+		line.add_theme_stylebox_override("normal", row_style)
 		var time_str := SimulationClock.format_minutes(e.minute_of_day)
-		line.text = "Giorno %d, %s · [%s] %s" % [e.day, time_str, e.category_label(), e.summary]
+		line.text = "Giorno %d, %s · [%s] %s" % [
+			e.day, time_str, e.category_label(), e.summary
+		]
 		_entries_container.add_child(line)
 
 
 func _color_for_category(cat: int) -> Color:
-	match cat:
-		ChronicleEntry.Category.PRODUCTION:
-			return Color(0.58, 0.78, 0.45, 1.0)
-		ChronicleEntry.Category.SHORTAGE:
-			return Color(0.85, 0.52, 0.40, 1.0)
-		ChronicleEntry.Category.HELP:
-			return Color(0.55, 0.70, 0.88, 1.0)
-		ChronicleEntry.Category.RELATIONSHIP:
-			return Color(0.77, 0.65, 0.82, 1.0)
-		ChronicleEntry.Category.PROJECT:
-			return Color(0.90, 0.78, 0.42, 1.0)
-		ChronicleEntry.Category.MILESTONE:
-			return Color(0.80, 0.76, 0.62, 1.0)
-		ChronicleEntry.Category.SYSTEM:
-			return Color(0.55, 0.55, 0.58, 1.0)
-	return Color(0.85, 0.82, 0.72, 1.0)
+	return CATEGORY_COLORS.get(cat, Color(0.85, 0.82, 0.72, 1.0))
 
 
 func _on_category_selected(index: int) -> void:
-	# The OptionButton holds the category id as the item metadata. The "Tutte"
-	# item has metadata -1 which maps to "no filter".
 	_category_filter = _category_button.get_item_metadata(index)
 	_refresh_entries()
 
@@ -324,11 +351,11 @@ func _on_save_pressed() -> void:
 func _do_save() -> void:
 	var err := Game.request_save()
 	if err == SaveManager.Error.OK:
-		_message_label.text = "Partita salvata."
-		_message_label.add_theme_color_override("font_color", Color(0.55, 0.80, 0.50, 1.0))
+		_message_label.text = "✓ Partita salvata con successo."
+		_message_label.add_theme_color_override("font_color", UiTheme.TEXT_GOOD)
 	else:
 		_message_label.text = "Salvataggio fallito: %s." % SaveManager.error_label(err)
-		_message_label.add_theme_color_override("font_color", Color(0.85, 0.50, 0.40, 1.0))
+		_message_label.add_theme_color_override("font_color", UiTheme.TEXT_CRITICAL)
 	_refresh()
 
 
@@ -336,8 +363,7 @@ func _on_load_pressed() -> void:
 	_confirm_save = false
 	_confirm_dialog.dialog_text = (
 		"Caricare l'ultimo salvataggio? I progressi non salvati andranno persi.\n"
-		+ "Il mondo verrà ricaricato dal menu principale "
-		+ "(questa versione non ricarica la scena senza riavvio)."
+		+ "Lo stato dei sistemi verrà ripristinato dal file di salvataggio."
 	)
 	_confirm_dialog.popup_centered()
 
@@ -355,31 +381,24 @@ func _on_confirm() -> void:
 	if _confirm_save:
 		_do_save()
 		return
-	# Load / New do a best-effort scene reload. Godot does not hot-replace
-	# the running scene cleanly for all nodes; we document that a restart
-	# is required after load/new in v1 (see README).
-	# For "New world" we delete the save first.
 	if _confirm_dialog.dialog_text.begins_with("Eliminare"):
 		_delete_save_files()
 		_message_label.text = "Salvataggio eliminato. Riavvia per iniziare un nuovo mondo."
+		_message_label.add_theme_color_override("font_color", UiTheme.TEXT_WARN)
 	else:
-		# Attempt a live load: re-run the world systems' load path. Because
-		# MainWorld has already built the terrain and places we cannot
-		# re-instantiate everything here, so we do the state restore via
-		# SaveManager and refresh views.
 		var sm := Game.get_save_manager()
 		if sm != null:
 			var res: Array = sm.load_from_file()
 			var code: int = res[0]
 			if code == SaveManager.Error.OK:
 				_message_label.text = String(res[1])
-				_message_label.add_theme_color_override("font_color", Color(0.55, 0.80, 0.50, 1.0))
+				_message_label.add_theme_color_override("font_color", UiTheme.TEXT_GOOD)
 			else:
 				_message_label.text = "Caricamento fallito: %s — %s" % [
 					SaveManager.error_label(code), String(res[1])
 				]
 				_message_label.add_theme_color_override(
-					"font_color", Color(0.85, 0.50, 0.40, 1.0)
+					"font_color", UiTheme.TEXT_CRITICAL
 				)
 	_refresh()
 
@@ -404,7 +423,6 @@ func _on_save_performed() -> void:
 
 
 func _on_background_input(event: InputEvent) -> void:
-	# Click outside the panel closes it, like a modal dialog.
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		_hide_panel()
