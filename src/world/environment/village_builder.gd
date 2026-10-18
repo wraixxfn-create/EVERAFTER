@@ -252,9 +252,9 @@ func _bake_road_kerb(baker: MeshBaker) -> void:
 				t = clampf(t, 0.02, 0.98)
 				if _detail_rng.randf() < ROAD_KERB_GAP_CHANCE:
 					continue
-				for side in [-1.0, 1.0]:
-					var lateral := (VillageLayout.ROAD_WIDTH * 0.5 + 0.32) * side
-					var point := start + span * t + outward * lateral
+				for side: float in [-1.0, 1.0]:
+					var lateral: float = (VillageLayout.ROAD_WIDTH * 0.5 + 0.32) * side
+					var point: Vector2 = start + span * t + outward * lateral
 					if point.length() < VillageLayout.PLAZA_RADIUS + 2.0:
 						continue
 					if layout.pond_weight(point.x, point.y) > 0.25:
@@ -315,11 +315,11 @@ func _bake_pond_shore_pebbles(baker: MeshBaker) -> void:
 		var angle := TAU * (float(index) + _detail_rng.randf_range(-0.25, 0.25)) / 18.0
 		# Two concentric rings: the inner one half-buried in the mud, the outer
 		# one on the grass verge.  Jitter keeps them from forming a ruler.
-		for band in [0.88, 1.06]:
+		for band: float in [0.88, 1.06]:
 			if _detail_rng.randf() < 0.18:
 				continue
-			var dist := ring * (band + _detail_rng.randf_range(-0.07, 0.07))
-			var point := center + Vector2(cos(angle), sin(angle)) * dist
+			var dist: float = ring * (band + _detail_rng.randf_range(-0.07, 0.07))
+			var point: Vector2 = center + Vector2(cos(angle), sin(angle)) * dist
 			if layout.road_weight(point.x, point.y) > 0.15:
 				continue
 			if _near_structure(point, 0.6):
