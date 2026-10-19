@@ -222,6 +222,67 @@ static func run_tests(harness: TestHarness) -> void:
 	for node in clump_baker.commit(materials):
 		(node as MeshInstance3D).free()
 
+	# A rock uses a closed, ring-built profile with a buried foot and a clipped
+	# crown. Seeded angular variation must never create a folded or degenerate
+	# triangle, and every facet normal must agree with the visible winding.
+	var rock_baker := MeshBaker.new()
+	var rock_size := Vector3(1.8, 1.1, 1.4)
+	rock_baker.add_rock("rock", rock_size, 41)
+	harness.check(
+		rock_baker.get_triangle_count() >= 60 and rock_baker.get_triangle_count() <= 80,
+		"a faceted boulder costs 60–80 triangles, not a dense sculpt"
+	)
+	var rock_arrays := _first_surface(rock_baker, materials)
+	var rock_vertices: PackedVector3Array = rock_arrays[Mesh.ARRAY_VERTEX]
+	var rock_normals: PackedVector3Array = rock_arrays[Mesh.ARRAY_NORMAL]
+	harness.check_equals(
+		_bad_windings(rock_vertices, rock_normals, Vector3.ZERO),
+		0,
+		"all boulder facets and caps face outwards"
+	)
+	harness.check_equals(
+		_degenerate_triangles(rock_vertices),
+		0,
+		"the bounded rock profile emits no zero-area triangles"
+	)
+	var lowest_rock_y := INF
+	var highest_rock_y := -INF
+	for vertex in rock_vertices:
+		lowest_rock_y = minf(lowest_rock_y, vertex.y)
+		highest_rock_y = maxf(highest_rock_y, vertex.y)
+	harness.check(
+		lowest_rock_y < -0.10 and highest_rock_y > 0.55,
+		"the rock has an embedded base and a readable crown (%.2f…%.2f m)"
+		% [lowest_rock_y, highest_rock_y]
+	)
+	var rock_tints: PackedColorArray = rock_arrays[Mesh.ARRAY_COLOR]
+	var darkest_rock := 1.0
+	var brightest_rock := 0.0
+	for color in rock_tints:
+		darkest_rock = minf(darkest_rock, color.r)
+		brightest_rock = maxf(brightest_rock, color.r)
+	harness.check(
+		brightest_rock - darkest_rock > 0.05,
+		"rock facets keep subtle tonal variation in the shared material"
+	)
+
+	var rock_signatures := {}
+	for seed_value in [41, 42, 43]:
+		var variant_baker := MeshBaker.new()
+		variant_baker.add_rock("rock", rock_size, seed_value)
+		var variant_arrays := _first_surface(variant_baker, materials)
+		var variant_vertices: PackedVector3Array = variant_arrays[Mesh.ARRAY_VERTEX]
+		var min_y := INF
+		var max_y := -INF
+		for vertex in variant_vertices:
+			min_y = minf(min_y, vertex.y)
+			max_y = maxf(max_y, vertex.y)
+		rock_signatures["%.2f/%.2f" % [min_y, max_y]] = true
+	harness.check(
+		rock_signatures.size() >= 2,
+		"different rock seeds form distinct proportions, not repeated boulders"
+	)
+
 	# A blade is two triangles with an upward normal: no alpha texture and no
 	# crossed double-sided quad, which is where the old billboard grass came
 	# from.
@@ -274,6 +335,17 @@ static func _bad_windings(
 			if wound.dot((a - center).normalized()) < 0.0:
 				bad += 1
 	return bad
+
+
+static func _degenerate_triangles(vertices: PackedVector3Array) -> int:
+	var degenerate := 0
+	for index in range(0, vertices.size(), 3):
+		var a := vertices[index]
+		var b := vertices[index + 1]
+		var c := vertices[index + 2]
+		if (c - a).cross(b - a).length_squared() < EPSILON:
+			degenerate += 1
+	return degenerate
 
 
 static func _first_surface(baker: MeshBaker, materials: VillageMaterials) -> Array:

@@ -7,7 +7,7 @@ extends RefCounted
 ## three primitives: a **cylinder** trunk, a **UV sphere** crown and a **stack of
 ## cones** for a pine. From the plaza that reads as a row of lollipops, and from
 ## the meadow as a traffic cone. The replacement is a small vocabulary of organic
-## solids in [MeshBaker]:
+## solids in [MeshBaker], extended with a rock-specific profile in Visual Polish 17:
 ##
 ## * `add_limb` — a tapered tube through a bent polyline, used for trunks, roots
 ##   and branches. It carries a root flare and narrows into the crown, so the
@@ -16,6 +16,9 @@ extends RefCounted
 ##   the angle and the latitude. No crown is a sphere, and no two seeds repeat.
 ## * `add_blade` — a tapered blade for grass and flower stems, lit with an
 ##   upward normal so a single quad works from both sides without transparency.
+## * `add_rock` — a closed, layered stone with a buried foot, flat facets and a
+##   clipped crown. Its bounded ring variation changes the silhouette without
+##   deforming topology or making a sphere/cube.
 ##
 ## Three species remain, each with three genuinely different variants (see
 ## `_pine_profile`, `_oak_profile`, `_birch_profile`), plus a new
@@ -115,6 +118,8 @@ func colliders_for(placement: VillageLayout.Placement) -> Array:
 			shapes.append(_cylinder_collider(0.22 * scale, 2.6 * scale, Vector3.ZERO))
 		VillageLayout.KIND_ROCK:
 			if scale > 0.9:
+				# Preserve the original obstacle exactly; visual rock silhouettes
+				# evolve, but the player's collision footprint does not.
 				shapes.append(
 					_box_collider(
 						Vector3(1.5, 1.0, 1.4) * scale,
@@ -731,67 +736,102 @@ func _build_flower_patch(
 	}
 
 
+static func rock_dimensions(variant: int) -> Vector3:
+	match posmod(variant, 3):
+		0:
+			# Broad ledge stone, around knee height at unit scale.
+			return Vector3(1.58, 0.88, 1.18)
+		1:
+			# Taller shoulder with a narrower footprint.
+			return Vector3(1.34, 1.08, 1.48)
+		_:
+			# Long, low, oblong boulder for damp ground and stream edges.
+			return Vector3(1.72, 0.78, 1.26)
+
+
 func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var start := baker.get_triangle_count()
 	var scale := placement.scale
-	var rock_key := "rock_wet" if placement.variant == 2 else "rock"
-	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.18))
+	var variant := posmod(placement.variant, 3)
+	var rock_key := "rock_wet" if variant == 2 else "rock"
+	var tint := Color.WHITE.darkened(rng.randf_range(0.025, 0.16))
 	if scale < 0.55:
-		# Pebble cluster: three little stones in a loose triangle. A single
-		# scaled-down boulder reads as a marble; a knot of them reads as a
-		# shore or a path edge. Walkable, so no collider is added for these.
-		for pebble in 3:
-			var angle := rng.randf() * TAU
-			var spread := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.18, 0.42)
-			var pebble_basis := Basis.from_euler(
-				Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3))
+		# Pebbles are a small, irregular knot rather than one scaled-down boulder.
+		# Their bases are sunk into the terrain and they deliberately have no
+		# collider, so walking across a gravel edge stays unobstructed.
+		var pebble_count := 3 if rng.randf() < 0.78 else 4
+		var scale_factor := maxf(scale, 0.25) / 0.5
+		var phase := rng.randf() * TAU
+		for pebble in pebble_count:
+			var angle := phase + TAU * float(pebble) / float(pebble_count)
+			angle += rng.randf_range(-0.22, 0.22)
+			var distance := rng.randf_range(0.16, 0.30) * scale_factor
+			var offset := Vector2(cos(angle), sin(angle)) * distance
+			var pebble_size := Vector3(
+				rng.randf_range(0.38, 0.54),
+				rng.randf_range(0.22, 0.34),
+				rng.randf_range(0.32, 0.48)
+			) * scale_factor
+			var pebble_yaw := rng.randf_range(0.0, TAU)
+			var pebble_transform := Transform3D(
+				Basis.from_euler(Vector3(0.0, pebble_yaw, 0.0)),
+				Vector3(offset.x, 0.0, offset.y)
 			)
-			baker.add_foliage_clump(
-				rock_key,
-				Vector3(
-					rng.randf_range(0.22, 0.34),
-					rng.randf_range(0.14, 0.22),
-					rng.randf_range(0.22, 0.34)
-				),
-				2, 5, rng.randi(),
-				_origin * Transform3D(pebble_basis, Vector3(spread.x, 0.10, spread.z)),
-				tint.lightened(rng.randf_range(0.0, 0.06)), true
+			var pebble_seed := rng.randi() * 3 + (variant + pebble) % 3
+			baker.add_rock(
+				rock_key, pebble_size, pebble_seed, _origin * pebble_transform,
+				tint.lightened(rng.randf_range(0.0, 0.07)), 0.10
 			)
 		last_stats = {
-			"kind": placement.kind, "variant": placement.variant, "detail": true,
+			"kind": placement.kind, "variant": variant, "detail": true,
 			"triangles": baker.get_triangle_count() - start,
-			"crown_clumps": 3
+			"rock_pieces": pebble_count,
+			"grounded_base": true,
 		}
 		return
-	var squash := Vector3(
-		rng.randf_range(0.8, 1.3), rng.randf_range(0.6, 0.95), rng.randf_range(0.8, 1.3)
+
+	var dimensions := rock_dimensions(variant) * scale
+	var main_seed := rng.randi() * 3 + variant
+	baker.add_rock(rock_key, dimensions, main_seed, _origin, tint, 0.14)
+	var pieces := 1
+
+	# A smaller shoulder overlaps one edge of the main body. The intentional
+	# overlap hides a seam; both profiles begin below the terrain anchor, so it
+	# reads as one buried cluster rather than two clean shapes balanced together.
+	var chip_angle := rng.randf() * TAU
+	var chip_offset := Vector3(
+		cos(chip_angle) * dimensions.x * 0.32,
+		0.0,
+		sin(chip_angle) * dimensions.z * 0.31
 	)
-	var main_basis := Basis.from_euler(
-		Vector3(rng.randf_range(-0.2, 0.2), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))
+	var chip_size := Vector3(0.58, 0.46, 0.62) * scale
+	var chip_transform := Transform3D(
+		Basis.from_euler(Vector3(0.0, rng.randf() * TAU, 0.0)), chip_offset
 	)
-	baker.add_foliage_clump(
-		rock_key, squash * (0.9 * scale), 3, 6, rng.randi(),
-		_origin * Transform3D(main_basis, Vector3(0.0, 0.35 * scale, 0.0)),
-		tint, true
+	baker.add_rock(
+		rock_key, chip_size, rng.randi() * 3 + (variant + 1) % 3,
+		_origin * chip_transform, tint.lightened(0.04), 0.11
 	)
-	# A small attached chip breaks the perfect-egg silhouette without turning
-	# scattered stones into a separate pile of high-poly props.
-	var chip_basis := Basis.from_euler(
-		Vector3(rng.randf_range(-0.25, 0.25), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))
-	)
-	baker.add_foliage_clump(
-		rock_key,
-		Vector3(0.62, 0.52, 0.70) * (0.46 * scale),
-		3, 5, rng.randi(),
-		_origin * Transform3D(
-			chip_basis, Vector3(0.38 * scale, 0.18 * scale, -0.16 * scale)
-		),
-		tint.lightened(0.035), true
-	)
+	pieces += 1
+	if rng.randf() < 0.32:
+		var shard_offset := Vector3(
+			-cos(chip_angle) * dimensions.x * 0.36,
+			0.0,
+			-sin(chip_angle) * dimensions.z * 0.34
+		)
+		var shard_size := Vector3(0.42, 0.34, 0.48) * scale
+		baker.add_rock(
+			rock_key, shard_size, rng.randi() * 3 + (variant + 2) % 3,
+			_origin * Transform3D(Basis.IDENTITY, shard_offset),
+			tint.lightened(rng.randf_range(0.02, 0.07)), 0.10
+		)
+		pieces += 1
 	last_stats = {
-		"kind": placement.kind, "variant": placement.variant, "detail": true,
+		"kind": placement.kind, "variant": variant, "detail": true,
 		"triangles": baker.get_triangle_count() - start,
-		"crown_clumps": 2
+		"rock_dimensions": dimensions,
+		"rock_pieces": pieces,
+		"grounded_base": true,
 	}
 
 

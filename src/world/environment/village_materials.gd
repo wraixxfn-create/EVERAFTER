@@ -194,7 +194,9 @@ func _make_material(key: String) -> StandardMaterial3D:
 				BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 			)
 		"rock_wet":
-			material.roughness = 0.72
+			# Damp stone softens the highlight, but remains matte; waterline
+			# rocks should read as wet mineral, not lacquer or polished metal.
+			material.roughness = 0.82
 		"leaf_deep", "leaf_mid", "leaf_bright", "leaf_autumn", "pine", "grass":
 			material.roughness = 0.94
 		"grass_blade":

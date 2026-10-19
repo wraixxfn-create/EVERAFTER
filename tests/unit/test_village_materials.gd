@@ -32,6 +32,7 @@ static func run_tests(harness: TestHarness) -> void:
 	var plaster := materials.get_material("wall_cream")
 	var iron := materials.get_material("iron")
 	var water := materials.get_material("water")
+	var dry_rock := materials.get_material("rock")
 	var wet_rock := materials.get_material("rock_wet")
 	harness.check(
 		iron.metallic > 0.25 and iron.metallic < 0.5,
@@ -46,8 +47,10 @@ static func run_tests(harness: TestHarness) -> void:
 		"water has a restrained highlight instead of a mirror finish"
 	)
 	harness.check(
-		wet_rock.roughness > 0.65 and wet_rock.roughness < 0.8,
-		"wet rocks are a little smoother without becoming glossy"
+		dry_rock.roughness > wet_rock.roughness
+		and wet_rock.roughness > 0.78
+		and wet_rock.roughness < 0.90,
+		"wet rocks soften the dry stone highlight but stay matte"
 	)
 	harness.check(
 		water.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA,
