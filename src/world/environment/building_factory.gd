@@ -26,6 +26,7 @@ var materials: VillageMaterials = null
 var rng := RandomNumberGenerator.new()
 var _surface_details: BuildingSurfaceDetails = null
 var _architecture := BuildingArchitecture.new()
+var _roof_kit := RoofArchitecture.new()
 
 ## Transform every solid built from now on is relative to. Structures leave it
 ## at identity (their own node carries the placement transform); merged props
@@ -42,13 +43,16 @@ func _init(shared_materials: VillageMaterials, seed_value: int = 0) -> void:
 
 ## True for the kinds that get their own node and their own collider body.
 static func is_structure(kind: String) -> bool:
-	return kind in [
-		VillageLayout.KIND_HOUSE,
-		VillageLayout.KIND_INN,
-		VillageLayout.KIND_HALL,
-		VillageLayout.KIND_WELL,
-		VillageLayout.KIND_STALL,
-	]
+	return (
+		kind
+		in [
+			VillageLayout.KIND_HOUSE,
+			VillageLayout.KIND_INN,
+			VillageLayout.KIND_HALL,
+			VillageLayout.KIND_WELL,
+			VillageLayout.KIND_STALL,
+		]
+	)
 
 
 ## Builds one structure as a self contained node: baked meshes plus a
@@ -107,7 +111,9 @@ func colliders_for(placement: VillageLayout.Placement) -> Array:
 				_box_collider(Vector3(3.4, 3.4, 3.4) * scale, Vector3(-5.0, 1.7, 1.6) * scale)
 			)
 		VillageLayout.KIND_HALL:
-			shapes.append(_box_collider(Vector3(10.0, 5.0, 6.0) * scale, Vector3(0, 2.5, 0) * scale))
+			shapes.append(
+				_box_collider(Vector3(10.0, 5.0, 6.0) * scale, Vector3(0, 2.5, 0) * scale)
+			)
 			shapes.append(
 				_box_collider(Vector3(3.2, 8.0, 3.2) * scale, Vector3(-5.4, 4.0, 0.0) * scale)
 			)
@@ -126,15 +132,15 @@ func colliders_for(placement: VillageLayout.Placement) -> Array:
 		VillageLayout.KIND_BARREL:
 			shapes.append(_cylinder_collider(0.5 * scale, 1.1 * scale, Vector3.ZERO))
 		VillageLayout.KIND_FENCE:
-			shapes.append(_box_collider(Vector3(3.0, 1.1, 0.2) * scale, Vector3(0, 0.55, 0) * scale))
+			shapes.append(
+				_box_collider(Vector3(3.0, 1.1, 0.2) * scale, Vector3(0, 0.55, 0) * scale)
+			)
 	return shapes
 
 
 ## Adds a small prop to a shared baker. Called for every lamp, fence, cart,
 ## crate, barrel, log pile and signpost, so all of them end up in one mesh.
-func append_prop(
-	baker: MeshBaker, placement: VillageLayout.Placement, origin: Transform3D
-) -> void:
+func append_prop(baker: MeshBaker, placement: VillageLayout.Placement, origin: Transform3D) -> void:
 	_origin = origin
 	match placement.kind:
 		VillageLayout.KIND_LAMP:
@@ -165,8 +171,7 @@ func _build_well(baker: MeshBaker) -> void:
 	# Low solid footing under the stone ring; leaving its upper half open makes
 	# the water surface visible instead of burying it inside a capped cylinder.
 	baker.add_cylinder(
-		"stone", 1.15, 1.25, 0.42, 12, _transform(Vector3(0.0, 0.21, 0.0)),
-		Color.WHITE, 0.04
+		"stone", 1.15, 1.25, 0.42, 12, _transform(Vector3(0.0, 0.21, 0.0)), Color.WHITE, 0.04
 	)
 	# Two staggered courses of rough ashlar wrap the basin, keeping the well's
 	# round silhouette while replacing the featureless cylinder wall.
@@ -180,8 +185,7 @@ func _build_well(baker: MeshBaker) -> void:
 			var yaw := rad_to_deg(atan2(x, z))
 			var tint := Color.WHITE.darkened(rng.randf_range(0.015, 0.12))
 			baker.add_box(
-				"stone", Vector3(0.56, 0.38, 0.22),
-				_transform(Vector3(x, y, z), yaw), tint, 0.1
+				"stone", Vector3(0.56, 0.38, 0.22), _transform(Vector3(x, y, z), yaw), tint, 0.1
 			)
 	# A segmented coping leaves a real opening over the well; a solid cylinder
 	# here used to cap the basin and completely hide its water mesh.
@@ -192,60 +196,173 @@ func _build_well(baker: MeshBaker) -> void:
 		var rim_yaw := rad_to_deg(atan2(rim_x, rim_z))
 		var rim_tint := Color.WHITE.darkened(rng.randf_range(0.025, 0.10))
 		baker.add_box(
-			"stone_dark", Vector3(0.58, 0.18, 0.26),
-			_transform(Vector3(rim_x, 0.94, rim_z), rim_yaw), rim_tint, 0.08
+			"stone_dark",
+			Vector3(0.58, 0.18, 0.26),
+			_transform(Vector3(rim_x, 0.94, rim_z), rim_yaw),
+			rim_tint,
+			0.08
 		)
-	baker.add_cylinder(
-		"water", 0.92, 0.92, 0.06, 12, _transform(Vector3(0.0, 0.72, 0.0))
-	)
+	baker.add_cylinder("water", 0.92, 0.92, 0.06, 12, _transform(Vector3(0.0, 0.72, 0.0)))
 	for side in [-1.0, 1.0]:
+		var s_x: float = side * 1.38
 		baker.add_box(
-			"timber", Vector3(0.2, 3.6, 0.2),
-			_transform(Vector3(side * 1.4, 1.8, 0.0)), Color.WHITE, 0.04
+			"stone_dark",
+			Vector3(0.32, 0.24, 0.32),
+			_transform(Vector3(s_x, 0.12, 0.0)),
+			Color.WHITE,
+			0.04
 		)
-	var well_roof_center := _transform(Vector3(0.0, 3.15, 0.0), 90.0)
-	baker.add_prism("roof_shingle", 3.2, 0.9, 3.1, well_roof_center)
-	_surface_details.add_roof_details(
-		baker, "roof_shingle", Color.WHITE, 3.2, 3.1, 0.9,
-		2.7, well_roof_center, 1.0
+		baker.add_box(
+			"timber",
+			Vector3(0.2, 2.52, 0.2),
+			_transform(Vector3(s_x, 1.38, 0.0)),
+			Color.WHITE,
+			0.04
+		)
+		baker.add_box("iron", Vector3(0.24, 0.08, 0.24), _transform(Vector3(s_x, 2.48, 0.0)))
+		baker.add_box("iron", Vector3(0.06, 0.42, 0.12), _transform(Vector3(s_x, 1.88, 0.12)))
+		for z_dir in [-1.0, 1.0]:
+			var z_b: float = z_dir * 0.32
+			baker.add_box(
+				"timber",
+				Vector3(0.11, 0.56, 0.11),
+				_transform(Vector3(s_x, 2.34, z_b), 0.0, z_dir * 38.0)
+			)
+	var well_roof_frame := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3.ZERO)
+	(
+		_roof_kit
+		. build_pitched_roof(
+			baker,
+			_origin,
+			well_roof_frame,
+			{
+				"span": 2.18,
+				"length": 2.48,
+				"eave_y": 2.48,
+				"rise": 0.96,
+				"overhang_eave": 0.34,
+				"overhang_front": 0.32,
+				"overhang_back": 0.32,
+				"gable_front": true,
+				"gable_back": true,
+				"open_truss": true,
+				"roof_key": "roof_shingle",
+				"wall_key": "wall_cream",
+				"timbered": true,
+				"bell_cast": 0.08,
+				"seed_val": 41,
+			}
+		)
 	)
-	baker.add_box("timber", Vector3(2.8, 0.16, 0.16), _transform(Vector3(0.0, 2.6, 0.0)))
-	baker.add_box("plank", Vector3(0.6, 0.6, 0.6), _transform(Vector3(0.0, 1.9, 0.0)))
+	baker.add_cylinder(
+		"timber",
+		0.11,
+		0.11,
+		2.66,
+		8,
+		_origin * Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.0, 1.88, 0.0))
+	)
+	baker.add_box("iron", Vector3(0.06, 0.06, 0.32), _transform(Vector3(1.52, 1.88, 0.14)))
+	baker.add_box("iron", Vector3(0.06, 0.28, 0.06), _transform(Vector3(1.52, 1.76, 0.28)))
+	baker.add_cylinder("iron", 0.025, 0.025, 0.48, 6, _transform(Vector3(0.0, 1.62, 0.0)))
+	baker.add_cylinder("plank", 0.22, 0.18, 0.3, 8, _transform(Vector3(0.0, 1.28, 0.0)))
+	baker.add_cylinder("iron", 0.23, 0.23, 0.04, 8, _transform(Vector3(0.0, 1.38, 0.0)))
 	# A bucket on the stones beside the basin: the well is used, not staged.
 	# It sits outside the well collider (r 1.36), so it never blocks the ring.
 	var bucket_turn := rng.randf_range(0.0, 360.0)
 	baker.add_cylinder(
-		"plank", 0.26, 0.21, 0.34, 8,
-		_transform(Vector3(1.55, 0.17, 0.85), bucket_turn), Color.WHITE, 0.06
+		"plank",
+		0.26,
+		0.21,
+		0.34,
+		8,
+		_transform(Vector3(1.55, 0.17, 0.85), bucket_turn),
+		Color.WHITE,
+		0.06
 	)
 	baker.add_cylinder(
-		"iron", 0.27, 0.27, 0.05, 8,
-		_transform(Vector3(1.55, 0.36, 0.85), bucket_turn)
+		"iron", 0.27, 0.27, 0.05, 8, _transform(Vector3(1.55, 0.36, 0.85), bucket_turn)
 	)
 
 
 func _build_stall(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var cloth_key: String = CLOTH_KEYS[placement.variant % CLOTH_KEYS.size()]
 	var corners := [
-		Vector3(-1.2, 0, -0.7), Vector3(1.2, 0, -0.7),
-		Vector3(-1.2, 0, 0.7), Vector3(1.2, 0, 0.7),
+		Vector3(-1.2, 0, -0.7),
+		Vector3(1.2, 0, -0.7),
+		Vector3(-1.2, 0, 0.7),
+		Vector3(1.2, 0, 0.7),
 	]
 	for corner in corners:
-		var post_height := 2.45 if corner.z < 0.0 else 2.2
+		var post_height := 2.34 if corner.z < 0.0 else 2.04
 		baker.add_box(
-			"timber", Vector3(0.14, post_height, 0.14),
+			"timber",
+			Vector3(0.14, post_height, 0.14),
 			_transform(Vector3(corner.x, post_height * 0.5, corner.z))
+		)
+	baker.add_box("timber", Vector3(2.64, 0.11, 0.12), _transform(Vector3(0.0, 2.36, -0.7)))
+	baker.add_box("timber", Vector3(2.64, 0.11, 0.12), _transform(Vector3(0.0, 2.06, 0.7)))
+	for side in [-1.0, 1.0]:
+		var s_x: float = side * 1.2
+		baker.add_box(
+			"timber", Vector3(0.11, 0.1, 1.88), _transform(Vector3(s_x, 2.21, 0.0), 0.0, 12.1)
+		)
+		baker.add_box(
+			"timber", Vector3(0.09, 0.34, 0.09), _transform(Vector3(s_x, 1.88, 0.48), 0.0, -36.0)
 		)
 	baker.add_box("plank", Vector3(2.6, 0.14, 1.5), _transform(Vector3(0.0, 1.05, -0.1)))
 	baker.add_box(
-		cloth_key, Vector3(2.9, 0.1, 2.0),
-		_transform(Vector3(0.0, 2.3, 0.0), 0.0, 8.0)
+		"plank",
+		Vector3(2.36, 0.54, 0.06),
+		_transform(Vector3(0.0, 0.72, 0.58)),
+		Color.WHITE.darkened(0.08)
 	)
-	# Hanging valance along the front edge: turns the flat awning into a stall.
-	for index in 4:
+	var awning_frame := _transform(Vector3(0.0, 2.29, 0.02), 0.0, 12.1)
+	for index in 5:
+		var x_pos := -1.16 + float(index) * 0.58
+		var sag := 0.0 if (index == 0 or index == 4) else -0.016
+		var shade := Color.WHITE.darkened(0.045 * float(index % 2))
+		var strip_pos := Vector3(x_pos, sag, 0.0)
 		baker.add_box(
-			cloth_key, Vector3(0.6, 0.26, 0.07),
-			_transform(Vector3(-1.02 + float(index) * 0.68, 2.15, 1.0))
+			cloth_key,
+			Vector3(0.56, 0.055, 2.06),
+			awning_frame * Transform3D(Basis.IDENTITY, strip_pos),
+			shade
+		)
+		if index < 4:
+			var batten_pos := Vector3(x_pos + 0.29, 0.018, 0.0)
+			baker.add_box(
+				"timber",
+				Vector3(0.05, 0.065, 2.08),
+				awning_frame * Transform3D(Basis.IDENTITY, batten_pos)
+			)
+	baker.add_box(
+		"timber",
+		Vector3(2.94, 0.075, 0.09),
+		awning_frame * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.02, -1.0))
+	)
+	baker.add_box(
+		"timber",
+		Vector3(2.94, 0.07, 0.08),
+		awning_frame * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.01, 1.01))
+	)
+	# Hanging valance along the front and side edges: turns the awning into a stall.
+	for index in 4:
+		var val_h := 0.24 if index % 2 == 0 else 0.2
+		var v_shade := Color.WHITE.darkened(0.05 * float(index % 2))
+		baker.add_box(
+			cloth_key,
+			Vector3(0.68, val_h, 0.06),
+			_transform(Vector3(-1.02 + float(index) * 0.68, 2.04 - val_h * 0.5, 1.02)),
+			v_shade
+		)
+	for side in [-1.0, 1.0]:
+		var s_x: float = side * 1.42
+		baker.add_box(
+			cloth_key,
+			Vector3(0.06, 0.2, 1.98),
+			_transform(Vector3(s_x, 2.16, 0.02), 0.0, 12.1),
+			Color.WHITE.darkened(0.08)
 		)
 	# Goods on the counter.
 	for index in 3:
@@ -271,60 +388,89 @@ func _build_lamp(baker: MeshBaker) -> void:
 func _build_fence(baker: MeshBaker) -> void:
 	for side in [-1.0, 1.0]:
 		baker.add_box(
-			"timber_warm", Vector3(0.16, 1.15, 0.16),
-			_transform(Vector3(side * 1.4, 0.58, 0.0)), Color.WHITE, 0.06
+			"timber_warm",
+			Vector3(0.16, 1.15, 0.16),
+			_transform(Vector3(side * 1.4, 0.58, 0.0)),
+			Color.WHITE,
+			0.06
 		)
 		# A restrained cut point on each post gives the fence a hand-hewn top.
 		baker.add_cylinder(
-			"timber_warm", 0.0, 0.13, 0.2, 4,
-			_transform(Vector3(side * 1.4, 1.2, 0.0)), Color.WHITE, 0.04
+			"timber_warm",
+			0.0,
+			0.13,
+			0.2,
+			4,
+			_transform(Vector3(side * 1.4, 1.2, 0.0)),
+			Color.WHITE,
+			0.04
 		)
 	for height in [0.55, 0.95]:
 		baker.add_box(
-			"timber_warm", Vector3(3.0, 0.12, 0.09),
-			_transform(Vector3(0.0, height, 0.0)), Color.WHITE, 0.06
+			"timber_warm",
+			Vector3(3.0, 0.12, 0.09),
+			_transform(Vector3(0.0, height, 0.0)),
+			Color.WHITE,
+			0.06
 		)
 
 
 func _build_cart(baker: MeshBaker) -> void:
 	baker.add_box(
-		"plank", Vector3(1.7, 0.16, 2.9),
-		_transform(Vector3(0.0, 0.72, 0.0)), Color.WHITE, 0.05
+		"plank", Vector3(1.7, 0.16, 2.9), _transform(Vector3(0.0, 0.72, 0.0)), Color.WHITE, 0.05
 	)
 	# Individual bed boards and corner stakes replace the single empty tray.
 	for board in 5:
 		var x := (float(board) - 2.0) * 0.32
 		var board_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
 		baker.add_box(
-			"plank", Vector3(0.29, 0.035, 2.65),
-			_transform(Vector3(x, 0.815, 0.0)), board_tint, 0.045
+			"plank",
+			Vector3(0.29, 0.035, 2.65),
+			_transform(Vector3(x, 0.815, 0.0)),
+			board_tint,
+			0.045
 		)
 	for side in [-1.0, 1.0]:
 		baker.add_box(
-			"plank", Vector3(0.12, 0.5, 2.9),
-			_transform(Vector3(side * 0.82, 1.0, 0.0)), Color.WHITE, 0.045
+			"plank",
+			Vector3(0.12, 0.5, 2.9),
+			_transform(Vector3(side * 0.82, 1.0, 0.0)),
+			Color.WHITE,
+			0.045
 		)
 		for end in [-1.0, 1.0]:
 			baker.add_box(
-				"timber", Vector3(0.14, 0.62, 0.14),
+				"timber",
+				Vector3(0.14, 0.62, 0.14),
 				_transform(Vector3(side * 0.78, 1.03, end * 1.28)),
-				Color.WHITE, 0.04
+				Color.WHITE,
+				0.04
 			)
 	baker.add_box(
-		"plank", Vector3(1.7, 0.5, 0.12),
-		_transform(Vector3(0.0, 1.0, -1.42)), Color.WHITE, 0.045
+		"plank", Vector3(1.7, 0.5, 0.12), _transform(Vector3(0.0, 1.0, -1.42)), Color.WHITE, 0.045
 	)
 	# A properly oriented axle and six spokes make the cart wheels read as wood
 	# wheels rather than solid discs. This is static display geometry only.
 	baker.add_cylinder(
-		"timber", 0.08, 0.08, 2.0, 8,
-		_transform(Vector3(0.0, 0.52, 0.9), 0.0, 0.0, 90.0), Color.WHITE, 0.04
+		"timber",
+		0.08,
+		0.08,
+		2.0,
+		8,
+		_transform(Vector3(0.0, 0.52, 0.9), 0.0, 0.0, 90.0),
+		Color.WHITE,
+		0.04
 	)
 	for side in [-1.0, 1.0]:
 		baker.add_cylinder(
-			"timber", 0.52, 0.52, 0.14, 10,
+			"timber",
+			0.52,
+			0.52,
+			0.14,
+			10,
 			_transform(Vector3(side * 0.9, 0.52, 0.9), 0.0, 0.0, 90.0),
-			Color.WHITE, 0.06
+			Color.WHITE,
+			0.06
 		)
 		for spoke in 6:
 			var angle := TAU * float(spoke) / 6.0
@@ -332,22 +478,35 @@ func _build_cart(baker: MeshBaker) -> void:
 				side * 0.99, 0.52 + cos(angle) * 0.23, 0.9 + sin(angle) * 0.23
 			)
 			baker.add_box(
-				"timber_warm", Vector3(0.08, 0.42, 0.07),
+				"timber_warm",
+				Vector3(0.08, 0.42, 0.07),
 				_transform(spoke_center, 0.0, rad_to_deg(angle), 0.0),
-				Color.WHITE, 0.04
+				Color.WHITE,
+				0.04
 			)
 		baker.add_cylinder(
-			"timber_warm", 0.13, 0.13, 0.1, 8,
+			"timber_warm",
+			0.13,
+			0.13,
+			0.1,
+			8,
 			_transform(Vector3(side * 1.02, 0.52, 0.9), 0.0, 0.0, 90.0),
-			Color.WHITE, 0.04
+			Color.WHITE,
+			0.04
 		)
 	baker.add_box(
-		"timber", Vector3(0.12, 0.12, 1.6),
-		_transform(Vector3(0.0, 0.66, 2.1), -12.0), Color.WHITE, 0.04
+		"timber",
+		Vector3(0.12, 0.12, 1.6),
+		_transform(Vector3(0.0, 0.66, 2.1), -12.0),
+		Color.WHITE,
+		0.04
 	)
 	var bundle_basis := Basis.IDENTITY.scaled(Vector3(0.78, 0.45, 0.78))
 	baker.add_sphere(
-		"cloth_cream", 1.0, 4, 7,
+		"cloth_cream",
+		1.0,
+		4,
+		7,
 		_origin * Transform3D(bundle_basis, Vector3(0.0, 1.12, -0.4)),
 		Color.WHITE.darkened(0.035)
 	)
@@ -356,33 +515,43 @@ func _build_cart(baker: MeshBaker) -> void:
 func _build_crate(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var size := 1.05 * placement.scale
 	baker.add_box(
-		"plank", Vector3(size, size, size),
-		_transform(Vector3(0.0, size * 0.5, 0.0)), Color.WHITE, 0.06
+		"plank",
+		Vector3(size, size, size),
+		_transform(Vector3(0.0, size * 0.5, 0.0)),
+		Color.WHITE,
+		0.06
 	)
 	for offset in [-size * 0.35, size * 0.35]:
 		baker.add_box(
-			"timber", Vector3(size * 1.02, 0.1, size * 1.02),
+			"timber",
+			Vector3(size * 1.02, 0.1, size * 1.02),
 			_transform(Vector3(0.0, size * 0.5 + offset, 0.0)),
-			Color.WHITE, 0.05
+			Color.WHITE,
+			0.05
 		)
 	# Corner battens and top slats give the crate a boarded construction instead
 	# of a single featureless cube.
 	for side in [-1.0, 1.0]:
 		for end in [-1.0, 1.0]:
 			baker.add_box(
-				"timber_warm", Vector3(0.075, size * 0.92, 0.075),
+				"timber_warm",
+				Vector3(0.075, size * 0.92, 0.075),
 				_transform(Vector3(side * size * 0.44, size * 0.5, end * size * 0.44)),
-				Color.WHITE.darkened(rng.randf_range(0.0, 0.04)), 0.04
+				Color.WHITE.darkened(rng.randf_range(0.0, 0.04)),
+				0.04
 			)
 	for board in 3:
 		baker.add_box(
-			"plank", Vector3(size * 0.88, 0.035, size * 0.24),
+			"plank",
+			Vector3(size * 0.88, 0.035, size * 0.24),
 			_transform(Vector3(0.0, size * 1.01, (float(board) - 1.0) * size * 0.27)),
-			Color.WHITE.darkened(rng.randf_range(0.0, 0.06)), 0.04
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.06)),
+			0.04
 		)
 	if placement.variant == 1:
 		baker.add_box(
-			"plank", Vector3(size * 0.8, size * 0.8, size * 0.8),
+			"plank",
+			Vector3(size * 0.8, size * 0.8, size * 0.8),
 			_transform(Vector3(0.2, size * 1.4, 0.15), 18.0)
 		)
 
@@ -390,13 +559,17 @@ func _build_crate(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 func _build_barrel(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
 	var turn := rng.randf_range(0.0, 360.0)
 	var barrel_transform := _transform(offset + Vector3(0.0, 0.52, 0.0), turn)
-	baker.add_cylinder(
-		"plank", 0.42, 0.46, 1.05, 10, barrel_transform, Color.WHITE, 0.07
-	)
+	baker.add_cylinder("plank", 0.42, 0.46, 1.05, 10, barrel_transform, Color.WHITE, 0.07)
 	for height in [0.25, 0.8]:
 		baker.add_cylinder(
-			"iron", 0.47, 0.47, 0.08, 10,
-			_transform(offset + Vector3(0.0, height, 0.0), turn), Color.WHITE, 0.035
+			"iron",
+			0.47,
+			0.47,
+			0.08,
+			10,
+			_transform(offset + Vector3(0.0, height, 0.0), turn),
+			Color.WHITE,
+			0.035
 		)
 
 
@@ -406,15 +579,22 @@ func _build_logpile(baker: MeshBaker) -> void:
 		for index in count:
 			var x := (float(index) - float(count - 1) * 0.5) * 0.62
 			baker.add_cylinder(
-				"trunk", 0.28, 0.28, 2.4, 7,
+				"trunk",
+				0.28,
+				0.28,
+				2.4,
+				7,
 				_transform(Vector3(x, 0.3 + float(row) * 0.55, 0.0), 0.0, 90.0),
-				Color.WHITE.darkened(float(row) * 0.05), 0.055
+				Color.WHITE.darkened(float(row) * 0.05),
+				0.055
 			)
 
 
 func _build_signpost(baker: MeshBaker) -> void:
 	baker.add_cylinder("timber", 0.1, 0.13, 2.5, 6, _transform(Vector3(0, 1.25, 0)))
-	baker.add_box("plank", Vector3(1.7, 0.36, 0.1), _transform(Vector3(0.6, 2.1, 0.0), 0.0, 0.0, 8.0))
+	baker.add_box(
+		"plank", Vector3(1.7, 0.36, 0.1), _transform(Vector3(0.6, 2.1, 0.0), 0.0, 0.0, 8.0)
+	)
 	baker.add_box(
 		"plank", Vector3(1.4, 0.32, 0.1), _transform(Vector3(-0.5, 1.7, 0.0), 0.0, 0.0, -6.0)
 	)
@@ -428,28 +608,39 @@ func _build_flower_box(baker: MeshBaker, placement: VillageLayout.Placement) -> 
 	var scale := placement.scale
 	var turn := rng.randf_range(0.0, 360.0)
 	baker.add_cylinder(
-		"plank", 0.52, 0.42, 0.52, 10,
+		"plank",
+		0.52,
+		0.42,
+		0.52,
+		10,
 		_transform(Vector3(0.0, 0.26, 0.0) * scale, turn),
-		Color.WHITE.darkened(rng.randf_range(0.0, 0.07)), 0.05
+		Color.WHITE.darkened(rng.randf_range(0.0, 0.07)),
+		0.05
 	)
 	for hoop in [0.12, 0.44]:
 		baker.add_cylinder(
-			"iron", 0.53, 0.53, 0.05, 10,
-			_transform(Vector3(0.0, hoop, 0.0) * scale, turn)
+			"iron", 0.53, 0.53, 0.05, 10, _transform(Vector3(0.0, hoop, 0.0) * scale, turn)
 		)
 	baker.add_cylinder(
-		"stone_dark", 0.46, 0.46, 0.06, 10,
-		_transform(Vector3(0.0, 0.5, 0.0) * scale, turn), Color.WHITE, 0.05
+		"stone_dark",
+		0.46,
+		0.46,
+		0.06,
+		10,
+		_transform(Vector3(0.0, 0.5, 0.0) * scale, turn),
+		Color.WHITE,
+		0.05
 	)
 	for flower in 7:
 		var angle := rng.randf() * TAU
 		var spread := Vector3(cos(angle), 0.0, sin(angle)) * rng.randf_range(0.08, 0.34)
 		var key: String = ["cloth_red", "cloth_cream", "leaf_bright"][flower % 3]
 		baker.add_sphere(
-			key, rng.randf_range(0.08, 0.13), 3, 5,
-			_transform(
-				Vector3(spread.x, 0.56 + rng.randf() * 0.2, spread.z) * scale
-			),
+			key,
+			rng.randf_range(0.08, 0.13),
+			3,
+			5,
+			_transform(Vector3(spread.x, 0.56 + rng.randf() * 0.2, spread.z) * scale),
 			Color.WHITE.darkened(rng.randf_range(0.0, 0.06))
 		)
 
@@ -460,28 +651,40 @@ func _build_flower_box(baker: MeshBaker, placement: VillageLayout.Placement) -> 
 func _build_bench(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
 	for side in [-1.0, 1.0]:
 		baker.add_box(
-			"stone_dark", Vector3(0.34, 0.16, 0.5),
-			_transform(offset + Vector3(side * 0.72, 0.08, 0.0)), Color.WHITE, 0.06
+			"stone_dark",
+			Vector3(0.34, 0.16, 0.5),
+			_transform(offset + Vector3(side * 0.72, 0.08, 0.0)),
+			Color.WHITE,
+			0.06
 		)
 		baker.add_box(
-			"timber_warm", Vector3(0.14, 0.42, 0.42),
-			_transform(offset + Vector3(side * 0.72, 0.32, 0.0)), Color.WHITE, 0.04
+			"timber_warm",
+			Vector3(0.14, 0.42, 0.42),
+			_transform(offset + Vector3(side * 0.72, 0.32, 0.0)),
+			Color.WHITE,
+			0.04
 		)
 		baker.add_box(
-			"timber_warm", Vector3(0.12, 0.62, 0.12),
+			"timber_warm",
+			Vector3(0.12, 0.62, 0.12),
 			_transform(offset + Vector3(side * 0.72, 0.72, -0.22), 0.0, -8.0),
-			Color.WHITE, 0.04
+			Color.WHITE,
+			0.04
 		)
 	for plank in 3:
 		baker.add_box(
-			"plank", Vector3(1.75, 0.05, 0.15),
+			"plank",
+			Vector3(1.75, 0.05, 0.15),
 			_transform(offset + Vector3(0.0, 0.56, -0.16 + float(plank) * 0.16)),
-			Color.WHITE.darkened(rng.randf_range(0.0, 0.05)), 0.04
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.05)),
+			0.04
 		)
 	baker.add_box(
-		"plank", Vector3(1.75, 0.18, 0.05),
+		"plank",
+		Vector3(1.75, 0.18, 0.05),
 		_transform(offset + Vector3(0.0, 0.96, -0.28), 0.0, -8.0),
-		Color.WHITE.darkened(0.03), 0.04
+		Color.WHITE.darkened(0.03),
+		0.04
 	)
 
 

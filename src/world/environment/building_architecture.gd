@@ -14,6 +14,7 @@ var _baker: MeshBaker
 var _root := Transform3D.IDENTITY
 var _wall := "wall_cream"
 var _roof := "roof_tile"
+var _roof_kit := RoofArchitecture.new()
 
 
 func build(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
@@ -21,7 +22,7 @@ func build(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	_root = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * placement.scale), Vector3.ZERO)
 	match placement.kind:
 		VillageLayout.KIND_HOUSE:
-			_house(placement.variant)
+			_house(placement.variant, placement.id)
 		VillageLayout.KIND_INN:
 			_inn()
 		VillageLayout.KIND_HALL:
@@ -29,13 +30,20 @@ func build(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	_baker = null
 
 
-func _house(variant: int) -> void:
-	_wall = ["wall_cream", "wall_ochre", "wall_pale"][variant % 3]
-	_roof = ["roof_tile", "roof_shingle", "roof_slate"][variant % 3]
-	var width := 5.8 if variant == 2 else 4.4
-	var depth := 3.4 if variant == 2 else 4.0
+func _house(variant: int, placement_id: String = "") -> void:
+	var v := posmod(variant, 3)
+	var base_wall: String = ["wall_cream", "wall_ochre", "wall_pale"][v]
+	var base_roof: String = ["roof_tile", "roof_shingle", "roof_slate"][v]
+	var v_cfg := _house_variation(v, placement_id, base_wall, base_roof)
+	_wall = String(v_cfg.wall_key)
+	_roof = String(v_cfg.roof_key)
+	var pitch_scale: float = v_cfg.pitch_scale
+	var c_side: float = v_cfg.chimney_side
+	var crown: int = v_cfg.crown_style
+	var width := 5.8 if v == 2 else 4.4
+	var depth := 3.4 if v == 2 else 4.0
 	_foundation(width, depth)
-	if variant == 1:
+	if v == 1:
 		# The upper storey jets out 10 cm on each side, within the old box
 		# collider. Corbels carry the sill rather than a floating upper cube.
 		_storey(width - 0.2, depth - 0.18, PLINTH, 2.26, true)
@@ -55,22 +63,98 @@ func _house(variant: int) -> void:
 					0.16,
 					_at(Vector3(x, 2.68, side * (depth * 0.5 - 0.06)))
 				)
-		_roof_pair(width, depth, 4.62, 2.2)
-		_chimney(Vector3(1.25, 0.0, -0.85), 5.2, 7.25)
-	elif variant == 2:
+		var spec1 := _roof_spec(width, depth, 4.62, 2.2 * pitch_scale, true, v_cfg)
+		_roof_kit.build_pitched_roof(_baker, _root, Transform3D.IDENTITY, spec1)
+		_roof_kit.build_gable_dormer(
+			_baker, _root, Transform3D.IDENTITY, spec1, -c_side, 0.15, 0.96
+		)
+		_entry_hood(depth * 0.5, 2.62, 1.48)
+		_chimney_on_roof(Transform3D.IDENTITY, spec1, Vector2(c_side * 1.25, -0.85), 7.25, crown)
+	elif v == 2:
 		# A broad crofter's house uses a transverse ridge, not the same
 		# cottage stretched sideways. Entry hood is cantilevered, no road posts.
 		_storey(width, depth, PLINTH, 2.85, true)
 		var transverse := _at(Vector3.ZERO, PI * 0.5)
-		_roof_pair(depth, width, 3.27, 1.85, transverse)
+		var spec2 := _roof_spec(depth, width, 3.27, 1.85 * pitch_scale, true, v_cfg)
+		_roof_kit.build_pitched_roof(_baker, _root, transverse, spec2)
+		if bool(v_cfg.twin_dormers):
+			for dz in [-1.35, 1.35]:
+				_roof_kit.build_gable_dormer(_baker, _root, transverse, spec2, -1.0, dz, 0.88)
+		else:
+			_roof_kit.build_gable_dormer(
+				_baker, _root, transverse, spec2, -1.0, float(v_cfg.dormer_z), 0.98
+			)
 		_entry_hood(depth * 0.5, 2.65, 1.65)
-		_chimney(Vector3(-1.95, 0.0, -0.55), 3.9, 5.9)
+		_chimney_on_roof(transverse, spec2, Vector2(0.75, c_side * 1.85), 5.9, crown)
 	else:
 		_storey(width, depth, PLINTH, 2.65, true)
-		_roof_pair(width, depth, 3.07, 2.05)
+		var spec0 := _roof_spec(width, depth, 3.07, 2.05 * pitch_scale, true, v_cfg)
+		_roof_kit.build_pitched_roof(_baker, _root, Transform3D.IDENTITY, spec0)
+		_roof_kit.build_gable_dormer(
+			_baker, _root, Transform3D.IDENTITY, spec0, -c_side, -0.15, 0.92
+		)
 		_entry_hood(depth * 0.5, 2.64, 1.45)
-		_chimney(Vector3(1.25, 0.0, -0.85), 3.8, 5.65)
+		_chimney_on_roof(Transform3D.IDENTITY, spec0, Vector2(c_side * 1.25, -0.85), 5.65, crown)
 	_steps(depth, 1.0)
+
+
+func _house_variation(
+	v: int, placement_id: String, base_wall: String, base_roof: String
+) -> Dictionary:
+	var cfg := {
+		"wall_key": base_wall,
+		"roof_key": base_roof,
+		"pitch_scale": 1.0,
+		"overhang_eave": 0.34 + float(v) * 0.015,
+		"bell_cast": 0.08,
+		"tint_shift": 0.0,
+		"seed_val": v * 17 + 3,
+		"chimney_side": -1.0 if v == 2 else 1.0,
+		"crown_style": v,
+		"twin_dormers": false,
+		"dormer_z": 0.0,
+	}
+	if not placement_id.begins_with("house_"):
+		return cfg
+	var num := int(placement_id.trim_prefix("house_"))
+	var pitch_table := [0.94, 1.04, 0.98, 1.07, 0.95, 1.02, 1.06]
+	var shift_table := [-0.05, 0.03, -0.02, 0.04, -0.04, 0.02]
+	cfg.pitch_scale = pitch_table[posmod(num, pitch_table.size())]
+	cfg.overhang_eave = 0.32 + float(posmod(num * 3, 4)) * 0.022
+	cfg.bell_cast = 0.06 + float(posmod(num * 5, 4)) * 0.02
+	cfg.tint_shift = shift_table[posmod(num, shift_table.size())]
+	cfg.seed_val = num * 19 + v * 7
+	cfg.chimney_side = -1.0 if posmod(num, 2) == 1 else 1.0
+	cfg.crown_style = posmod(num + v, 3)
+	cfg.twin_dormers = v == 2 and posmod(num, 3) == 0
+	cfg.dormer_z = -0.85 if posmod(num, 2) == 0 else 0.85
+	if num in [19, 24, 28]:
+		cfg.roof_key = "roof_moss"
+	elif num in [16, 27]:
+		cfg.roof_key = "roof_shingle"
+	elif num in [21, 25]:
+		cfg.roof_key = "roof_tile"
+	return cfg
+
+
+func _roof_spec(
+	span: float, length: float, eave_y: float, rise: float, timbered: bool, v_cfg: Dictionary = {}
+) -> Dictionary:
+	return {
+		"span": span,
+		"length": length,
+		"eave_y": eave_y,
+		"rise": rise,
+		"overhang_eave": float(v_cfg.get("overhang_eave", OVERHANG)),
+		"overhang_front": OVERHANG,
+		"overhang_back": OVERHANG,
+		"roof_key": _roof,
+		"wall_key": _wall,
+		"timbered": timbered,
+		"bell_cast": float(v_cfg.get("bell_cast", 0.08)),
+		"tint_shift": float(v_cfg.get("tint_shift", 0.0)),
+		"seed_val": int(v_cfg.get("seed_val", 0)),
+	}
 
 
 func _inn() -> void:
@@ -79,7 +163,26 @@ func _inn() -> void:
 	_foundation(8.2, 5.6)
 	_storey(8.0, 5.4, PLINTH, 2.5, true, Transform3D.IDENTITY, 1.5, "-X")
 	_storey(8.2, 5.6, 2.92, 2.5, false)
-	_roof_pair(8.2, 5.6, 5.42, 3.4)
+	var inn_spec := {
+		"span": 8.2,
+		"length": 5.6,
+		"eave_y": 5.42,
+		"rise": 3.25,
+		"overhang_eave": 0.36,
+		"overhang_front": 0.34,
+		"overhang_back": 0.34,
+		"roof_key": "roof_shingle",
+		"wall_key": "wall_ochre",
+		"timbered": true,
+		"bell_cast": 0.1,
+		"seed_val": 41,
+	}
+	_roof_kit.build_pitched_roof(_baker, _root, Transform3D.IDENTITY, inn_spec)
+	for side in [-1.0, 1.0]:
+		_roof_kit.build_gable_dormer(
+			_baker, _root, Transform3D.IDENTITY, inn_spec, side, 0.72, 1.02
+		)
+	_chimney_on_roof(Transform3D.IDENTITY, inn_spec, Vector2(2.35, -1.35), 9.1, 2)
 	# Wing joins the main body's west wall; no buried facade or window in
 	# the junction. All of its walls remain inside the existing wing collider.
 	var wing := _at(Vector3(-5.0, 0.0, 1.6), PI * 0.5)
@@ -87,11 +190,27 @@ func _inn() -> void:
 	_foundation(2.8, 3.2, wing)
 	_storey(2.8, 3.2, PLINTH, 2.7, false, wing, 1.0, "+Z")
 	_roof = "roof_tile"
-	_roof_pair(2.8, 3.2, 3.12, 1.4, wing)
+	var wing_spec := {
+		"span": 2.8,
+		"length": 3.2,
+		"eave_y": 3.12,
+		"rise": 1.4,
+		"overhang_eave": 0.3,
+		"overhang_front": 0.0,
+		"overhang_back": 0.32,
+		"gable_front": false,
+		"gable_back": true,
+		"roof_key": "roof_tile",
+		"wall_key": "wall_ash",
+		"timbered": true,
+		"bell_cast": 0.08,
+		"seed_val": 53,
+	}
+	_roof_kit.build_pitched_roof(_baker, _root, wing, wing_spec)
+	_chimney_on_roof(wing, wing_spec, Vector2(-0.72, -0.45), 5.05, 0)
 	_roof = "roof_shingle"
 	_entry_hood(2.8, 3.03, 2.7)
 	_steps(5.4, 1.5)
-	_chimney(Vector3(2.5, 0.0, -1.1), 6.5, 9.1)
 	# Pegged bracket, iron suspension and framed sign identify the inn.
 	_beam(Vector3(3.7, 3.3, 2.8), Vector3(3.7, 3.3, 3.55), 0.13)
 	_beam(Vector3(3.7, 2.94, 2.8), Vector3(3.7, 3.3, 3.38), 0.09)
@@ -151,7 +270,33 @@ func _hall() -> void:
 				0.36,
 				_at(Vector3(x, 0.0, side * 2.73))
 			)
-	_roof_pair(5.4, 9.4, 4.7, 2.6, _at(Vector3.ZERO, PI * 0.5), false)
+	# Nave roof spans the full 9.4 m nave and joins the belfry east wall (x = -3.925)
+	# with a stepped stone saddle flashing collar around the tower intersection.
+	var nave_r_frame := _at(Vector3.ZERO, PI * 0.5)
+	var hall_spec := {
+		"span": 5.4,
+		"length": 9.4,
+		"eave_y": 4.7,
+		"rise": 2.48,
+		"overhang_eave": 0.36,
+		"overhang_front": 0.34,
+		"overhang_back": 0.2,
+		"gable_front": true,
+		"gable_back": true,
+		"roof_key": "roof_slate",
+		"wall_key": "stone",
+		"timbered": false,
+		"bell_cast": 0.09,
+		"seed_val": 71,
+	}
+	_roof_kit.build_pitched_roof(_baker, _root, nave_r_frame, hall_spec)
+	var h_pitch := atan2(2.48, 2.7)
+	for side in [-1.0, 1.0]:
+		var b_flash := nave_r_frame * _at(Vector3(0.0, 7.18, -3.88), 0.0, -side * h_pitch)
+		_box("stone_dark", Vector3(1.95, 0.16, 0.2), Vector3(side * 0.96, 0.15, 0.0), b_flash)
+	for dz in [-1.4, 1.9]:
+		_roof_kit.build_gable_dormer(_baker, _root, nave_r_frame, hall_spec, -1.0, dz, 1.02)
+	_chimney_on_roof(nave_r_frame, hall_spec, Vector2(1.25, 2.35), 7.85, 1)
 	_entry_hood(2.7, 3.6, 2.8)
 	_steps(5.4, 2.2)
 	_belfry()
@@ -410,9 +555,8 @@ func _course(length: float, course: int, frame: Transform3D) -> void:
 		first = false
 
 
-## Separate gable walls and CLOSED chamfered roof sections. The gables end at
-## the wall faces; no plaster spans the overhang. Ridge/eave positions derive
-## from one pitch equation, including every rafter and tile course.
+## Separate gable walls and CLOSED chamfered roof sections delegated to
+## `RoofArchitecture` with non-degenerate parameter clamping.
 func _roof_pair(
 	width: float,
 	depth: float,
@@ -421,118 +565,12 @@ func _roof_pair(
 	frame: Transform3D = Transform3D.IDENTITY,
 	timbered: bool = true
 ) -> void:
-	var half := width * 0.5
-	var pitch := atan2(rise, half)
-	var slope := Vector2(half + OVERHANG, rise * (1.0 + OVERHANG / half)).length()
-	for side in [-1.0, 1.0]:
-		var section := frame * _at(Vector3(0.0, top + rise, 0.0), 0.0, -side * pitch)
-		var profile := PackedVector2Array(
-			[
-				Vector2(0.0, 0.0),
-				Vector2(side * (slope - 0.055), 0.0),
-				Vector2(side * slope, 0.055),
-				Vector2(side * slope, 0.14),
-				Vector2(0.0, 0.14)
-			]
-		)
-		_profile(_roof, profile, depth + OVERHANG * 2.0, section)
-		# Lapped tile bands have staggered joints and a controlled pitch, not
-		# random cubes. Their lower lips change the roof silhouette subtly.
-		var rows := maxi(4, int(ceil(slope / 0.5)))
-		var columns := maxi(4, int(ceil((depth + OVERHANG * 2.0) / 0.7)))
-		var row_pitch := slope / float(rows)
-		var col_pitch := (depth + OVERHANG * 2.0) / float(columns)
-		var half_depth := (depth + OVERHANG * 2.0) * 0.5
-		for row in rows:
-			for column in columns + 1:
-				var start := -half_depth + (float(column) - float(row % 2) * 0.5) * col_pitch
-				var end := minf(start + col_pitch, half_depth)
-				start = maxf(start, -half_depth)
-				if end - start < 0.03:
-					continue
-				var z := (start + end) * 0.5
-				var tone := 0.025 * float((row * 7 + column * 3) % 4)
-				_box(
-					_roof,
-					Vector3(row_pitch - 0.012, 0.045, end - start - 0.016),
-					Vector3(
-						side * (float(row) + 0.5) * row_pitch, 0.153 + float(row % 2) * 0.004, z
-					),
-					section,
-					Color.WHITE.darkened(tone)
-				)
-		# Fascia follows the downslope section exactly, including rear view.
-		_box(
-			"timber",
-			Vector3(0.13, 0.2, depth + OVERHANG * 2.0),
-			Vector3(side * slope, 0.0, 0.0),
-			section
-		)
-		for end in [-1.0, 1.0]:
-			_box(
-				"timber",
-				Vector3(slope + 0.04, 0.16, 0.13),
-				Vector3(side * slope * 0.5, 0.025, end * (depth * 0.5 + OVERHANG)),
-				section
-			)
-		# Exposed rafter tails connect wall plate to eave underside.
-		for index in maxi(3, int(depth / 0.65) + 1):
-			var count := maxi(3, int(depth / 0.65) + 1)
-			var z := lerpf(-depth * 0.5, depth * 0.5, float(index) / float(count - 1))
-			_box(
-				"timber",
-				Vector3(0.56, 0.12, 0.1),
-				Vector3(side * (slope - 0.24), -0.07, z),
-				section
-			)
-	# Faceted ridge cap, closed at both ends.
-	_profile(
-		_roof,
-		PackedVector2Array(
-			[
-				Vector2(-0.2, 0.0),
-				Vector2(0.0, 0.16),
-				Vector2(0.2, 0.0),
-				Vector2(0.16, -0.08),
-				Vector2(-0.16, -0.08)
-			]
-		),
-		depth + OVERHANG * 2.0 + 0.12,
-		frame * _at(Vector3(0.0, top + rise + 0.17, 0.0))
-	)
-	for end in [-1.0, 1.0]:
-		var gable := frame * _at(Vector3(0.0, top, end * (depth * 0.5 - 0.1)))
-		_profile(
-			_wall,
-			PackedVector2Array([Vector2(-half, 0.0), Vector2(half, 0.0), Vector2(0.0, rise)]),
-			0.2,
-			gable
-		)
-		if timbered:
-			var face := frame * _at(Vector3(0.0, 0.0, end * depth * 0.5))
-			_beam(Vector3(-half, top + 0.02, 0.0), Vector3(half, top + 0.02, 0.0), 0.18, face)
-			_beam(Vector3(0.0, top, 0.0), Vector3(0.0, top + rise - 0.08, 0.0), 0.13, face)
-			for side in [-1.0, 1.0]:
-				_beam(
-					Vector3(side * half * 0.88, top + 0.04, 0.0),
-					Vector3(0.0, top + rise * 0.86, 0.0),
-					0.11,
-					face
-				)
+	var spec := _roof_spec(width, depth, top, rise, timbered)
+	_roof_kit.build_pitched_roof(_baker, _root, frame, spec)
 
 
 func _entry_hood(face_z: float, top: float, width: float) -> void:
-	# Bracket-supported lean-to hood: high edge meets wall, low edge drains
-	# toward street. Projection < 0.65 m, unlike the old freestanding porch.
-	var pitch := 0.26
-	var hood := _at(Vector3(0.0, top, face_z + 0.26), 0.0)
-	hood.basis = Basis(Vector3.RIGHT, pitch)
-	_box(_roof, Vector3(width, 0.12, 0.78), Vector3.ZERO, hood)
-	_box("timber", Vector3(width + 0.08, 0.15, 0.12), Vector3(0.0, -0.06, 0.39), hood)
-	for side in [-1.0, 1.0]:
-		var x: float = side * (width * 0.5 - 0.13)
-		_beam(Vector3(x, top - 0.65, face_z), Vector3(x, top - 0.18, face_z + 0.52), 0.11)
-		_box("timber", Vector3(0.11, 0.13, 0.74), Vector3(x, -0.1, 0.0), hood)
+	_roof_kit.build_entry_hood(_baker, _root, Transform3D.IDENTITY, _roof, face_z, top, width)
 
 
 func _steps(depth: float, width: float) -> void:
@@ -540,24 +578,10 @@ func _steps(depth: float, width: float) -> void:
 	_box("stone", Vector3(width + 0.26, 0.28, 0.45), Vector3(0.0, 0.14, depth * 0.5 + 0.14))
 
 
-func _chimney(position: Vector3, bottom: float, top: float) -> void:
-	var frame := _at(Vector3(position.x, 0.0, position.z))
-	# Shaft begins below its roof intersection. A recessed black aperture and
-	# four coping stones form an actual open flue, never a sealed dark cube.
-	var courses := int(ceil((top - bottom) / 0.24))
-	for course in courses:
-		var y := bottom + (float(course) + 0.5) * (top - bottom) / float(courses)
-		_box(
-			"stone",
-			Vector3(0.56, (top - bottom) / float(courses) - 0.012, 0.56),
-			Vector3(0.0, y, 0.0),
-			frame,
-			Color.WHITE.darkened(float(course % 3) * 0.035)
-		)
-	_box("iron", Vector3(0.4, 0.02, 0.4), Vector3(0.0, top + 0.012, 0.0), frame)
-	for side in [-1.0, 1.0]:
-		_box("stone_dark", Vector3(0.16, 0.2, 0.76), Vector3(side * 0.3, top + 0.1, 0.0), frame)
-		_box("stone_dark", Vector3(0.44, 0.2, 0.16), Vector3(0.0, top + 0.1, side * 0.3), frame)
+func _chimney_on_roof(
+	frame: Transform3D, parent_spec: Dictionary, pos: Vector2, top: float, crown_style: int = 0
+) -> void:
+	_roof_kit.build_chimney(_baker, _root, frame, parent_spec, pos, top, crown_style)
 
 
 func _belfry() -> void:
@@ -568,7 +592,10 @@ func _belfry() -> void:
 	for quarter in 4:
 		var angle := float(quarter) * PI * 0.5
 		var face := frame * _at(Vector3(sin(angle), 0.0, cos(angle)) * 1.475, angle)
-		_facade(2.95, PLINTH, 7.38, face, [_opening(0.0, 4.35, 0.45, 1.25)], true)
+		var b_openings: Array[Dictionary] = []
+		if quarter != 1:
+			b_openings.append(_opening(0.0, 4.35, 0.45, 1.25))
+		_facade(2.95, PLINTH, 7.38, face, b_openings, true)
 	_wall = saved_wall
 	# Corner piers carry an open chamber ABOVE the nave ridge cap (7.63 m),
 	# so the main roof never slices through the bell or its four openings.
@@ -588,11 +615,7 @@ func _belfry() -> void:
 		_root * frame * _at(Vector3(0.0, 8.33, 0.0)),
 		Color(1.4, 1.16, 0.75)
 	)
-	# Four-sided spire has a square eave and collar, no oversized cone skirt.
-	_baker.add_cylinder(
-		"roof_slate", 0.0, 2.42, 2.3, 4, _root * frame * _at(Vector3(0.0, 10.65, 0.0), PI * 0.25)
-	)
-	_box("iron", Vector3(0.08, 0.85, 0.08), Vector3(0.0, 12.15, 0.0), frame)
+	_roof_kit.build_belfry_spire(_baker, _root, frame, 9.5, 2.48, 2.65)
 
 
 func _box(
