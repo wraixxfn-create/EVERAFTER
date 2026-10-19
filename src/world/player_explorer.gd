@@ -23,12 +23,16 @@ extends CharacterBody3D
 ## How far from the terrain border the player is stopped.
 const CAPTURE_DISTANCE_FROM_EDGE := 2.0
 
-@export var walk_speed: float = 5.0
-@export var sprint_speed: float = 9.0
-@export var jump_velocity: float = 6.0
+## Movement is deliberately unhurried: the village is the content, and a 9 m/s
+## sprint turned every street into a corridor to run through. These defaults
+## give a 1.2 m/s walk and a 1.9 m/s jog/sprint, with a jump of about 0.85 m —
+## enough to hop a bank or a low step, never enough to clear a fence.
+@export var walk_speed: float = 3.4
+@export var sprint_speed: float = 5.6
+@export var jump_velocity: float = 4.1
 @export var mouse_sensitivity: float = 0.0022
-@export var acceleration: float = 45.0
-@export var deceleration: float = 32.0
+@export var acceleration: float = 32.0
+@export var deceleration: float = 26.0
 @export_range(30.0, 89.0) var max_pitch_degrees: float = 85.0
 ## Half width of the walkable world. The player is kept inside it, so walking
 ## off the edge of the terrain is impossible rather than merely unlikely.

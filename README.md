@@ -95,8 +95,8 @@ Su Windows l'output su console è visibile solo con l'eseguibile `_console.exe`.
 | Input | Azione |
 | --- | --- |
 | `W` `A` `S` `D` o frecce | Muoversi |
-| `Shift` | Correre |
-| `Spazio` | Saltare |
+| `Shift` | Correre (5,6 m/s invece di 3,4 m/s di passo) |
+| `Spazio` | Saltare (≈0,86 m: un gradino o un argine, non uno steccato) |
 | Mouse | Guardarsi attorno |
 | `Esc` | **Libera il mouse** (per raggiungere la finestra, l'editor, un secondo monitor) |
 | Clic sinistro **oppure** `F` | **Riprende il controllo del mouse** |
@@ -157,9 +157,13 @@ Un villaggio di confine, al mattino del giorno 1 (ore 07:00 simulate):
   raggiungono le porte.
 * **250+ alberi** di tre specie (quercia, pino, betulla), ognuna con **tre varianti** davvero
   diverse: abete rosso, pino silvestre e mugo; quercia larga, alta e inclinata; betulla snella,
-  a due fusti e d'autunno. Tronchi rastremati con flare radicale e rami visibili, chiome fatte di
-  masse lobate (mai una sfera), sagome diverse per ogni seme (Visual Polish 16). Il bosco ha tre
-  radure vere, specie a fasce e densità ondulata invece di un disco uniforme.
+  a due fusti e d'autunno. Gli alberi hanno un'altezza credibile accanto a un giocatore di 1,8 m
+  (quercia 5–7 m, betulla 4–5,5 m, abete 5–6 m) e sono costruiti come una struttura con sopra le
+  foglie: tronchi rastremati con flare radicale, rami primari e secondari, e chiome di molte masse
+  piccole con sfumatura verticale. Le conifere sono **verticilli di aghi** (punte lunghe e corte
+  alternate, che pendono dal cono interno), non pila di dischi; il pino silvestre è un tronco nudo
+  con un ombrello di aghi sopra. Il bosco ha tre radure vere, specie a fasce e densità ondulata
+  invece di un disco uniforme (Visual Polish 16 e 18).
 * **Cespugli** a più lobi (alcuni fioriti), **chiazze di fiori** con steli e capolini in tre
   varianti, massi e ciottoli, e uno **stagno** con ninfee, riva con panchina, fioriere e sassi a
   nord-est. Alberi e cespugli stanno fuori dai corridoi delle porte e tengono una verge dalle strade.
@@ -476,6 +480,7 @@ docs/
   VISUAL_POLISH_14.md          paesaggio modellato: rilievo, spalle stradali, orizzonte (Polish 14)
   VISUAL_POLISH_15.md          strade curve, piazza composta e superfici calpestabili (Polish 15)
   VISUAL_POLISH_16.md          ricostruzione della vegetazione: alberi, cespugli, fiori, erba (Polish 16)
+  VISUAL_POLISH_18.md          alberi ricostruiti (verticilli, scheletro + foglie) e movimento rallentato (Polish 18)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 

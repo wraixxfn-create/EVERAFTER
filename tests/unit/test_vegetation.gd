@@ -83,6 +83,10 @@ static func run_tests(harness: TestHarness) -> void:
 	)
 
 	# --- trunk and crown structure -------------------------------------------
+	# Visual polish 18 rebuilt the trees again: conifers are whorls of needles,
+	# broadleaves are a skeleton with many small leaf masses hung on it. These
+	# checks are the ones that tell that construction apart from "a ball on a
+	# pole", and they read the measurements out of the baked geometry.
 	for kind in VillageLayout.TREE_KINDS:
 		var baked := _bake(materials, kind, 0, true)
 		var stats: Dictionary = baked["stats"]
@@ -92,9 +96,19 @@ static func run_tests(harness: TestHarness) -> void:
 			base > top * 2.0,
 			"%s trunk tapers instead of being a pipe (%.2f -> %.2f)" % [kind, base, top]
 		)
+		# A crown is now a crowd of masses: six needle whorls for a spruce, a
+		# dozen leaf bunches for an oak, a loose veil for a birch.
 		harness.check(
-			int(stats["crown_clumps"]) >= 4,
-			"%s crown is built from several lobed masses, not one ball" % kind
+			int(stats["crown_clumps"]) >= 6,
+			"%s crown is built from many masses, not one ball (%d)"
+			% [kind, int(stats["crown_clumps"])]
+		)
+		# A tree has to be a tree next to a 1.8 m player: a crown at knee height
+		# or at ten metres both read as a mistake from the walking camera.
+		var tree_top: Vector3 = stats["top"]
+		harness.check(
+			tree_top.y > 3.0 and tree_top.y < 6.5,
+			"%s stands at a believable height (%.1f m at scale 1)" % [kind, tree_top.y]
 		)
 
 	# --- far detail is cheaper, never empty ----------------------------------
