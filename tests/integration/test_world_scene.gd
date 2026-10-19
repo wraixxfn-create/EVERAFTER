@@ -55,7 +55,7 @@ static func check_structure(harness: TestHarness, world: Node3D) -> void:
 	harness.check(built != null, "the village content was built")
 	if built == null:
 		return
-	var parts := ["Structures", "Props", "Vegetation", "Grass", "Water"]
+	var parts := ["Structures", "Props", "Paving", "Vegetation", "Grass", "Water"]
 	for part in parts:
 		harness.check(built.get_node_or_null(part) != null, "village has a %s node" % part)
 	for body_path in ["Props/PropCollision", "Vegetation/TreeCollision"]:

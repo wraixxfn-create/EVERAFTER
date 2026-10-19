@@ -75,7 +75,26 @@ const DOOR_CORRIDOR_REACH := 1.5
 ## fence module so a 0.4 m player capsule and a 0.42 m NPC never clip a post.
 const FENCE_GATE_MARGIN := 1.6
 const ROAD_FALLOFF := 2.4
-const ROAD_STEP := 17.0
+## Visual polish 15 — the road is sampled as a smooth curve, not as a chain of
+## 17 m chords with a random kink at every joint. Three metres is short enough
+## that the terrain, the collision and the paving ribbon follow the same line
+## invisibly, and long enough that the height field still costs little to query.
+const ROAD_SAMPLE_STEP := 3.0
+## Long, low-amplitude meander: a road that wanders because the land does,
+## instead of the old random walk that read as a zigzag of straight sticks.
+const ROAD_MEANDER := 2.0
+const ROAD_MEANDER_WAVELENGTH := 44.0
+## Slower drift across the map, so each road has its own broad bend.
+const ROAD_DRIFT := 3.0
+const ROAD_DRIFT_WAVELENGTH := 168.0
+## Distance over which a road leaves the plaza radially and starts to bend.
+## Keeping the mouth straight is what makes the three entrances read as a
+## composed square instead of three lines arriving at random angles.
+const ROAD_MOUTH_BLEND := 24.0
+## House plots are spaced by travelled distance now that a road is a dense
+## polyline: one plot every nine metres, never on consecutive segments.
+const ROAD_PLOT_SPACING := 9.0
+const ROAD_PLOT_START := 16.0
 const PLOT_FALLOFF := 2.6
 ## Compass bearings (degrees, 0 = +X, counter-clockwise in XZ) of the three
 ## roads leaving the plaza. The plaza ring buildings sit between them.
@@ -113,6 +132,11 @@ var pond_radius: float = POND_RADIUS
 var water_level: float = 0.0
 
 var _rng := RandomNumberGenerator.new()
+## Bounding rectangle of every road (grown by the widest query threshold). A
+## point outside a road's rectangle cannot be near it, so a distance query skips
+## its segments entirely: with the dense curves of visual polish 15 this keeps
+## the terrain paint pass as cheap as it was with coarse polylines.
+var _road_bounds: Array[Rect2] = []
 var _occupied: Array[Vector2] = []
 var _occupied_radius: PackedFloat32Array = PackedFloat32Array()
 var _next_id := 0
@@ -123,6 +147,7 @@ func _init(initial_seed: int = 0, initial_half_extent: float = 63.5) -> void:
 	half_extent = maxf(initial_half_extent, PLAZA_RADIUS * 3.0)
 	_rng.seed = initial_seed
 	_build_roads()
+	_cache_road_bounds()
 	_build_plaza_landmarks()
 	_build_road_plots()
 	_build_homestead_details()
@@ -193,12 +218,30 @@ func road_distance(world_x: float, world_z: float) -> float:
 ## Shortest distance from a point to any road centre line.
 func distance_to_roads(point: Vector2) -> float:
 	var best := INF
-	for road in roads:
+	for road_index in roads.size():
+		if road_index < _road_bounds.size() and not _road_bounds[road_index].has_point(point):
+			continue
+		var road := roads[road_index]
 		for index in road.size() - 1:
 			best = minf(
 				best, AreaRegistry.distance_to_segment(point, road[index], road[index + 1])
 			)
 	return best
+
+
+## Caches one grown rectangle per road. The margin is larger than every
+## distance threshold used by the layout, the terrain and the nav graph, so a
+## skipped road can only be reported as "far away", never as "at the threshold".
+func _cache_road_bounds() -> void:
+	_road_bounds.clear()
+	for road in roads:
+		if road.is_empty():
+			_road_bounds.append(Rect2())
+			continue
+		var bounds := Rect2(road[0], Vector2.ZERO)
+		for index in road.size() - 1:
+			bounds = bounds.expand(road[index + 1])
+		_road_bounds.append(bounds.grow(14.0))
 
 
 ## 1.0 inside the pond, 0.0 outside its basin.
@@ -284,17 +327,43 @@ func built_ground_coverage(sample_step: float = 4.0) -> float:
 # --- generation --------------------------------------------------------------
 
 
+## Visual polish 15: roads are continuous low-frequency curves.
+##
+## The previous generator advanced 17 m along a bearing and then applied an
+## independent random sideways offset, so every joint was a visible knee and
+## the village was ringed by three broken sticks. This version evaluates two
+## long sine terms — a 44 m meander and a 168 m drift — and fades them in over
+## the first 24 m so each road still leaves the square radially. The result is
+## deterministic, has a bounded heading (no hairpins), and costs one sin per
+## sample instead of a random walk whose shape depended on the previous step.
 func _build_roads() -> void:
+	var end_distance := half_extent - 6.0
 	for bearing in ROAD_BEARINGS_DEG:
 		var direction := Vector2(cos(deg_to_rad(bearing)), sin(deg_to_rad(bearing)))
 		var side := Vector2(-direction.y, direction.x)
-		var points := PackedVector2Array([direction * (PLAZA_RADIUS - 2.0)])
-		var distance := PLAZA_RADIUS
-		var offset := 0.0
-		while distance < half_extent - 6.0:
-			distance += ROAD_STEP
-			offset = clampf(offset + _rng.randf_range(-4.5, 4.5), -11.0, 11.0)
-			points.append(direction * distance + side * offset)
+		var meander_phase := _rng.randf_range(0.0, TAU)
+		var drift_phase := _rng.randf_range(0.0, TAU)
+		var meander_scale := _rng.randf_range(0.62, 1.0)
+		var drift_scale := _rng.randf_range(-1.0, 1.0)
+		var points := PackedVector2Array()
+		var cursor := PLAZA_RADIUS - 2.0
+		while true:
+			var along := minf(cursor, end_distance)
+			var mouth := _smoothstep(
+				clampf((along - PLAZA_RADIUS) / ROAD_MOUTH_BLEND, 0.0, 1.0)
+			)
+			var offset := meander_scale * ROAD_MEANDER * mouth * sin(
+				along / ROAD_MEANDER_WAVELENGTH * TAU + meander_phase
+			)
+			offset += drift_scale * ROAD_DRIFT * mouth * sin(
+				along / ROAD_DRIFT_WAVELENGTH * TAU + drift_phase
+			)
+			points.append(direction * along + side * offset)
+			# Stop exactly on the border, so the road comes out of the valley
+			# instead of ending wherever the last 3 m step happened to land.
+			if along >= end_distance:
+				break
+			cursor = minf(cursor + ROAD_SAMPLE_STEP, end_distance)
 		roads.append(points)
 
 
@@ -324,27 +393,25 @@ func _build_plaza_landmarks() -> void:
 
 
 ## Houses along the roads, alternating sides, always facing the road.
+##
+## Plots are spaced by arc length rather than by polyline segment: the road is
+## now a dense curve, and "two houses per segment" would have packed the whole
+## verge. Alternating sides and a small along-track jitter keep the row from
+## reading as a measured colonnade of identical plots.
 func _build_road_plots() -> void:
 	for road in roads:
+		var length := polyline_length(road)
 		var side := 1.0
-		for index in road.size() - 1:
-			var start: Vector2 = road[index]
-			var end: Vector2 = road[index + 1]
-			var span := end - start
-			if span.length() < 4.0:
-				continue
-			var along := span.normalized()
+		var distance := ROAD_PLOT_START
+		while distance < length - 4.0:
+			var sample := sample_polyline(road, distance + _rng.randf_range(-1.4, 1.4))
+			var along: Vector2 = sample.tangent
 			var outward := Vector2(-along.y, along.x) * side
 			side = -side
-			for fraction in [0.32, 0.72]:
-				# A small along-track jitter keeps the row from reading as a
-				# measured colonnade of identical plots.
-				var at := start + span * float(fraction)
-				at += along * _rng.randf_range(-1.4, 1.4)
-				var depth := _rng.randf_range(3.4, 5.0)
-				var position := at + outward * (ROAD_WIDTH * 0.5 + depth * 0.5 + 1.6)
-				if position.length() > half_extent - 10.0:
-					continue
+			var at: Vector2 = sample.point
+			var depth := _rng.randf_range(3.4, 5.0)
+			var position := at + outward * (ROAD_WIDTH * 0.5 + depth * 0.5 + 1.6)
+			if position.length() <= half_extent - 10.0:
 				var faces_road := rad_to_deg(
 					atan2(at.x - position.x, at.y - position.y)
 				)
@@ -359,6 +426,7 @@ func _build_road_plots() -> void:
 					_rng.randf_range(0.85, 1.25),
 					depth * 0.9
 				)
+			distance += ROAD_PLOT_SPACING + _rng.randf_range(-1.0, 1.6)
 
 
 ## Small yard clutter beside every building: a crate stack by the wall, a
@@ -409,32 +477,28 @@ func _build_homestead_details() -> void:
 			)
 
 
+## Street furniture is placed by travelled distance, at an irregular rhythm,
+## instead of once per polyline segment (which now would have put a lamp every
+## three metres).
 func _build_road_details() -> void:
 	for road in roads:
+		var length := polyline_length(road)
 		var side := 1.0
-		for index in road.size() - 1:
-			var start: Vector2 = road[index]
-			var end: Vector2 = road[index + 1]
-			var span := end - start
-			if span.length() < 4.0:
-				continue
-			var along := span.normalized()
+		var distance := 13.0
+		while distance < length - 8.0:
+			var sample := sample_polyline(road, distance)
+			var along: Vector2 = sample.tangent
 			var outward := Vector2(-along.y, along.x)
+			var at: Vector2 = sample.point
 			side = -side
-			# Lamps drift along the segment and towards the verge instead of
-			# standing at the exact midpoint of every stretch: the old rhythm
-			# read as a ruler, not as street furniture.
-			if _rng.randf() < 0.8:
-				var lamp_t := _rng.randf_range(0.3, 0.7)
+			if _rng.randf() < 0.82:
 				var lamp_out := ROAD_WIDTH * 0.5 + _rng.randf_range(0.9, 1.5)
-				var position := start + span * lamp_t + outward * lamp_out * side
+				var position := at + outward * lamp_out * side
 				if position.length() <= half_extent - 8.0:
 					_add_placement(KIND_LAMP, position, 0.0, 0, 1.0, 0.7)
 			if _rng.randf() < 0.3:
-				var near_t := _rng.randf_range(0.08, 0.28)
-				if _rng.randf() < 0.5:
-					near_t = _rng.randf_range(0.72, 0.92)
-				var near := start + span * near_t - outward * (ROAD_WIDTH * 0.5 + 1.3) * side
+				var near := at - outward * (ROAD_WIDTH * 0.5 + 1.3) * side
+				near += along * _rng.randf_range(-2.2, 2.2)
 				if near.length() <= half_extent - 8.0:
 					_add_placement(
 						KIND_CART if _rng.randf() < 0.5 else KIND_BARREL,
@@ -444,6 +508,7 @@ func _build_road_details() -> void:
 						_rng.randf_range(0.9, 1.1),
 						1.4
 					)
+			distance += _rng.randf_range(19.0, 27.0)
 
 
 func _build_pond() -> void:
@@ -624,6 +689,33 @@ func _build_scatter() -> void:
 
 
 # --- helpers -----------------------------------------------------------------
+
+
+## Total length of a polyline, in metres.
+static func polyline_length(road: PackedVector2Array) -> float:
+	var total := 0.0
+	for index in maxi(road.size() - 1, 0):
+		total += road[index].distance_to(road[index + 1])
+	return total
+
+
+## Point and unit tangent at [param distance] along a polyline, clamped to its
+## ends. Used by house plots, street furniture and the paving builder so all
+## three read the same curve.
+static func sample_polyline(road: PackedVector2Array, distance: float) -> Dictionary:
+	var travelled := 0.0
+	for index in maxi(road.size() - 1, 0):
+		var start: Vector2 = road[index]
+		var end: Vector2 = road[index + 1]
+		var span := end - start
+		var length := span.length()
+		if length < 0.0001:
+			continue
+		if travelled + length >= distance or index == road.size() - 2:
+			var t := clampf((distance - travelled) / length, 0.0, 1.0)
+			return {"point": start + span * t, "tangent": span / length}
+		travelled += length
+	return {"point": road[road.size() - 1], "tangent": Vector2(1.0, 0.0)}
 
 
 ## Places a prop at a bearing from the plaza centre, facing the centre.

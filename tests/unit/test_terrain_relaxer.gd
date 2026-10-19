@@ -18,10 +18,10 @@ static func run_tests(harness: TestHarness) -> void:
 	harness.suite("TerrainRelaxer")
 
 	_spike_is_relaxed(harness)
-	protected_ground_is_never_moved(harness)
-	pads_blend(harness)
-	measurements_are_honest(harness)
-	mask_matches_the_layout(harness)
+	_protected_ground_is_never_moved(harness)
+	_pads_blend(harness)
+	_measurements_are_honest(harness)
+	_mask_matches_the_layout(harness)
 
 
 ## A single tall spike on flat ground must be levelled down until every

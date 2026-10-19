@@ -141,6 +141,46 @@ static func run_tests(harness: TestHarness) -> void:
 		"some of the map is built ground (paths and plaza)"
 	)
 
+	# --- visual polish 15: roads are smooth curves --------------------------
+	# A road may bend, but it may not kink. The old generator walked 17 m and
+	# then jumped sideways, so consecutive segments could meet at a visible
+	# angle; the current curve is sampled every three metres and its heading
+	# can only turn a few degrees per step.
+	var worst_turn := 0.0
+	var worst_excursion := 0.0
+	for road in layout.roads:
+		harness.check(
+			road.size() >= 20,
+			"a road is sampled as a dense curve (%d points)" % road.size()
+		)
+		for index in range(1, road.size() - 1):
+			var before: Vector2 = road[index] - road[index - 1]
+			var after: Vector2 = road[index + 1] - road[index]
+			if before.length_squared() < 0.0001 or after.length_squared() < 0.0001:
+				continue
+			worst_turn = maxf(worst_turn, absf(before.angle_to(after)))
+		var chord_start: Vector2 = road[0]
+		var chord_end: Vector2 = road[road.size() - 1]
+		var chord := chord_end - chord_start
+		for point in road:
+			var offset := point - chord_start
+			var projection := offset.dot(chord) / maxf(chord.length_squared(), 0.0001)
+			var closest := chord_start + chord * clampf(projection, 0.0, 1.0)
+			worst_excursion = maxf(worst_excursion, point.distance_to(closest))
+	harness.check(
+		worst_turn < deg_to_rad(16.0),
+		"no visible kink between road segments (worst turn %.1f degrees)"
+		% rad_to_deg(worst_turn)
+	)
+	harness.check(
+		worst_excursion > 0.9,
+		"the roads meander instead of running as straight spokes (%.1f m)"
+		% worst_excursion
+	)
+	harness.check(
+		worst_excursion < 12.0, "a meander never loops back into the village"
+	)
+
 	# --- roads and the pond --------------------------------------------------
 	var first_road: PackedVector2Array = layout.roads[0]
 	harness.check(first_road.size() >= 3, "a road is a polyline, not a single segment")

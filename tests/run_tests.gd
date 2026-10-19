@@ -41,6 +41,7 @@ func _run_tests() -> void:
 	TestTerrainRelaxer.run_tests(harness)
 	TestAreaRegistry.run_tests(harness)
 	TestVillageLayout.run_tests(harness)
+	TestGroundSurfaces.run_tests(harness)
 	TestVillageMaterials.run_tests(harness)
 	TestMeshBaker.run_tests(harness)
 	TestVillageArt.run_tests(harness)
