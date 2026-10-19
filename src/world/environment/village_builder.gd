@@ -156,13 +156,7 @@ func _build_props() -> Node3D:
 	for placement in layout.placements:
 		if BuildingFactory.is_structure(placement.kind):
 			continue
-		if placement.kind in [
-			VillageLayout.KIND_TREE_PINE,
-			VillageLayout.KIND_TREE_OAK,
-			VillageLayout.KIND_TREE_BIRCH,
-			VillageLayout.KIND_BUSH,
-			VillageLayout.KIND_ROCK,
-		]:
+		if VillageLayout.is_vegetation(placement.kind):
 			continue
 		var origin := _placement_transform(placement)
 		_buildings.append_prop(baker, placement, origin)
@@ -186,17 +180,15 @@ func _build_vegetation() -> Node3D:
 	var colliders := StaticBody3D.new()
 	colliders.name = "TreeCollision"
 	for placement in layout.placements:
-		var is_plant := placement.kind in [
-			VillageLayout.KIND_TREE_PINE,
-			VillageLayout.KIND_TREE_OAK,
-			VillageLayout.KIND_TREE_BIRCH,
-			VillageLayout.KIND_BUSH,
-			VillageLayout.KIND_ROCK,
-		]
-		if not is_plant:
+		if not VillageLayout.is_vegetation(placement.kind):
 			continue
 		var origin := _placement_transform(placement)
-		_vegetation.append(baker, placement, origin)
+		# Detail follows distance: near trees and the ones lining a road get the
+		# full silhouette, the outer forest a cheaper one. Both stay species
+		# specific, so the tree line still reads from the square.
+		_vegetation.append(
+			baker, placement, origin, _vegetation.needs_detail(layout, placement)
+		)
 		_vegetation_count += 1
 		for shape in _vegetation.colliders_for(placement):
 			shape.transform = origin * shape.transform

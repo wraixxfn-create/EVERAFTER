@@ -161,6 +161,97 @@ static func run_tests(harness: TestHarness) -> void:
 		(node as MeshInstance3D).free()
 
 
+	# --- organic primitives (visual polish 16) --------------------------------
+	# A limb is a bent tube, not a cylinder. Two segments with six sides give
+	# 24 side triangles plus two six-triangle caps; the important part is that
+	# a *bent* limb still emits outward-facing facets and caps.
+	var limb_baker := MeshBaker.new()
+	limb_baker.add_limb(
+		"trunk",
+		PackedVector3Array([Vector3(0, 0, 0), Vector3(0, 0.9, 0), Vector3(0, 1.8, 0)]),
+		PackedFloat32Array([0.42, 0.24, 0.06]),
+		6
+	)
+	harness.check_equals(
+		limb_baker.get_triangle_count(), 36, "a two-segment limb is 36 triangles"
+	)
+	var limb_arrays := _first_surface(limb_baker, materials)
+	harness.check_equals(
+		_bad_windings(
+			limb_arrays[Mesh.ARRAY_VERTEX],
+			limb_arrays[Mesh.ARRAY_NORMAL],
+			Vector3(0.0, 0.9, 0.0)
+		),
+		0,
+		"limb facets and caps face outwards"
+	)
+	for node in limb_baker.commit(materials):
+		(node as MeshInstance3D).free()
+
+	# A foliage clump must not describe a sphere: its vertices are displaced by
+	# a lobed function, which is what removes the identical-lollipop tree line.
+	var clump_baker := MeshBaker.new()
+	var clump_radii := Vector3(1.6, 1.0, 1.2)
+	clump_baker.add_foliage_clump("leaf_mid", clump_radii, 4, 9, 42)
+	harness.check_equals(
+		clump_baker.get_triangle_count(), 54,
+		"a foliage clump keeps the cheap sphere topology"
+	)
+	var clump_arrays := _first_surface(clump_baker, materials)
+	harness.check_equals(
+		_bad_windings(
+			clump_arrays[Mesh.ARRAY_VERTEX],
+			clump_arrays[Mesh.ARRAY_NORMAL],
+			Vector3.ZERO
+		),
+		0,
+		"every foliage facet faces outwards"
+	)
+	var lowest := INF
+	var highest := 0.0
+	for vertex in clump_arrays[Mesh.ARRAY_VERTEX]:
+		var normalised := Vector3(
+			vertex.x / clump_radii.x, vertex.y / clump_radii.y, vertex.z / clump_radii.z
+		).length()
+		lowest = minf(lowest, normalised)
+		highest = maxf(highest, normalised)
+	harness.check(
+		highest - lowest > 0.05,
+		"a foliage clump is lobed, not a sphere (radial spread %.3f)" % (highest - lowest)
+	)
+	for node in clump_baker.commit(materials):
+		(node as MeshInstance3D).free()
+
+	# A blade is two triangles with an upward normal: no alpha texture and no
+	# crossed double-sided quad, which is where the old billboard grass came
+	# from.
+	var blade_baker := MeshBaker.new()
+	blade_baker.add_blade("grass_blade", 0.6, 0.05, 0.01, Vector2(0.04, 0.12))
+	harness.check_equals(blade_baker.get_triangle_count(), 2, "a blade is two triangles")
+	var blade_arrays := _first_surface(blade_baker, materials)
+	var blade_normals: PackedVector3Array = blade_arrays[Mesh.ARRAY_NORMAL]
+	harness.check(
+		blade_normals[0].y > 0.9,
+		"a blade is lit like the meadow, so it never goes black from behind"
+	)
+	for node in blade_baker.commit(materials):
+		(node as MeshInstance3D).free()
+
+	# A stem or a low leaf hangs on `leaf_mid`, whose material culls back faces,
+	# so the same quad is emitted twice with opposite windings. Grass does not
+	# pay for that: its material is double-sided already.
+	var leaf_baker := MeshBaker.new()
+	leaf_baker.add_blade(
+		"leaf_mid", 0.4, 0.03, 0.01, Vector2.ZERO, Transform3D.IDENTITY,
+		Color.WHITE, 0.20, true
+	)
+	harness.check_equals(
+		leaf_baker.get_triangle_count(), 4, "a culled leaf blade is emitted for both sides"
+	)
+	for node in leaf_baker.commit(materials):
+		(node as MeshInstance3D).free()
+
+
 ## Counts triangles whose winding disagrees with their own written normal, using
 ## the rule measured on the engine. Zero means the mesh will be seen from the
 ## side its normals point to.

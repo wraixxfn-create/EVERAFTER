@@ -155,11 +155,17 @@ Un villaggio di confine, al mattino del giorno 1 (ore 07:00 simulate):
   tratti di steccato, carri, casse, barili, cataste di legna e un cartello indicatore. I bordi
   delle strade sono segnati da pietre irregolari fuse nel terreno, con buchi dove i sentieri
   raggiungono le porte.
-* **250+ alberi** di tre specie (quercia, pino, betulla) con sagome e chiome sempre diverse,
-  cespugli (alcuni fioriti), massi e ciottoli, e uno **stagno** con ninfee, riva con panchina,
-  fioriere e sassi a nord-est.
-* **4200 ciuffi d'erba** in un unico `MultiMesh`, quindi una sola draw call, distribuiti a
-  due scale (uniforme + ciuffi) e tenuti fuori da soglie, recinti e arredi.
+* **250+ alberi** di tre specie (quercia, pino, betulla), ognuna con **tre varianti** davvero
+  diverse: abete rosso, pino silvestre e mugo; quercia larga, alta e inclinata; betulla snella,
+  a due fusti e d'autunno. Tronchi rastremati con flare radicale e rami visibili, chiome fatte di
+  masse lobate (mai una sfera), sagome diverse per ogni seme (Visual Polish 16). Il bosco ha tre
+  radure vere, specie a fasce e densità ondulata invece di un disco uniforme.
+* **Cespugli** a più lobi (alcuni fioriti), **chiazze di fiori** con steli e capolini in tre
+  varianti, massi e ciottoli, e uno **stagno** con ninfee, riva con panchina, fioriere e sassi a
+  nord-est. Alberi e cespugli stanno fuori dai corridoi delle porte e tengono una verge dalle strade.
+* **3200 ciuffi d'erba** in un unico `MultiMesh`, quindi una sola draw call: ogni ciuffo è fatto di
+  cinque lame rastremate e opache (niente texture alpha, niente billboard), distribuite a due scale
+  e colorate da un campo lento che disegna i campi di verde e d'oro.
 * **Cielo e luce** che seguono l'ora simulata, non quella reale: il sole si sposta, il cielo
   cambia colore, la nebbia si infittisce, le finestre e i lampioni si accendono al tramonto.
   È la dimostrazione visibile che la simulazione ha un orologio proprio.
@@ -332,34 +338,31 @@ pannello nuovo: le stesse righe che il sistema produce, lette direttamente da es
 
 ### Costo misurato della scena
 
-Misura **ripetuta in questa fase** avviando la scena con Godot 4.7.2 headless
-(`--script res://tests/run_world_tests.gd`). La suite di integrazione ora stampa i tre numeri a
-ogni esecuzione:
+L'ultima misura reale è quella di **Visual Polish 15**, letta dal log della suite di integrazione
+(`--script res://tests/run_world_tests.gd`). La suite stampa i tre numeri a ogni esecuzione, così la
+cifra non invecchia in silenzio:
 
 ```
-[INFO] Budget measured: 145 meshes, 149673 triangles, 291 colliders (limits 260 / 260000 / 900)
+[INFO] Budget measured: 175 meshes, 230740 triangles, 346 colliders (limits 260 / 260000 / 900)
 ```
 
-**Nota onesta (Visual Polish 04 — densità ambientale).** I numeri di questa sezione sono la
-misura della fase precedente: il passaggio di rifinitura ambientale (`docs/WORLD_DETAIL.md`) ha
-aggiunto bordi stradali, arredi, cortili e vegetazione, quindi vanno **rimisurati** rieseguendo
-la suite — che li stampa a ogni esecuzione, così la cifra non invecchia in silenzio. Le stime
-del nuovo dettaglio restano ampiamente dentro i limiti (margine stimato ~30% sui triangoli); la
-tabella sotto resta come riferimento della misura precedente, con l'erba portata a 4.200 istanze
-dal codice.
-
-| Voce | Valore misurato (fase precedente) |
+| Voce | Valore misurato (Polish 15) |
 | --- | --- |
-| Draw call (mesh + MultiMesh + terreno) | **145** |
-| Triangoli totali | **149.673** (50.562 terreno + 78.311 villaggio + 20.800 erba istanziata) |
-| Collider statici | **291** |
-| Materiali distinti | **≤ 24** (verificato da `test_village_art.gd`, che costruisce il villaggio) |
-| Istanze d'erba | 2.600 in 1 draw call |
+| Mesh / draw call (villaggio + terreno) | **175** |
+| Triangoli totali | **230.740** (limite 260.000) |
+| Collider statici | **346** (limite 900) |
+| Materiali distinti | **≤ 24** (verificato da `test_village_art.gd`) |
+| Istanze d'erba | 3.200 (`GRASS_COUNT`), 1 draw call, nessuna ombra |
 
-I numeri riportati finora (**107.643** triangoli e **292** collider) non corrispondevano alla scena
-attuale: la differenza di 42.030 triangoli comprende le 20.800 delle 2.600 istanze d'erba e 21.230
-di geometria del villaggio, mentre i collider erano uno in più. Il terreno (50.562) era corretto.
-Ora la cifra esce dal log della suite, quindi non può invecchiare in silenzio.
+**Nota onesta (Visual Polish 16).** La vegetazione è stata ricostruita in questa fase, ma **la scena
+non è stata rieseguita**: l'ambiente di verifica di questo passaggio non ha un eseguibile Godot
+(GitHub Objects bloccato, nessun pacchetto npm/pip utilizzabile) e il repository non include binari.
+Il budget non è quindi stato rimisurato qui; il margine della misura precedente è di ~29.000
+triangoli, e la nuova vegetazione non dovrebbe consumarne di più (tre primitive al posto di
+cilindri e sfere, dettaglio pieno solo entro 44 m dal centro o lungo le strade, erba di dieci
+triangoli per ciuffo). Una stima statica — un port Python delle regole di piazzamento e dei
+conteggi per primitiva, non il motore — dà circa **45.000–55.000 triangoli** per tutta la
+vegetazione, fiori compresi. La cifra definitiva resta quella che stamperà la suite.
 
 Per confronto: una casa "a primitive" sarebbe circa 15 nodi e 15 draw call; qui l'intera foresta
 ne costa una manciata, perché `MeshBaker` fonde per materiale.
@@ -420,7 +423,8 @@ src/
       village_materials.gd       palette unica e materiali condivisi
       mesh_baker.gd              fonde primitive in una mesh per materiale
       building_factory.gd        case, locanda, sala, pozzo, banchi, oggetti
-      vegetation_builder.gd      alberi, cespugli, massi, erba (MultiMesh)
+      vegetation_builder.gd      alberi, cespugli, fiori e massi (mesh fuse)
+      meadow_builder.gd          erba istanziata: ciuffi e campo di colore (Polish 16)
       ground_surfaces.gd         pavimentazione della piazza e delle strade (Polish 15)
       paving_textures.gd         texture procedurali di acciottolato e sterrato
       village_builder.gd         assembla il villaggio: mesh, collider, acqua
@@ -447,13 +451,15 @@ tests/
                                economia simulata, relazioni e memoria
                                (test_social_relationships, test_social_simulation), illuminazione
                                (test_sky_rig), geometria della pavimentazione
-                               (test_ground_surfaces)
+                               (test_ground_surfaces), vegetazione e distribuzione
+                               (test_vegetation)
   integration/
     test_world_scene.gd        scena, terreno vs fisica, collisioni, budget, abitanti,
                                selezione, pannello NPC, pannello economico, strato sociale,
                                illuminazione oraria e tour della mappa
     test_paved_surfaces.gd     la pavimentazione esiste, è testurizzata e segue il suolo
   visual/paving_review.tscn    scena di confronto della piazza e delle strade (tasti 1–5)
+  visual/vegetation_review.tscn scena di confronto di alberi, cespugli, fiori ed erba (tasti 1–5)
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
@@ -469,6 +475,7 @@ docs/
   VISUAL_POLISH_13.md          tetti e silhouette architettoniche (Polish 13)
   VISUAL_POLISH_14.md          paesaggio modellato: rilievo, spalle stradali, orizzonte (Polish 14)
   VISUAL_POLISH_15.md          strade curve, piazza composta e superfici calpestabili (Polish 15)
+  VISUAL_POLISH_16.md          ricostruzione della vegetazione: alberi, cespugli, fiori, erba (Polish 16)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 

@@ -100,3 +100,18 @@ static func run_tests(harness: TestHarness) -> void:
 		0.0001,
 		"the glow factor is clamped high"
 	)
+
+	# --- grass is opaque geometry, not a cut-out texture ----------------------
+	# Visual polish 16 replaced the two crossed double-sided quads with tapered
+	# blades. That only works if the shared blade material renders both faces.
+	var grass := materials.get_material("grass_blade")
+	harness.check_equals(
+		grass.transparency,
+		BaseMaterial3D.TRANSPARENCY_DISABLED,
+		"grass has no alpha cut-out, so no transparent fringe in the distance"
+	)
+	harness.check_equals(
+		grass.cull_mode,
+		BaseMaterial3D.CULL_DISABLED,
+		"grass blades are visible from both sides with a single quad each"
+	)
