@@ -95,9 +95,11 @@ const DEFAULT_LOGIC_TICK_SECONDS := 0.05
 @export_range(1, 100) var social_daily_gain_cap: int = 14
 
 @export_group("Player")
-@export_range(0.5, 20.0) var player_walk_speed: float = 5.0
-@export_range(0.5, 40.0) var player_sprint_speed: float = 9.0
-@export_range(0.0, 20.0) var player_jump_velocity: float = 6.0
+@export_range(0.5, 20.0) var player_walk_speed: float = 3.4
+@export_range(0.5, 40.0) var player_sprint_speed: float = 5.6
+## Metres per second of vertical launch. 4.1 m/s against the 9.8 m/s² gravity
+## gives a jump of about 0.85 m and 0.84 s in the air: a step-up, not a leap.
+@export_range(0.0, 20.0) var player_jump_velocity: float = 4.1
 @export_range(0.0002, 0.02) var mouse_sensitivity: float = 0.0022
 
 

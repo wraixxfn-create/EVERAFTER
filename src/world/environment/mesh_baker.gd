@@ -392,10 +392,12 @@ func add_foliage_clump(
 	seed_value: int = 0,
 	xform: Transform3D = Transform3D.IDENTITY,
 	tint: Color = Color.WHITE,
-	flat_shading: bool = false
+	flat_shading: bool = false,
+	vertical_shade: float = 0.0
 ) -> void:
 	var band_count := maxi(rings, 2)
 	var slice_count := maxi(segments, 3)
+	var shade_amount := clampf(vertical_shade, 0.0, 0.6)
 	var shaped := xform * Transform3D(Basis.IDENTITY.scaled(radii), Vector3.ZERO)
 	var normal_basis := shaped.basis.inverse().transposed()
 	var surface := _surface(material_key)
@@ -406,13 +408,17 @@ func add_foliage_clump(
 		var angle_1 := TAU * float(slice + 1) / float(slice_count)
 		var top_0 := _clump_point(angle_0, 1, band_count, seed_value)
 		var top_1 := _clump_point(angle_1, 1, band_count, seed_value)
-		_add_sphere_triangle(surface, shaped, normal_basis, apex, top_0, top_1, tint, flat_shading)
+		_add_sphere_triangle(
+			surface, shaped, normal_basis, apex, top_0, top_1,
+			_shaded_tint(tint, apex, top_0, top_1, shade_amount, radii.y), flat_shading
+		)
 		_triangle_count += 1
 		var last := band_count - 1
 		var bottom_0 := _clump_point(angle_0, last, band_count, seed_value)
 		var bottom_1 := _clump_point(angle_1, last, band_count, seed_value)
 		_add_sphere_triangle(
-			surface, shaped, normal_basis, nadir, bottom_1, bottom_0, tint, flat_shading
+			surface, shaped, normal_basis, nadir, bottom_1, bottom_0,
+			_shaded_tint(tint, nadir, bottom_1, bottom_0, shade_amount, radii.y), flat_shading
 		)
 		_triangle_count += 1
 	for band in range(1, band_count - 1):
@@ -424,12 +430,98 @@ func add_foliage_clump(
 			var p11 := _clump_point(angle_1, band + 1, band_count, seed_value)
 			var p01 := _clump_point(angle_0, band + 1, band_count, seed_value)
 			_add_sphere_triangle(
-				surface, shaped, normal_basis, p00, p11, p10, tint, flat_shading
+				surface, shaped, normal_basis, p00, p11, p10,
+				_shaded_tint(tint, p00, p11, p10, shade_amount, radii.y), flat_shading
 			)
 			_add_sphere_triangle(
-				surface, shaped, normal_basis, p00, p01, p11, tint, flat_shading
+				surface, shaped, normal_basis, p00, p01, p11,
+				_shaded_tint(tint, p00, p01, p11, shade_amount, radii.y), flat_shading
 			)
 			_triangle_count += 2
+
+
+## One whorl of conifer foliage: a ring of pointed needles hanging from a solid
+## inner cone. A spruce reads as a trunk with whorls of sagging branches, so its
+## silhouette is the jagged rim of those whorls: `segments` points around the
+## axis alternating a long needle and a short one, `drop` below the centre.
+func add_frond_ring(
+	material_key: String,
+	y: float,
+	radius: float,
+	drop: float,
+	segments: int = 16,
+	seed_value: int = 0,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
+	short_ratio: float = 0.66,
+	underside: float = 0.52
+) -> void:
+	var sides := maxi(segments, 5)
+	var step := TAU / float(sides)
+	var phase_a := _hash_unit(seed_value, 3, 0) * TAU
+	var phase_b := _hash_unit(seed_value, 5, 0) * TAU
+	var apex := PackedVector3Array()
+	var mid := PackedVector3Array()
+	var rim := PackedVector3Array()
+	for index in sides:
+		var angle := step * float(index)
+		var wobble := (
+			1.0 + 0.06 * sin(angle * 3.0 + phase_a) + 0.04 * sin(angle * 5.0 + phase_b)
+		)
+		# Long and short needles alternate, or the rim is a clean disc.
+		var long_tip := index % 2 == 0
+		var reach := radius * wobble * (1.0 if long_tip else short_ratio)
+		var sag := drop * (1.0 if long_tip else 0.55)
+		var inner_radius := radius * 0.34 * wobble
+		var shoulder_radius := radius * 0.62 * wobble
+		apex.append(Vector3(cos(angle) * inner_radius, y + 0.02, sin(angle) * inner_radius))
+		mid.append(
+			Vector3(cos(angle) * shoulder_radius, y - drop * 0.32, sin(angle) * shoulder_radius)
+		)
+		rim.append(Vector3(cos(angle) * reach, y - sag, sin(angle) * reach))
+	for index in sides:
+		var next := (index + 1) % sides
+		var tone := 1.0 + 0.10 * sin(step * float(index) * 3.0 + phase_a)
+		_add_oriented_triangle(
+			material_key, xform, apex[index], mid[index], mid[next],
+			_ring_outward(apex[index], mid[index], 0.7), _scaled_tint(tint, tone)
+		)
+		_triangle_count += 1
+		_add_oriented_triangle(
+			material_key, xform, apex[index], mid[next], apex[next],
+			_ring_outward(apex[index], mid[next], 0.8), _scaled_tint(tint, tone * 0.94)
+		)
+		_triangle_count += 1
+		_add_oriented_triangle(
+			material_key, xform, mid[index], rim[index], rim[next],
+			_ring_outward(mid[index], rim[index], 0.35), _scaled_tint(tint, tone * 0.90)
+		)
+		_triangle_count += 1
+		_add_oriented_triangle(
+			material_key, xform, mid[index], rim[next], mid[next],
+			_ring_outward(mid[index], rim[next], 0.35), _scaled_tint(tint, tone * 0.86)
+		)
+		_triangle_count += 1
+	# A shallow cone over the inner ring, so the whorl has a crown.
+	var hub_top := Vector3(0.0, y + drop * 0.45, 0.0)
+	for index in sides:
+		var next := (index + 1) % sides
+		_add_oriented_triangle(
+			material_key, xform, hub_top, apex[next], apex[index],
+			Vector3(0.0, 1.0, 0.0) + _ring_outward(apex[index], apex[next], 0.0) * 0.4,
+			_scaled_tint(tint, 1.05)
+		)
+		_triangle_count += 1
+	# Closed, darker underside: seen from below it is in its own shadow.
+	var hub_bottom := Vector3(0.0, y - drop * 0.38, 0.0)
+	for index in sides:
+		var next := (index + 1) % sides
+		_add_oriented_triangle(
+			material_key, xform, rim[index], hub_bottom, rim[next],
+			Vector3(0.0, -1.0, 0.0) + _ring_outward(rim[index], rim[next], 0.0) * 0.4,
+			_scaled_tint(tint, underside)
+		)
+		_triangle_count += 1
 
 
 ## Closed, stratified boulder with a broad buried foot, fractured shoulder and
@@ -804,6 +896,43 @@ func _add_sphere_triangle(
 	_add_vertex(surface, point_a, _sphere_normal(normal_basis, a), tint)
 	_add_vertex(surface, point_b, _sphere_normal(normal_basis, b), tint)
 	_add_vertex(surface, point_c, _sphere_normal(normal_basis, c), tint)
+
+
+func _ring_outward(point: Vector3, other: Vector3, lift: float) -> Vector3:
+	var radial := Vector3(point.x + other.x, 0.0, point.z + other.z)
+	if radial.length_squared() < 0.0000000001:
+		return Vector3(0.0, signf(lift), 0.0)
+	return Vector3(radial.x, lift, radial.z).normalized()
+
+
+## Emits a triangle wound so that it faces along `outward`.
+func _add_oriented_triangle(
+	material_key: String, xform: Transform3D, a: Vector3, b: Vector3, c: Vector3,
+	outward: Vector3, tint: Color
+) -> void:
+	var normal := (c - a).cross(b - a)
+	if normal.length_squared() < 0.000000001:
+		return
+	if normal.dot(outward) < 0.0:
+		var swap := b
+		b = c
+		c = swap
+		normal = -normal
+	_add_triangle(material_key, xform, a, b, c, normal.normalized(), tint)
+
+
+## Lit top and dark underside (0..0.6), normalised by the vertical radius.
+func _shaded_tint(
+	tint: Color, a: Vector3, b: Vector3, c: Vector3, amount: float, height: float
+) -> Color:
+	if amount <= 0.0:
+		return tint
+	# Normalised with the clump's own vertical radius, so a two-metre crown and
+	# a thirty-centimetre leaf bunch get the same gradient instead of the big
+	# one saturating.
+	var scale := height if height > 0.0001 else 1.0
+	var average_height := (a.y + b.y + c.y) / (3.0 * scale)
+	return _scaled_tint(tint, 1.0 + amount * clampf(average_height, -1.0, 1.0))
 
 
 func _face_tint(tint: Color, normal: Vector3, amount: float) -> Color:

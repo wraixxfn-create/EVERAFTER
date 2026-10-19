@@ -2,56 +2,52 @@ class_name VegetationBuilder
 extends RefCounted
 ## Trees, shrubs, meadow flowers, rocks and ground cover.
 ##
-## Visual polish 16 rebuilt the vegetation. The previous pass could already vary
-## a tree's height and lean, but every plant was still assembled from the same
-## three primitives: a **cylinder** trunk, a **UV sphere** crown and a **stack of
-## cones** for a pine. From the plaza that reads as a row of lollipops, and from
-## the meadow as a traffic cone. The replacement is a small vocabulary of organic
-## solids in [MeshBaker], extended with a rock-specific profile in Visual Polish 17:
+## Two passes built this. Polish 16 replaced cylinders and UV spheres with a
+## small vocabulary of organic solids in [MeshBaker] — a tapered `limb`, a lobed
+## `foliage_clump`, a tapered `blade`, a stratified `rock`. Polish 18 rebuilt
+## **how a tree is grown** on top of them, because a crown tied to a pole still
+## read as a boulder on a stick:
 ##
-## * `add_limb` — a tapered tube through a bent polyline, used for trunks, roots
-##   and branches. It carries a root flare and narrows into the crown, so the
-##   silhouette is a tree, not a pipe.
-## * `add_foliage_clump` — a lobed, irregular ellipsoid whose radius varies with
-##   the angle and the latitude. No crown is a sphere, and no two seeds repeat.
-## * `add_blade` — a tapered blade for grass and flower stems, lit with an
-##   upward normal so a single quad works from both sides without transparency.
-## * `add_rock` — a closed, layered stone with a buried foot, flat facets and a
-##   clipped crown. Its bounded ring variation changes the silhouette without
-##   deforming topology or making a sphere/cube.
+## * **conifers** (spruce, mugo, scots pine) are whorls of needles, not stacks of
+##   cones or discs: `add_frond_ring` lays out a star-shaped rim of pointed
+##   needles hanging from a solid inner cone, and consecutive whorls overlap.
+##   The scots pine keeps its long bare trunk and carries flat leaf clouds over
+##   it, which is what separates a pine from a spruce at a glance.
+## * **broadleaves** (oaks) grow a skeleton first — tapered trunk with a root
+##   flare, five primaries, secondaries, a couple of bare twigs — and then hang
+##   many small, flattened leaf bunches on the tips and inside the crown.
+## * **birches** are a loose veil: a pale tapering stem, ascending branches and
+##   clusters with visible gaps between them, never a solid ball.
+## * every clump carries a vertical tint gradient (lit top, dark underside), so
+##   a crown made of dozens of masses still reads as one volume.
 ##
-## Three species remain, each with three genuinely different variants (see
-## `_pine_profile`, `_oak_profile`, `_birch_profile`), plus a new
-## `flower_patch` kind and a rebuilt grass tuft. Distribution was revised at the
-## same time: species grow in stands, the forest has real clearings, trees keep a
-## wider verge from the roads and a longer sightline from every door.
+## Heights stay believable next to a 1.8 m player: oak 4–5 m to the crown, birch
+## 3.5–4.5 m, spruce 5–6 m, scots pine 4.5–5 m with half of it bare trunk, mugo
+## under 2.5 m. The three variants of a species differ in *shape*, not in scale.
 ##
 ## Two performance rules still drive this file:
 ## * **everything static is merged.** `VillageBuilder` hands one [MeshBaker] to
 ##   the whole forest, so hundreds of trees become a handful of meshes.
-## * **detail follows distance.** Trees near the village and along the roads are
-##   built with more clumps and rings; the outer forest uses a cheaper silhouette
-##   that is still species-specific. `VillageBuilder` decides with
-##   [method needs_detail].
-##
-## Grass is not built here: it is the one instanced part of the vegetation and
-## lives in [MeadowBuilder], which this class reaches through [method
-## build_grass].
+## * **detail follows distance.** Trees inside [constant DETAIL_RADIUS] or along
+##   a road get the full crown; the outer forest uses a cheap silhouette that is
+##   still species-specific. `VillageBuilder` decides with [method needs_detail].
+## Grass, the one instanced part, lives in [MeadowBuilder] and is reached through
+## [method build_grass].
 
 const LEAF_KEYS := ["leaf_deep", "leaf_mid", "leaf_bright"]
 const TREE_COLLIDER_KINDS := [
 	VillageLayout.KIND_TREE_PINE, VillageLayout.KIND_TREE_OAK, VillageLayout.KIND_TREE_BIRCH
 ]
-## Trees this close to the plaza are built at full detail. Outside the radius,
-## only the ones lining a road are, because those are the ones the player walks
-## past; the rest of the border forest keeps a cheaper silhouette.
-const DETAIL_RADIUS := 44.0
+## Full detail inside this radius, and along the roads the player walks; the
+## rest of the border forest keeps a cheaper silhouette. It shrank from 44 m to
+## 22 m: the new crowns cost more per tree, and the branch structure is worth
+## paying for only where the player actually walks.
+const DETAIL_RADIUS := 22.0
 const ROAD_DETAIL_CORRIDOR := 6.0
 
 var rng := RandomNumberGenerator.new()
-## Shape facts of the plant built by the last `append` call. Exposed for the
-## headless suite, which uses them to prove that variants differ and that a
-## trunk really tapers; not read by the game.
+## Shape facts of the plant built by the last `append` call, for the headless
+## suite (variants differ, trunks really taper). Not read by the game.
 var last_stats := {}
 
 ## See `BuildingFactory._origin`: merged vegetation has no node of its own, so
@@ -66,8 +62,7 @@ func _init(seed_value: int = 0) -> void:
 	_meadow = MeadowBuilder.new(seed_value + 13)
 
 
-## Builds one placement. [param detail] false selects the cheaper far silhouette;
-## `VillageBuilder` derives it from distance and from the road corridor.
+## Builds one placement; [param detail] false selects the far silhouette.
 func append(
 	baker: MeshBaker,
 	placement: VillageLayout.Placement,
@@ -103,9 +98,8 @@ func needs_detail(layout: VillageLayout, placement: VillageLayout.Placement) -> 
 
 
 ## Trunk and boulder colliders. Only trees and large boulders block the player;
-## shrubs, flowers and grass are walkable, which keeps the village open instead
-## of a pinball table. Radii follow the species' real trunk: a birch used to
-## block more than its visible stem, an oak less than its root flare.
+## shrubs, flowers and grass are walkable, or the village becomes a pinball
+## table. Radii follow the species' real trunk.
 func colliders_for(placement: VillageLayout.Placement) -> Array:
 	var shapes: Array = []
 	var scale := placement.scale
@@ -137,67 +131,92 @@ func build_grass(
 
 
 # --- species -----------------------------------------------------------------
+# Visual Polish 18 rebuilt the trees a second time. Polish 16 had already
+# replaced the lollipop with lobed clumps, but the construction was still "a
+# few big balls tied to a pole": from the plaza an oak read as a green boulder
+# on a stick, and a spruce as a pile of separate cones. This pass changes how a
+# tree is *grown*:
 #
-# Every builder starts from a profile dictionary. Three numbers decide a
-# silhouette: where the crown starts, how tall it is and how wide its lobed
-# masses spread. The variants below are deliberately far apart — a spruce, a
-# scots pine and a young mugo; a broad oak, a tall oak and a leaning oak; a
-# slender birch, a twin-stem birch and an autumn birch — because "two shades of
-# the same lollipop" is exactly what this pass removes.
+# * **conifers** are whorls of needles. [method MeshBaker.add_frond_ring] builds
+#   a star-shaped rim of pointed, drooping needles around a solid inner cone,
+#   and consecutive whorls overlap: the silhouette is a spiky spire that changes
+#   with every ring instead of a stack of discs.
+# * **broadleaves** grow a skeleton first — trunk, five primaries, secondaries —
+#   and then hang many small, flattened leaf clumps at the branch tips and
+#   inside the crown. The wood carries the leaves and the outline is ragged.
+# * **the scots pine** keeps its long bare trunk and carries flat, wide leaf
+#   clouds above it: an umbrella, not a cone.
+# * every clump carries a vertical tint gradient (lit top, dark underside), so
+#   a crown made of dozens of masses still reads as one volume.
+#
+# Heights are realistic next to a 1.8 m player: oak 5–7 m to the crown, birch
+# 4–5.5 m, spruce 5–6 m, scots pine 4.5–5 m with half of it bare trunk,
+# mugo pine under 2.5 m. The variants of each species differ in *shape*, not in
+# scale: broad and tall and leaning for oaks, slender and twin-stemmed and
+# autumn for birches.
 
 
 func _pine_profile(variant: int) -> Dictionary:
 	match variant:
 		1:
-			# Scots pine: a long bare trunk under a flat, umbrella-like crown.
+			# Scots pine: a long bare trunk under a flat umbrella of needles.
 			return {
-				"trunk": 3.2, "radius": 0.19, "start": 0.70, "span": 0.95,
-				"tiers": 3, "tufts": 5, "base": 1.55, "top": 0.55, "lift": 0.0
+				"kind": "umbrella", "trunk": 4.4, "radius": 0.20, "start": 0.58,
+				"levels": 0, "spread": 0.0, "short": 0.80,
 			}
 		2:
-			# Young mugo pine: short, dense and wide, like a bush with a trunk.
+			# Young mugo pine: short, wide, almost a bush with a trunk.
 			return {
-				"trunk": 1.45, "radius": 0.17, "start": 0.30, "span": 1.25,
-				"tiers": 4, "tufts": 4, "base": 1.45, "top": 0.38, "lift": 0.0
+				"kind": "whorl", "trunk": 2.10, "radius": 0.18, "start": 0.08,
+				"levels": 7, "spread": 0.62, "short": 0.54,
 			}
+	# Norway spruce: the full spire, needles almost to the ground.
 	return {
-		"trunk": 2.35, "radius": 0.20, "start": 0.42, "span": 1.35,
-		"tiers": 5, "tufts": 5, "base": 1.30, "top": 0.30, "lift": 0.0
+		"kind": "whorl", "trunk": 5.30, "radius": 0.20, "start": 0.10,
+		"levels": 8, "spread": 0.27, "short": 0.62,
 	}
 
 
 func _oak_profile(variant: int) -> Dictionary:
 	match variant:
 		1:
-			# Tall oak: narrow, high crown, almost twice the trunk of the broad one.
+			# Tall oak: a longer trunk and a high, narrow crown.
 			return {
-				"trunk": 2.95, "radius": 0.25, "lift": 0.95,
-				"x": 1.75, "y": 1.70, "z": 1.70, "clumps": 6, "limb": 0.9,
-				"lean_x": 0.0, "lean_z": 0.0, "twist": 0.7
+				"trunk": 3.30, "radius": 0.30, "x": 2.65, "y": 0.98, "z": 0.95,
+				"lean_x": 0.0, "lean_z": 0.0, "limbs": 5, "reach": 0.62,
 			}
 		2:
-			# Leaning oak: thrown to one side, low and broad, the tree you shelter under.
+			# Leaning oak: thrown to one side, low and broad, the tree you
+			# shelter under.
 			return {
-				"trunk": 1.75, "radius": 0.31, "lift": 0.75,
-				"x": 2.45, "y": 1.30, "z": 1.95, "clumps": 7, "limb": 1.25,
-				"lean_x": 0.55, "lean_z": -0.30, "twist": 1.9
+				"trunk": 2.20, "radius": 0.36, "x": 3.45, "y": 0.70, "z": 1.10,
+				"lean_x": 0.48, "lean_z": -0.26, "limbs": 5, "reach": 0.68,
 			}
+	# Broad oak: the reference silhouette, as wide as it is tall.
 	return {
-		"trunk": 2.15, "radius": 0.29, "lift": 0.80,
-		"x": 2.20, "y": 1.55, "z": 2.00, "clumps": 6, "limb": 1.0,
-		"lean_x": 0.0, "lean_z": 0.0, "twist": 0.0
+		"trunk": 2.70, "radius": 0.33, "x": 3.15, "y": 0.80, "z": 1.05,
+		"lean_x": 0.0, "lean_z": 0.0, "limbs": 5, "reach": 0.58,
 	}
 
 
 func _birch_profile(variant: int) -> Dictionary:
 	match variant:
 		1:
-			# Twin stem: two pale trunks from one root, the shape birches actually take.
-			return {"trunk": 2.95, "stems": 2, "spread": 0.75, "start": 0.56, "crown": 1.0}
+			# Twin stem: two pale trunks from one root, staggered crowns.
+			return {
+				"trunk": 3.55, "stems": 2, "spread": 0.40, "crown": 1.0,
+				"leaf": "leaf_bright", "branches": 5,
+			}
 		2:
-			# Autumn birch: taller, sparse crown, one warm accent in the treeline.
-			return {"trunk": 3.65, "stems": 1, "spread": 0.0, "start": 0.60, "crown": 1.05}
-	return {"trunk": 3.05, "stems": 1, "spread": 0.0, "start": 0.52, "crown": 0.95}
+			# Autumn birch: the one warm crown in the treeline.
+			return {
+				"trunk": 3.95, "stems": 1, "spread": 0.0, "crown": 1.04,
+				"leaf": "leaf_autumn", "branches": 5,
+			}
+	return {
+		"trunk": 3.45, "stems": 1, "spread": 0.0, "crown": 0.96,
+		"leaf": "leaf_bright", "branches": 5,
+	}
 
 
 func _build_pine(baker: MeshBaker, placement: VillageLayout.Placement, detail: bool) -> void:
@@ -206,112 +225,174 @@ func _build_pine(baker: MeshBaker, placement: VillageLayout.Placement, detail: b
 	var variant := placement.variant % 3
 	var profile := _pine_profile(variant)
 	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.02, 0.09))
-	var needle_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.15))
-	var trunk_height := float(profile["trunk"]) * scale * rng.randf_range(0.93, 1.07)
-	var base_radius := float(profile["radius"]) * scale * rng.randf_range(0.92, 1.08)
-	var lean := Vector3(rng.randf_range(-0.26, 0.26), 0.0, rng.randf_range(-0.26, 0.26)) * scale
-	var bend := Vector3(rng.randf_range(-0.12, 0.12), 0.0, rng.randf_range(-0.12, 0.12)) * scale
+	var needle_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.12))
+	var trunk_height := float(profile["trunk"]) * scale * rng.randf_range(0.94, 1.06)
+	var base_radius := float(profile["radius"]) * scale * rng.randf_range(0.94, 1.06)
+	var lean := Vector3(rng.randf_range(-0.10, 0.10), 0.0, rng.randf_range(-0.10, 0.10)) * scale
+	var bend := Vector3(rng.randf_range(-0.06, 0.06), 0.0, rng.randf_range(-0.06, 0.06)) * scale
 	var trunk_segments := 4 if detail else 3
 	var points := _trunk_points(trunk_height, lean, bend, trunk_segments)
-	var trunk_radii := _trunk_radii(base_radius, base_radius * 0.15, trunk_segments, 1.55)
+	var trunk_radii := _trunk_radii(base_radius, base_radius * 0.12, trunk_segments, 1.55)
 	baker.add_limb(
-		"trunk", points, trunk_radii, 7 if detail else 5, _origin, bark_tint, 0.05
+		"trunk", points, trunk_radii, 7 if detail else 4, _origin, bark_tint, 0.05
 	)
 	if detail:
 		_add_root_flare(baker, base_radius, bark_tint, 3)
-
-	var crown_start := trunk_height * float(profile["start"])
-	var crown_span := trunk_height * float(profile["span"])
-	var tier_count := int(profile["tiers"]) if detail else maxi(int(profile["tiers"]) - 2, 2)
-	var tuft_count := int(profile["tufts"]) if detail else 2
-	var widest_tier := float(profile["base"]) * scale
+	var crown_base := trunk_height * float(profile["start"])
+	var crown_clumps := 0
+	if String(profile["kind"]) == "umbrella":
+		crown_clumps = _build_scots_crown(
+			baker, trunk_height, crown_base, base_radius, lean, bark_tint, needle_tint,
+			detail
+		)
+	else:
+		crown_clumps = _build_whorled_crown(
+			baker, profile, trunk_height, crown_base, needle_tint, scale, detail
+		)
 	var top := points[points.size() - 1]
-	for tier in tier_count:
-		var t := 0.0 if tier_count <= 1 else float(tier) / float(tier_count - 1)
-		var y := crown_start + crown_span * t
-		var tier_radius: float = (
-			lerpf(float(profile["base"]), float(profile["top"]), pow(t, 0.75))
-			* scale * rng.randf_range(0.86, 1.16)
-		)
-		var along := clampf(y / trunk_height, 0.0, 1.25)
-		var tier_center := Vector3(lean.x * along, y, lean.z * along)
-		_add_pine_tier(
-			baker, tier_center, tier_radius, rng.randf() * TAU, tuft_count, needle_tint, detail
-		)
-	# A spire above the top tier closes the cone without a flat lid, and hides
-	# the point where the last skirt meets the trunk.
-	var spire_height := (0.55 + 0.45 * float(profile["top"])) * scale
-	var spire_radius := float(profile["top"]) * scale * 0.85
-	baker.add_cylinder(
-		"pine", 0.0, spire_radius, spire_height, 5,
-		_origin * Transform3D(
-			Basis.IDENTITY,
-			Vector3(lean.x, crown_start + crown_span + spire_height * 0.5, lean.z)
-		),
-		needle_tint, 0.05
-	)
-	# A scots pine shows its branches under the umbrella. Two or three visible
-	# limbs are what tell it apart from the spruce at a glance.
-	if detail and variant == 1:
-		for index in 3:
-			var angle := TAU * float(index) / 3.0 + rng.randf_range(-0.35, 0.35)
-			var at := rng.randf_range(0.58, 0.82)
-			var origin := Vector3(lean.x * at, trunk_height * at - 0.16, lean.z * at)
-			var direction := Vector3(
-				cos(angle), rng.randf_range(0.22, 0.45), sin(angle)
-			).normalized()
-			var end := origin + direction * rng.randf_range(0.95, 1.55) * scale
-			baker.add_limb(
-				"trunk", PackedVector3Array([origin, end]),
-				PackedFloat32Array([base_radius * 0.34, base_radius * 0.10]),
-				4, _origin, bark_tint, 0.06
-			)
 	last_stats = {
 		"kind": placement.kind, "variant": variant, "detail": detail,
 		"trunk_base_radius": base_radius,
 		"trunk_top_radius": trunk_radii[trunk_radii.size() - 1],
-		"crown_extent": Vector3(widest_tier, crown_span, widest_tier),
-		"crown_clumps": tier_count * (tuft_count + 1),
+		"crown_extent": Vector3(
+			float(profile["spread"]) * trunk_height * 2.0 + 0.60,
+			trunk_height * (0.30 if String(profile["kind"]) == "umbrella" else 0.90),
+			float(profile["spread"]) * trunk_height * 2.0 + 0.60
+		),
+		"crown_clumps": crown_clumps,
 		"triangles": baker.get_triangle_count() - start,
-		"top": Vector3(top.x, crown_start + crown_span, top.z),
+		"top": Vector3(top.x, trunk_height * 0.95, top.z),
 	}
 
 
-func _add_pine_tier(
-	baker: MeshBaker, center: Vector3, radius: float, yaw: float, tufts: int,
-	tint: Color, detail: bool
-) -> void:
-	var segments := 5 if detail else 4
-	var rings := 2
-	var clump_tint := tint.lightened(rng.randf_range(-0.02, 0.06))
-	# Central mass: the tier is a volume, not a ring of separate balls.
-	baker.add_foliage_clump(
-		"pine", Vector3(radius * 0.66, radius * 0.34, radius * 0.66),
-		rings, segments, rng.randi(),
-		_origin * Transform3D(Basis.IDENTITY, center), clump_tint, true
-	)
-	for index in tufts:
-		var angle := TAU * float(index) / float(tufts) + yaw + rng.randf_range(-0.16, 0.16)
-		var outward := Vector3(cos(angle), 0.0, sin(angle))
-		var distance := radius * rng.randf_range(0.30, 0.52)
-		var length := radius * rng.randf_range(0.46, 0.72)
-		var height := radius * 0.22 * rng.randf_range(0.75, 1.20)
-		var tuft_center := (
-			center + outward * distance
-			+ Vector3(0.0, rng.randf_range(-0.10, 0.10) * radius, 0.0)
+## Spruce and mugo: a column of overlapping needle whorls, each hanging
+## `drop` below its own ring height. That sag is what makes them branches.
+func _build_whorled_crown(
+	baker: MeshBaker, profile: Dictionary, trunk_height: float, crown_start: float,
+	needle_tint: Color, scale: float, detail: bool
+) -> int:
+	var levels := int(profile["levels"])
+	if detail:
+		levels = mini(levels, 6)
+	else:
+		levels = maxi(levels - 4, 4)
+	var spread := float(profile["spread"]) * trunk_height
+	var top := trunk_height * 0.92
+	var step := (top - crown_start) / float(maxi(levels - 1, 1))
+	var segments := 12 if detail else 5
+	var clumps := 0
+	for level in levels:
+		var fraction := float(level) / float(maxi(levels - 1, 1))
+		var y := crown_start + step * float(level)
+		var radius := spread * pow(1.0 - fraction * 0.80, 0.75) + 0.10 * scale
+		var drop := step * (1.40 if detail else 1.10)
+		var tone := 0.16 * float((level * 5) % 3) * 0.5
+		baker.add_frond_ring(
+			"pine", y, radius, drop, segments, 91 + level,
+			_origin, needle_tint.lightened(tone), float(profile["short"])
 		)
-		# Local X points radially outward, so the tuft is longer along the branch
-		# than across it, and a small roll drops the outer tip the way pine
-		# needles hang.
-		var basis := Basis.from_euler(
-			Vector3(0.0, -angle, rng.randf_range(-0.17, 0.17))
-		)
+		clumps += 1
+	# The spire: three shrinking clumps rising out of the last whorl, so the top
+	# is a needle tip instead of a diamond floating over the tree.
+	var tip_y := top + step * 0.15
+	for index in (3 if detail else 2):
+		var f := float(index) / 2.0
 		baker.add_foliage_clump(
-			"pine", Vector3(length, height, length * 0.66),
-			rings, segments, rng.randi(),
-			_origin * Transform3D(basis, tuft_center),
-			clump_tint.lightened(rng.randf_range(-0.03, 0.05)), true
+			"pine",
+			Vector3(0.26 * (1.0 - f * 0.65) + 0.04, 0.30 * (1.0 - f * 0.55) + 0.05,
+				0.26 * (1.0 - f * 0.65) + 0.04) * scale,
+			2, 5, 311 + index,
+			_origin * Transform3D(Basis.IDENTITY, Vector3(0.0, tip_y + f * 0.42, 0.0)),
+			needle_tint.lightened(0.06 * f), false, 0.14
 		)
+		clumps += 1
+	return clumps
+
+
+## Scots pine: four exposed limbs above the bare trunk, each carrying a flat
+## cloud of needles. That shape separates a pine from a spruce at a glance.
+func _build_scots_crown(
+	baker: MeshBaker, trunk_height: float, crown_start: float, base_radius: float,
+	lean: Vector3, bark_tint: Color, needle_tint: Color, detail: bool
+) -> int:
+	var clumps := 0
+	var fork := Vector3(lean.x * 0.62, -0.16 + crown_start, lean.z * 0.62)
+	var limbs := 4
+	for index in limbs:
+		var angle := TAU * float(index) / float(limbs) + rng.randf_range(-0.30, 0.30)
+		var direction := Vector3(cos(angle), 0.0, sin(angle))
+		var length := trunk_height * rng.randf_range(0.15, 0.21)
+		var tip := fork + direction * length + Vector3(
+			0.0, length * rng.randf_range(0.80, 1.10), 0.0
+		)
+		baker.add_limb(
+			"trunk", PackedVector3Array([fork, tip]),
+			PackedFloat32Array([base_radius * 0.55, base_radius * 0.18]),
+			5 if detail else 4, _origin, bark_tint, 0.06
+		)
+		clumps += _add_leaf_cloud(
+			baker, "pine", tip, length * 1.20, length * 0.42, needle_tint, detail
+		)
+		if detail:
+			for branch in 1:
+				var along := rng.randf_range(0.30, 0.65)
+				var origin := fork + (tip - fork) * along
+				var side_angle := angle + (1.0 if branch == 0 else -1.0) * rng.randf_range(0.45, 0.85)
+				var side := Vector3(cos(side_angle), 0.0, sin(side_angle))
+				var side_tip := origin + side * length * rng.randf_range(0.45, 0.75) + Vector3(
+					0.0, length * rng.randf_range(0.10, 0.40), 0.0
+				)
+				baker.add_limb(
+					"trunk", PackedVector3Array([origin, side_tip]),
+					PackedFloat32Array([base_radius * 0.22, base_radius * 0.07]),
+					4, _origin, bark_tint, 0.06
+				)
+				clumps += _add_leaf_cloud(
+					baker, "pine", side_tip, length * 0.85, length * 0.32, needle_tint, detail
+				)
+	# The crown itself: a wider, flatter cloud over the fork.
+	var crown_center := Vector3(lean.x, -0.16 + trunk_height * 0.90, lean.z)
+	clumps += _add_leaf_cloud(
+		baker, "pine", crown_center, trunk_height * 0.11, trunk_height * 0.055,
+		needle_tint, detail
+	)
+	return clumps
+
+
+## A flat cloud of needle clumps: lobes spread over a squashed ellipsoid by a
+## golden-angle spiral, so they overlap evenly instead of clustering in a line.
+func _add_leaf_cloud(
+	baker: MeshBaker, material_key: String, center: Vector3, radius_x: float,
+	radius_y: float, tint: Color, detail: bool
+) -> int:
+	var lumps := 4 if detail else 3
+	var rings := 2
+	var segments := 5 if detail else 3
+	var golden := PI * (3.0 - sqrt(5.0))
+	var radius_z := radius_x * rng.randf_range(0.85, 1.15)
+	for index in lumps:
+		var latitude := 1.0 - 2.0 * (float(index) + 0.5) / float(lumps)
+		var band := sqrt(maxf(0.0, 1.0 - latitude * latitude))
+		var angle := golden * float(index) + rng.randf_range(-0.20, 0.20)
+		var offset := Vector3(cos(angle) * band, latitude, sin(angle) * band)
+		var position := center + Vector3(
+			offset.x * radius_x, offset.y * radius_y, offset.z * radius_z
+		) * rng.randf_range(0.45, 0.80)
+		var size := maxf(radius_x, radius_z) * rng.randf_range(0.34, 0.46)
+		baker.add_foliage_clump(
+			material_key,
+			Vector3(size, size * rng.randf_range(0.55, 0.75), size),
+			rings, segments, rng.randi(),
+			_origin * Transform3D(
+				Basis.from_euler(
+					Vector3(rng.randf_range(-0.22, 0.22), rng.randf() * TAU,
+						rng.randf_range(-0.22, 0.22))
+				),
+				position
+			),
+			tint.lightened(rng.randf_range(-0.05, 0.07)), false, 0.28
+		)
+	return lumps
 
 
 func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement, detail: bool) -> void:
@@ -319,153 +400,157 @@ func _build_oak(baker: MeshBaker, placement: VillageLayout.Placement, detail: bo
 	var scale := placement.scale
 	var variant := placement.variant % 3
 	var profile := _oak_profile(variant)
-	var trunk_height := float(profile["trunk"]) * scale * rng.randf_range(0.93, 1.06)
-	var base_radius := float(profile["radius"]) * scale * rng.randf_range(0.92, 1.10)
+	var trunk_height := float(profile["trunk"]) * scale * rng.randf_range(0.94, 1.06)
+	var base_radius := float(profile["radius"]) * scale * rng.randf_range(0.92, 1.08)
 	var lean := Vector3(
-		rng.randf_range(-0.28, 0.28) + float(profile["lean_x"]),
+		rng.randf_range(-0.14, 0.14) + float(profile["lean_x"]),
 		0.0,
-		rng.randf_range(-0.26, 0.26) + float(profile["lean_z"])
+		rng.randf_range(-0.12, 0.12) + float(profile["lean_z"])
 	) * scale
-	var bend := Vector3(rng.randf_range(-0.15, 0.15), 0.0, rng.randf_range(-0.15, 0.15)) * scale
+	var bend := Vector3(rng.randf_range(-0.12, 0.12), 0.0, rng.randf_range(-0.12, 0.12)) * scale
 	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.03, 0.11))
+	var leaf_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.10))
 	var trunk_segments := 4 if detail else 3
 	var points := _trunk_points(trunk_height, lean, bend, trunk_segments)
-	var trunk_radii := _trunk_radii(base_radius, base_radius * 0.44, trunk_segments, 1.60)
+	var trunk_radii := _trunk_radii(base_radius, base_radius * 0.42, trunk_segments, 1.60)
 	baker.add_limb(
-		"trunk", points, trunk_radii, 7 if detail else 5, _origin, bark_tint, 0.06
+		"trunk", points, trunk_radii, 7 if detail else 4, _origin, bark_tint, 0.06
 	)
 	if detail:
 		_add_root_flare(baker, base_radius, bark_tint, 3)
-
-	var top := points[points.size() - 1]
-	var crown_center := Vector3(
-		top.x, trunk_height - 0.16 + float(profile["lift"]) * scale, top.z
-	)
+	var fork := points[points.size() - 1]
 	var extents := Vector3(
-		float(profile["x"]), float(profile["y"]), float(profile["z"])
-	) * scale * rng.randf_range(0.94, 1.06)
-	var leaf_key: String = LEAF_KEYS[variant % LEAF_KEYS.size()]
-	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.10))
-
-	# Visible limbs, each ending just inside the crown: without them a broad
-	# canopy floats. Far trees keep a single cheap limb so the crown is still
-	# carried rather than pasted on.
-	var limb_count := 3 if detail else 1
+		float(profile["x"]), float(profile["y"]) * float(profile["x"]), float(profile["z"])
+	) * scale
+	extents *= rng.randf_range(0.94, 1.06)
+	var leaf_cycle := 0
 	var tips: Array[Vector3] = []
-	var twist := float(profile["twist"])
+	var limb_count := int(profile["limbs"])
 	for index in limb_count:
-		var angle := TAU * float(index) / float(limb_count) + twist + rng.randf_range(-0.35, 0.35)
-		var at := rng.randf_range(0.55, 0.82)
-		var origin := Vector3(
-			lean.x * pow(at, 1.35), -0.16 + trunk_height * at, lean.z * pow(at, 1.35)
+		var angle := TAU * float(index) / float(limb_count) + rng.randf_range(-0.28, 0.28)
+		var direction := Vector3(cos(angle), 0.0, sin(angle))
+		var length := extents.x * float(profile["reach"]) * rng.randf_range(0.85, 1.10)
+		var tip := fork + direction * length + Vector3(
+			0.0, extents.y * rng.randf_range(0.30, 0.95), 0.0
 		)
-		var direction := Vector3(
-			cos(angle) * rng.randf_range(0.75, 1.20),
-			rng.randf_range(0.42, 0.82),
-			sin(angle) * rng.randf_range(0.75, 1.20)
-		).normalized()
-		var length := rng.randf_range(0.95, 1.45) * scale * float(profile["limb"])
-		var mid := origin + direction * length * 0.55 + Vector3(0.0, 0.10 * scale, 0.0)
-		var end := origin + direction * length
 		baker.add_limb(
-			"trunk", PackedVector3Array([origin, mid, end]),
-			PackedFloat32Array([base_radius * 0.55, base_radius * 0.33, base_radius * 0.09]),
-			5 if detail else 4, _origin, bark_tint, 0.06
+			"trunk", PackedVector3Array([fork, tip]),
+			PackedFloat32Array([base_radius * 0.50, base_radius * 0.18]),
+			6 if detail else 3, _origin, bark_tint, 0.06
 		)
-		tips.append(end)
-
-	_add_oak_crown(
-		baker, crown_center, extents, int(profile["clumps"]), leaf_key, tint, detail, tips
-	)
-	# Two bare twigs above the leaf mass: a crown that ends in a clean dome is
-	# the tell of a primitive, and branches poking out cost four triangles each.
+		tips.append(tip)
+		if detail:
+			# One secondary per primary: a fork is what a broadleaf branch does,
+			# and it doubles the number of places the leaves can hang from.
+			var along := rng.randf_range(0.38, 0.62)
+			var origin := fork + (tip - fork) * along
+			var side_angle := angle + (1.0 if index % 2 == 0 else -1.0) * rng.randf_range(0.5, 0.95)
+			var side := Vector3(cos(side_angle), 0.0, sin(side_angle))
+			var side_tip := origin + side * length * rng.randf_range(0.55, 0.90) + Vector3(
+				0.0, extents.y * rng.randf_range(-0.10, 0.45), 0.0
+			)
+			baker.add_limb(
+				"trunk", PackedVector3Array([origin, side_tip]),
+				PackedFloat32Array([base_radius * 0.22, base_radius * 0.07]),
+				5, _origin, bark_tint, 0.06
+			)
+			tips.append(side_tip)
+	var crown_center := fork + Vector3(0.0, extents.y * 0.62, 0.0)
+	var inside := 2 if detail else 1
+	for index in inside:
+		var angle := TAU * float(index) / float(inside) + 0.7
+		var position := crown_center + Vector3(
+			cos(angle) * extents.x * 0.34,
+			extents.y * rng.randf_range(-0.20, 0.60),
+			sin(angle) * extents.z * 0.34
+		)
+		_add_leaf_bunch(
+			baker, position, extents.x * 0.34, 3 if detail else 1,
+			leaf_tint, detail, leaf_cycle
+		)
+		leaf_cycle += 1
+	for index in tips.size():
+		# A primary tip carries a fuller bunch than a secondary: that is what
+		# keeps the crown edge varied instead of a ring of equal balls.
+		var count := (3 if index < limb_count else 1) if detail else 1
+		_add_leaf_bunch(
+			baker, tips[index], extents.x * 0.38, count,
+			leaf_tint, detail, leaf_cycle
+		)
+		leaf_cycle += 1
+	# A ring of bunches above the fork closes the top of the crown. Without it
+	# an oak seen from the path is an umbrella: wide, flat and hollow.
+	var dome := 3 if detail else 1
+	for index in dome:
+		var angle := TAU * float(index) / float(dome) + 0.35
+		var position := fork + Vector3(
+			cos(angle) * extents.x * 0.26,
+			extents.y * rng.randf_range(0.95, 1.45),
+			sin(angle) * extents.z * 0.26
+		)
+		_add_leaf_bunch(
+			baker, position, extents.x * 0.30, 3 if detail else 1,
+			leaf_tint, detail, leaf_cycle
+		)
+		leaf_cycle += 1
+	# Two bare twigs above the crown: a leaf mass that ends in a clean dome is
+	# the most obvious tell of a primitive.
 	if detail:
 		for _index in 2:
 			var angle := rng.randf() * TAU
 			var origin := crown_center + Vector3(
-				cos(angle) * extents.x * 0.28, extents.y * 0.20, sin(angle) * extents.z * 0.28
+				cos(angle) * extents.x * 0.30, extents.y * 0.62, sin(angle) * extents.x * 0.30
 			)
 			var tip := origin + Vector3(
-				cos(angle) * extents.x * 0.34,
-				extents.y * rng.randf_range(0.40, 0.66),
-				sin(angle) * extents.z * 0.34
+				cos(angle) * extents.x * 0.10, extents.y * rng.randf_range(0.24, 0.40),
+				sin(angle) * extents.x * 0.10
 			)
 			baker.add_limb(
 				"trunk", PackedVector3Array([origin, tip]),
-				PackedFloat32Array([base_radius * 0.16, base_radius * 0.035]),
+				PackedFloat32Array([base_radius * 0.09, base_radius * 0.02]),
 				4, _origin, bark_tint, 0.05
 			)
 	last_stats = {
 		"kind": placement.kind, "variant": variant, "detail": detail,
 		"trunk_base_radius": base_radius,
 		"trunk_top_radius": trunk_radii[trunk_radii.size() - 1],
-		"crown_extent": extents,
-		"crown_clumps": int(profile["clumps"]),
+		"crown_extent": Vector3(extents.x, extents.y * 2.0, extents.z),
+		"crown_clumps": leaf_cycle,
 		"triangles": baker.get_triangle_count() - start,
-		"top": crown_center + Vector3(0.0, extents.y, 0.0),
+		"top": fork + Vector3(0.0, extents.y, 0.0),
 	}
 
 
-## Core mass plus offset lobes. The core guarantees the crown is one volume;
-## the lobes, placed on the branch tips and then on jittered rings, guarantee it
-## is not a sphere. Radii on three axes are independent, so one variant can be
-## tall and narrow, another low and wide.
-func _add_oak_crown(
-	baker: MeshBaker, center: Vector3, extents: Vector3, count: int, leaf_key: String,
-	tint: Color, detail: bool, tips: Array[Vector3]
+## Many small, flattened leaf clumps in a loose sphere. Equal sizes read as
+## foliage; one big and three small balls read as a model.
+func _add_leaf_bunch(
+	baker: MeshBaker, center: Vector3, size: float, count: int,
+	tint: Color, detail: bool, cycle: int
 ) -> void:
-	var rings := 3 if detail else 2
-	var segments := 7 if detail else 5
-	baker.add_foliage_clump(
-		leaf_key, Vector3(extents.x * 0.60, extents.y * 0.80, extents.z * 0.60),
-		rings, segments, rng.randi(),
-		_origin * Transform3D(Basis.IDENTITY, center), tint, false
-	)
-	var placed := 1
-	for tip in tips:
-		var offset := (tip - center) * 0.86
+	var rings := 2
+	var segments := 5 if detail else 3
+	var golden := PI * (3.0 - sqrt(5.0))
+	for index in count:
+		var latitude := 1.0 - 2.0 * (float(index) + 0.5) / float(count)
+		var band := sqrt(maxf(0.0, 1.0 - latitude * latitude))
+		var angle := golden * float(index) + rng.randf_range(-0.30, 0.30)
+		var offset := Vector3(cos(angle) * band, latitude * 0.78, sin(angle) * band)
+		var position := center + offset * size * rng.randf_range(0.20, 0.60)
+		var lump := size * rng.randf_range(0.62, 0.88)
+		var key: String = LEAF_KEYS[(cycle + index) % LEAF_KEYS.size()]
 		baker.add_foliage_clump(
-			leaf_key,
-			Vector3(
-				extents.x * rng.randf_range(0.34, 0.46),
-				extents.y * rng.randf_range(0.38, 0.54),
-				extents.z * rng.randf_range(0.34, 0.46)
-			),
+			key,
+			Vector3(lump, lump * rng.randf_range(0.62, 0.80), lump * 1.05),
 			rings, segments, rng.randi(),
 			_origin * Transform3D(
 				Basis.from_euler(
-					Vector3(rng.randf_range(-0.22, 0.22), rng.randf() * TAU, rng.randf_range(-0.22, 0.22))
+					Vector3(rng.randf_range(-0.35, 0.35), rng.randf() * TAU,
+						rng.randf_range(-0.35, 0.35))
 				),
-				center + offset
+				position
 			),
-			tint.lightened(rng.randf_range(-0.03, 0.06)), false
+			tint.lightened(rng.randf_range(-0.06, 0.06)), false, 0.34
 		)
-		placed += 1
-	while placed < count:
-		var angle := rng.randf() * TAU
-		var radial := rng.randf_range(0.28, 0.82)
-		var offset := Vector3(
-			cos(angle) * extents.x * radial,
-			rng.randf_range(-0.58, 0.58) * extents.y,
-			sin(angle) * extents.z * radial
-		)
-		baker.add_foliage_clump(
-			leaf_key,
-			Vector3(
-				extents.x * rng.randf_range(0.26, 0.42),
-				extents.y * rng.randf_range(0.30, 0.48),
-				extents.z * rng.randf_range(0.26, 0.42)
-			),
-			rings, segments, rng.randi(),
-			_origin * Transform3D(
-				Basis.from_euler(
-					Vector3(rng.randf_range(-0.28, 0.28), rng.randf() * TAU, rng.randf_range(-0.28, 0.28))
-				),
-				center + offset
-			),
-			tint.lightened(rng.randf_range(-0.04, 0.08)), false
-		)
-		placed += 1
 
 
 func _build_birch(baker: MeshBaker, placement: VillageLayout.Placement, detail: bool) -> void:
@@ -473,128 +558,127 @@ func _build_birch(baker: MeshBaker, placement: VillageLayout.Placement, detail: 
 	var scale := placement.scale
 	var variant := placement.variant % 3
 	var profile := _birch_profile(variant)
-	var trunk_height := float(profile["trunk"]) * scale * rng.randf_range(0.92, 1.08)
-	var base_radius := 0.15 * scale * rng.randf_range(0.94, 1.10)
+	var trunk_height := float(profile["trunk"]) * scale * rng.randf_range(0.94, 1.06)
+	var base_radius := 0.15 * scale * rng.randf_range(0.94, 1.08)
 	var bark_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.05))
-	var leaf_key := "leaf_autumn" if variant == 2 else "leaf_bright"
-	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.08))
+	var leaf_key := String(profile["leaf"])
+	var leaf_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.08))
 	var stems := int(profile["stems"])
-	var crown_bases: Array[Vector3] = []
+	var clusters := 0
+	var crown_tops: Array[Vector3] = []
 	for stem in stems:
-		var stem_scale := 1.0 if stem == 0 else 0.78
+		var stem_scale := 1.0 if stem == 0 else 0.82
+		var stem_offset := Vector3(float(profile["spread"]) if stem == 1 else 0.0, 0.0, 0.0)
 		var lean := Vector3(
-			rng.randf_range(-0.30, 0.30) + (float(profile["spread"]) if stem == 1 else 0.0),
-			0.0,
-			rng.randf_range(-0.24, 0.24)
+			rng.randf_range(-0.16, 0.16), 0.0, rng.randf_range(-0.14, 0.14)
 		) * scale
-		var bend := Vector3(rng.randf_range(-0.10, 0.10), 0.0, rng.randf_range(-0.10, 0.10)) * scale
+		var bend := Vector3(rng.randf_range(-0.08, 0.08), 0.0, rng.randf_range(-0.08, 0.08)) * scale
 		var height := trunk_height * stem_scale
 		var segments := 3 if detail else 2
 		var points := _trunk_points(height, lean, bend, segments)
+		for index in points.size():
+			points[index] = points[index] + stem_offset
 		var trunk_radii := _trunk_radii(
-			base_radius * stem_scale, base_radius * 0.22 * stem_scale, segments, 1.35
+			base_radius * stem_scale, base_radius * 0.45 * stem_scale, segments, 1.35
 		)
 		baker.add_limb(
 			"trunk_birch", points, trunk_radii, 6 if detail else 4, _origin, bark_tint, 0.07
 		)
 		var top := points[points.size() - 1]
-		crown_bases.append(Vector3(top.x, height - 0.16, top.z))
-		# The dark scars that make a birch a birch. Two short wider cylinders
-		# read as bark breaks from the walking camera; the cost is 32 triangles.
+		# Two short dark scars on the white bark: a box, not a ring, so the
+		# trunk keeps its taper instead of growing a lump.
 		if detail:
-			for _band in 2:
-				var at := rng.randf_range(0.22, 0.66)
-				var radius := lerpf(trunk_radii[0], trunk_radii[segments], at) * 1.10
-				baker.add_cylinder(
-					"trunk", radius, radius, 0.035 * scale, 4,
+			for band in 2:
+				var along := rng.randf_range(0.20, 0.60)
+				var angle := rng.randf() * TAU
+				var radius := lerpf(trunk_radii[0], trunk_radii[segments], along)
+				var position := Vector3(
+					lean.x * pow(along, 1.35), -0.16 + height * along, lean.z * pow(along, 1.35)
+				) + stem_offset + Vector3(cos(angle), 0.0, sin(angle)) * radius * 0.80
+				baker.add_box(
+					"trunk",
+					Vector3(0.11, 0.030, 0.055) * scale,
 					_origin * Transform3D(
-						Basis.IDENTITY,
-						Vector3(lean.x * pow(at, 1.35), -0.16 + height * at, lean.z * pow(at, 1.35))
+						Basis.from_euler(Vector3(0.0, -angle, 0.0)), position
 					),
-					Color.WHITE.darkened(rng.randf_range(0.25, 0.4))
+					Color.WHITE.darkened(rng.randf_range(0.28, 0.42))
 				)
-		# Two slim ascending limbs per stem: birches do not have a bare pole
-		# between the ground and the leaves.
-		var limb_count := 2 if detail else 1
-		for index in limb_count:
-			var angle := TAU * float(index) / float(maxi(limb_count, 1)) + rng.randf() * TAU * 0.25
-			var at := rng.randf_range(float(profile["start"]), 0.92)
-			var origin := Vector3(
-				lean.x * pow(at, 1.35), -0.16 + height * at, lean.z * pow(at, 1.35)
+		# Ascending branches from the upper half, foliage in loose clusters at
+		# the tips: a birch is a veil of leaves, never a ball.
+		var branches := int(profile["branches"]) if detail else 1
+		var crown_center := Vector3(top.x, -0.16 + height, top.z)
+		for index in branches:
+			var angle := TAU * float(index) / float(branches) + rng.randf_range(-0.40, 0.40)
+			var direction := Vector3(cos(angle), 0.0, sin(angle))
+			var origin := crown_center + Vector3(0.0, rng.randf_range(-0.90, 0.10), 0.0) * scale
+			var length := height * rng.randf_range(0.20, 0.32)
+			var tip := origin + direction * length + Vector3(
+				0.0, length * rng.randf_range(0.95, 1.40), 0.0
 			)
-			var direction := Vector3(
-				cos(angle) * 0.5, rng.randf_range(0.8, 1.25), sin(angle) * 0.5
-			).normalized()
-			var end := origin + direction * rng.randf_range(0.65, 1.1) * scale * stem_scale
 			baker.add_limb(
-				"trunk_birch", PackedVector3Array([origin, end]),
-				PackedFloat32Array([base_radius * 0.28 * stem_scale, base_radius * 0.06]),
+				"trunk_birch", PackedVector3Array([origin, tip]),
+				PackedFloat32Array([base_radius * 0.34, base_radius * 0.10]),
 				4, _origin, bark_tint, 0.06
 			)
-	_add_birch_crown(
-		baker, crown_bases[0], float(profile["start"]), float(profile["crown"]),
-		leaf_key, tint, detail
-	)
-	if stems > 1:
-		_add_birch_crown(
-			baker, crown_bases[1] + Vector3(0.15, -0.25, 0.0), float(profile["start"]) + 0.06,
-			float(profile["crown"]) * 0.8, leaf_key, tint.lightened(0.03), detail
-		)
+			clusters += _add_leaf_cluster(
+				baker, leaf_key, tip, height * rng.randf_range(0.11, 0.15),
+				leaf_tint, detail
+			)
+		var crown_lumps := 4 if detail else 1
+		for index in crown_lumps:
+			var angle := TAU * float(index) / float(crown_lumps) + rng.randf_range(-0.5, 0.5)
+			var position := crown_center + Vector3(
+				cos(angle) * height * rng.randf_range(0.05, 0.22),
+				height * rng.randf_range(-0.06, 0.16),
+				sin(angle) * height * rng.randf_range(0.05, 0.22)
+			)
+			clusters += _add_leaf_cluster(
+				baker, leaf_key, position, height * rng.randf_range(0.11, 0.15),
+				leaf_tint, detail
+			)
+		crown_tops.append(crown_center + Vector3(0.0, height * 0.16, 0.0))
 	last_stats = {
 		"kind": placement.kind, "variant": variant, "detail": detail,
 		"trunk_base_radius": base_radius,
-		"trunk_top_radius": base_radius * 0.22,
+		"trunk_top_radius": base_radius * 0.45,
 		"crown_extent": Vector3(1.9, 2.4, 1.9) * scale * float(profile["crown"]),
-		"crown_clumps": 4 if detail else 2,
+		"crown_clumps": clusters,
 		"triangles": baker.get_triangle_count() - start,
-		"top": crown_bases[0] + Vector3(0.0, 1.6 * scale, 0.0),
+		"top": crown_tops[0],
 	}
 
 
-## Airy birch canopy: a few small clumps spread along the upper third with gaps
-## between them, so the crown is a loose veil of leaves rather than a ball.
-func _add_birch_crown(
-	baker: MeshBaker, base: Vector3, start: float, crown_scale: float, leaf_key: String,
+## A loose handful of leaf clumps around one point, with gaps: a veil.
+func _add_leaf_cluster(
+	baker: MeshBaker, key: String, center: Vector3, size: float,
 	tint: Color, detail: bool
-) -> void:
-	var count := 4 if detail else 2
-	var rings := 3 if detail else 2
-	var segments := 6 if detail else 5
-	var scale := 1.0
-	for index in count:
-		var angle := TAU * float(index) / float(count) + rng.randf_range(-0.5, 0.5)
-		var radial := rng.randf_range(0.30, 0.90) * crown_scale
-		var height := rng.randf_range(-0.15, 0.95 + float(index) * 0.15) * crown_scale
-		var center := base + Vector3(
-			cos(angle) * radial, height * 1.2 + 0.55 * crown_scale, sin(angle) * radial
-		)
+) -> int:
+	var lumps := 4 if detail else 2
+	var rings := 2
+	var segments := 5 if detail else 3
+	for index in lumps:
+		var angle := TAU * float(index) / float(lumps) + rng.randf_range(-0.4, 0.4)
+		var lift := rng.randf_range(-1.05, 1.15)
+		var offset := Vector3(
+			cos(angle) * rng.randf_range(0.55, 1.45),
+			lift,
+			sin(angle) * rng.randf_range(0.55, 1.45)
+		) * size
+		var lump := size * rng.randf_range(0.45, 0.72)
 		baker.add_foliage_clump(
-			leaf_key,
-			Vector3(
-				rng.randf_range(0.62, 0.92) * crown_scale * scale,
-				rng.randf_range(0.52, 0.78) * crown_scale * scale,
-				rng.randf_range(0.62, 0.92) * crown_scale * scale
-			),
+			key,
+			Vector3(lump, lump * rng.randf_range(0.70, 0.95), lump),
 			rings, segments, rng.randi(),
 			_origin * Transform3D(
 				Basis.from_euler(
-					Vector3(rng.randf_range(-0.30, 0.30), rng.randf() * TAU, rng.randf_range(-0.30, 0.30))
+					Vector3(rng.randf_range(-0.30, 0.30), rng.randf() * TAU,
+						rng.randf_range(-0.30, 0.30))
 				),
-				center
+				center + offset
 			),
-			tint.lightened(rng.randf_range(-0.04, 0.07)), false
+			tint.lightened(rng.randf_range(-0.05, 0.07)), false, 0.32
 		)
-	# One central puff binds the airy clumps into a crown.
-	baker.add_foliage_clump(
-		leaf_key,
-		Vector3(0.62, 0.58, 0.62) * crown_scale * scale,
-		rings, segments, rng.randi(),
-		_origin * Transform3D(
-			Basis.IDENTITY,
-			base + Vector3(0.0, 1.05 * crown_scale + 0.35 * start, 0.0)
-		),
-		tint, false
-	)
+	return lumps
 
 
 func _build_bush(baker: MeshBaker, placement: VillageLayout.Placement, detail: bool) -> void:
@@ -602,30 +686,31 @@ func _build_bush(baker: MeshBaker, placement: VillageLayout.Placement, detail: b
 	var scale := placement.scale * 0.82
 	var variant := placement.variant % 3
 	var tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.13))
-	var lumps := 4 if detail else 3
-	var spread := (0.92 if variant == 1 else 0.64) * scale
-	var top := (0.95 if variant == 2 else 0.66) * scale
-	var rings := 3 if detail else 2
-	var segments := 6 if detail else 5
+	var lumps := 6 if detail else 3
+	var spread := (1.05 if variant == 1 else 0.76) * scale
+	var top := (0.95 if variant == 2 else 0.72) * scale
+	var rings := 2
+	var segments := 6 if detail else 4
 	for index in lumps:
-		var angle := TAU * float(index) / float(lumps) + rng.randf_range(-0.45, 0.45)
-		var radial := spread * rng.randf_range(0.18, 0.95)
+		var angle := TAU * float(index) / float(lumps) + rng.randf_range(-0.40, 0.40)
+		var radial := spread * rng.randf_range(0.10, 0.85)
 		var offset := Vector3(cos(angle) * radial, 0.0, sin(angle) * radial)
 		var radii := Vector3(
-			rng.randf_range(0.38, 0.52),
-			rng.randf_range(0.30, 0.48),
-			rng.randf_range(0.36, 0.50)
+			rng.randf_range(0.34, 0.48),
+			rng.randf_range(0.28, 0.44),
+			rng.randf_range(0.32, 0.46)
 		) * scale
 		var key := "leaf_deep" if index % 2 == 0 else "leaf_mid"
 		baker.add_foliage_clump(
 			key, radii, rings, segments, rng.randi(),
 			_origin * Transform3D(
 				Basis.from_euler(
-					Vector3(rng.randf_range(-0.22, 0.22), rng.randf() * TAU, rng.randf_range(-0.22, 0.22))
+					Vector3(rng.randf_range(-0.20, 0.20), rng.randf() * TAU,
+						rng.randf_range(-0.20, 0.20))
 				),
-				Vector3(offset.x, top * rng.randf_range(0.45, 0.95), offset.z)
+				Vector3(offset.x, top * rng.randf_range(0.40, 0.90), offset.z)
 			),
-			tint.lightened(rng.randf_range(-0.04, 0.06)), false
+			tint.lightened(rng.randf_range(-0.04, 0.06)), false, 0.30
 		)
 	# Two twigs keep the mass from reading as a single green pillow.
 	if detail:
@@ -656,11 +741,7 @@ func _build_bush(baker: MeshBaker, placement: VillageLayout.Placement, detail: b
 				key, rng.randf_range(0.065, 0.095) * scale, 2, 4,
 				_origin * Transform3D(
 					Basis.IDENTITY.scaled(Vector3(1.0, 0.62, 1.0)),
-					Vector3(
-						away.x,
-						top * rng.randf_range(0.55, 0.95),
-						away.z
-					)
+					Vector3(away.x, top * rng.randf_range(0.55, 0.95), away.z)
 				),
 				Color.WHITE.darkened(rng.randf_range(0.0, 0.08))
 			)
@@ -674,10 +755,9 @@ func _build_bush(baker: MeshBaker, placement: VillageLayout.Placement, detail: b
 	}
 
 
-## A flower patch is deliberately not a new material: stems use the leaf greens
-## and heads reuse the cloth and autumn colours already in the palette. Three
-## variants (daisy cream, poppy red, marigold orange) are enough to break the
-## green edge of the meadow without turning it into a colour chart.
+## A flower patch adds no material: stems use the leaf greens, heads reuse the
+## cloth and autumn colours. Daisy cream, poppy red and marigold orange break
+## the green edge of the meadow without turning it into a colour chart.
 func _build_flower_patch(
 	baker: MeshBaker, placement: VillageLayout.Placement, detail: bool
 ) -> void:
@@ -763,9 +843,8 @@ func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var rock_key := "rock_wet" if variant == 2 else "rock"
 	var tint := Color.WHITE.darkened(rng.randf_range(0.025, 0.16))
 	if scale < 0.55:
-		# Pebbles are a small, irregular knot rather than one scaled-down boulder.
-		# Their bases are sunk into the terrain and they deliberately have no
-		# collider, so walking across a gravel edge stays unobstructed.
+		# Pebbles are an irregular knot, not one scaled-down boulder, and they
+		# have no collider: a gravel edge stays walkable.
 		var pebble_count := 3 if rng.randf() < 0.78 else 4
 		var scale_factor := maxf(scale, 0.25) / 0.5
 		var phase := rng.randf() * TAU
@@ -802,9 +881,8 @@ func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	baker.add_rock(rock_key, dimensions, main_seed, _origin, tint, 0.14)
 	var pieces := 1
 
-	# A smaller shoulder overlaps one edge of the main body. The intentional
-	# overlap hides a seam; both profiles begin below the terrain anchor, so it
-	# reads as one buried cluster rather than two clean shapes balanced together.
+	# A smaller shoulder overlapping one edge hides the seam; both profiles
+	# start below the terrain anchor, so it reads as one buried cluster.
 	var chip_angle := rng.randf() * TAU
 	var chip_offset := Vector3(
 		cos(chip_angle) * dimensions.x * 0.32,
@@ -844,10 +922,8 @@ func _build_rock(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 
 # --- shared plant geometry ---------------------------------------------------
 
-
-## Trunk axis: a curve that starts buried under the ground line, bends towards
-## `lean` with height and returns most of the way. The points are what `add_limb`
-## needs; no separate cylinder is involved.
+## Trunk axis: a curve starting under the ground line and bending towards
+## `lean`. These are the points `add_limb` needs; no cylinder is involved.
 func _trunk_points(
 	height: float, lean: Vector3, bend: Vector3, segments: int
 ) -> PackedVector3Array:
@@ -865,9 +941,8 @@ func _trunk_points(
 	return points
 
 
-## Radius per trunk point: a root flare at the very bottom, a fast first taper,
-## then a gentle narrowing towards the crown. A cylinder with a uniform radius
-## was the most obvious primitive tell on the old trees.
+## Radius per trunk point: root flare, fast first taper, then a gentle
+## narrowing towards the crown. A uniform radius is the primitive tell.
 func _trunk_radii(
 	base: float, top: float, segments: int, flare: float
 ) -> PackedFloat32Array:
@@ -883,9 +958,8 @@ func _trunk_radii(
 	return radii
 
 
-## Two or three buttresses from the trunk into the ground. They hide the point
-## where a trunk meets a slope, which a straight cylinder can never do from
-## close up.
+## Buttresses from the trunk into the ground: they hide the point where a
+## trunk meets a slope, which a cylinder can never do from close up.
 func _add_root_flare(
 	baker: MeshBaker, base_radius: float, tint: Color, count: int
 ) -> void:
@@ -901,7 +975,7 @@ func _add_root_flare(
 		var radii := PackedFloat32Array([
 			base_radius * 0.62, base_radius * 0.36, base_radius * 0.08
 		])
-		baker.add_limb("trunk", points, radii, 4, _origin, tint.darkened(0.04), 0.06)
+		baker.add_limb("trunk", points, radii, 3, _origin, tint.darkened(0.04), 0.06)
 
 
 func _cylinder_collider(radius: float, height: float, offset: Vector3) -> Node3D:

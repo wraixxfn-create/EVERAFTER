@@ -222,6 +222,81 @@ static func run_tests(harness: TestHarness) -> void:
 	for node in clump_baker.commit(materials):
 		(node as MeshInstance3D).free()
 
+	# A conifer whorl replaced the stack of cones: a ring of pointed needles
+	# around a solid inner cone, closed above and below. The winding is resolved
+	# per triangle, because the rim hangs below the ring and a naive fan would
+	# turn the underside inside-out.
+	var frond_baker := MeshBaker.new()
+	frond_baker.add_frond_ring("pine", 2.0, 1.4, 0.5, 12, 7)
+	harness.check_equals(
+		frond_baker.get_triangle_count(), 72,
+		"a frond whorl is six triangles per segment (four faces, top and underside)"
+	)
+	var frond_arrays := _first_surface(frond_baker, materials)
+	harness.check_equals(
+		_bad_windings(
+			frond_arrays[Mesh.ARRAY_VERTEX],
+			frond_arrays[Mesh.ARRAY_NORMAL],
+			Vector3(0.0, 2.06, 0.0)
+		),
+		0,
+		"every whorl facet faces outwards, including the underside"
+	)
+	harness.check_equals(
+		_degenerate_triangles(frond_arrays[Mesh.ARRAY_VERTEX]), 0,
+		"the whorl has no degenerate triangle"
+	)
+	# Alternating long and short needles are the whole point: a rim of equal
+	# points is a disc, which is what made the old pines look like traffic cones.
+	var rim_min := INF
+	var rim_max := 0.0
+	for vertex in frond_arrays[Mesh.ARRAY_VERTEX]:
+		if vertex.y < 1.44 or vertex.y > 1.78:
+			continue
+		var radial := Vector2(vertex.x, vertex.z).length()
+		rim_min = minf(rim_min, radial)
+		rim_max = maxf(rim_max, radial)
+	harness.check(
+		rim_max - rim_min > 0.15,
+		"the whorl rim alternates long and short needles (%.2f..%.2f)" % [rim_min, rim_max]
+	)
+	var frond_repeat := MeshBaker.new()
+	frond_repeat.add_frond_ring("pine", 2.0, 1.4, 0.5, 12, 7)
+	harness.check_equals(
+		frond_repeat.get_triangle_count(), frond_baker.get_triangle_count(),
+		"the same whorl seed rebuilds the same whorl"
+	)
+	for node in frond_baker.commit(materials):
+		(node as MeshInstance3D).free()
+	for node in frond_repeat.commit(materials):
+		(node as MeshInstance3D).free()
+
+	# A clump can carry its own vertical tint gradient. A crown built from dozens
+	# of small masses reads as one volume only if the tops are lit and the
+	# undersides fall away, and that has to survive the merge into one mesh.
+	var shaded_clump := MeshBaker.new()
+	shaded_clump.add_foliage_clump(
+		"leaf_mid", Vector3(1.0, 1.6, 1.0), 3, 6, 11, Transform3D.IDENTITY,
+		Color(0.8, 0.8, 0.8), false, 0.3
+	)
+	var shaded_arrays := _first_surface(shaded_clump, materials)
+	var shaded_vertices: PackedVector3Array = shaded_arrays[Mesh.ARRAY_VERTEX]
+	var shaded_colors: PackedColorArray = shaded_arrays[Mesh.ARRAY_COLOR]
+	var top_color := 0.0
+	var bottom_color := 1.0
+	for index in shaded_vertices.size():
+		if shaded_vertices[index].y > 1.0:
+			top_color = maxf(top_color, shaded_colors[index].r)
+		elif shaded_vertices[index].y < -1.0:
+			bottom_color = minf(bottom_color, shaded_colors[index].r)
+	harness.check(
+		top_color > bottom_color + 0.1,
+		"a shaded clump is lighter on top than underneath (%.2f > %.2f)"
+		% [top_color, bottom_color]
+	)
+	for node in shaded_clump.commit(materials):
+		(node as MeshInstance3D).free()
+
 	# A rock uses a closed, ring-built profile with a buried foot and a clipped
 	# crown. Seeded angular variation must never create a folded or degenerate
 	# triangle, and every facet normal must agree with the visible winding.

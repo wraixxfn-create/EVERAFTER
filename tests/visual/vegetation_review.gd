@@ -7,11 +7,11 @@ extends Node3D
 ##
 ## The five views are the five questions the rebuild has to answer:
 ##
-## 1: an oak trunk from arm's length — taper, root flare, real limbs
-## 2: a pine crown from below, against the sky — is the silhouette a cone?
+## 1: an oak from arm's length — trunk taper, root flare, real limbs, leaf mass
+## 2: a spruce crown from below, against the sky — are the needle whorls solid?
 ## 3: a shrub and a flower patch at knee height — are the details readable?
 ## 4: the meadow at ground level — tufts, blade shape, patch colour
-## 5: the tree line from the village, 55 m out — repetition and mass at range
+## 5: the tree line from the village, 30 m out — repetition and mass at range
 ##
 ## Left/right orbit, up/down elevation, wheel distance. The camera always looks
 ## at the same subject, so a defect can be compared between passes. The console
@@ -122,19 +122,19 @@ func _apply_view() -> void:
 		0:
 			var oak := _nearest_of_kind(VillageLayout.KIND_TREE_OAK)
 			if oak != null:
-				_subject = Vector3(oak.position.x, 1.5 * oak.scale, oak.position.y)
+				_subject = Vector3(oak.position.x, 2.6 * oak.scale, oak.position.y)
 				_azimuth = atan2(oak.position.x, oak.position.y) + 0.6
-				_elevation = 0.26
-				_distance = 5.0
+				_elevation = 0.18
+				_distance = 8.0
 		1:
 			var pine := _nearest_of_kind(VillageLayout.KIND_TREE_PINE)
 			if pine != null:
-				_subject = Vector3(pine.position.x, 6.0 * pine.scale, pine.position.y)
+				_subject = Vector3(pine.position.x, 3.2 * pine.scale, pine.position.y)
 				_azimuth = atan2(pine.position.x, pine.position.y) + 0.4
 				# Negative elevation drops the camera to eye height and looks up
-				# at the crown: the view that exposes a traffic-cone silhouette.
-				_elevation = -0.12
-				_distance = 26.0
+				# at the crown: the view that exposes a cone or a stack of discs.
+				_elevation = -0.10
+				_distance = 9.0
 		2:
 			var bush := _nearest_of_kind(VillageLayout.KIND_BUSH)
 			if bush != null:
@@ -154,10 +154,10 @@ func _apply_view() -> void:
 		4:
 			var center := _tree_line_center()
 			var direction := Vector2(center.x, center.z).normalized()
-			_subject = Vector3(center.x, 6.0, center.z)
+			_subject = Vector3(center.x, 5.0, center.z)
 			_azimuth = atan2(direction.x, direction.y) + PI
 			_elevation = 0.10
-			_distance = 28.0
+			_distance = 30.0
 	_update_camera()
 
 
