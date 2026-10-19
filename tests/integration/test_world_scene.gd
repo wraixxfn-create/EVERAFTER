@@ -58,9 +58,36 @@ static func check_structure(harness: TestHarness, world: Node3D) -> void:
 	var parts := ["Structures", "Props", "Paving", "Vegetation", "Grass", "Water"]
 	for part in parts:
 		harness.check(built.get_node_or_null(part) != null, "village has a %s node" % part)
+	var props := built.get_node_or_null("Props") as Node3D
+	harness.check(
+		props != null and props.has_meta("slope_outcrop_count"),
+		"scenic slope rocks are reported without adding a gameplay node"
+	)
+	if props != null and props.has_meta("slope_outcrop_count"):
+		var outcrop_count := int(props.get_meta("slope_outcrop_count"))
+		harness.check(
+			outcrop_count > 0 and outcrop_count <= VillageBuilder.SLOPE_OUTCROP_COUNT,
+			"slope outcrops are placed within the deterministic visual budget (%d)" % outcrop_count
+		)
 	for body_path in ["Props/PropCollision", "Vegetation/TreeCollision"]:
 		harness.check(
 			built.get_node_or_null(body_path) != null, "village has a %s body" % body_path
+		)
+	var layout: VillageLayout = world.get_layout()
+	var prop_collision := built.get_node_or_null("Props/PropCollision") as StaticBody3D
+	if layout != null and prop_collision != null:
+		var building_factory := BuildingFactory.new(VillageMaterials.new(), layout.world_seed)
+		var expected_prop_colliders := 0
+		for placement in layout.placements:
+			if BuildingFactory.is_structure(placement.kind):
+				continue
+			if VillageLayout.is_vegetation(placement.kind):
+				continue
+			expected_prop_colliders += building_factory.colliders_for(placement).size()
+		harness.check(
+			prop_collision.get_child_count() == expected_prop_colliders,
+			"scenic slope and shore rocks add no prop colliders (%d / %d)"
+			% [prop_collision.get_child_count(), expected_prop_colliders]
 		)
 	var structures := built.get_node_or_null("Structures") as Node3D
 	harness.check(

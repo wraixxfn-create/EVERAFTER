@@ -89,6 +89,22 @@ static func run_tests(harness: TestHarness) -> void:
 		0.001,
 		"the surface is continuous across the cell diagonal"
 	)
+	var expected_lower_normal := Vector3(
+		-(bottom_right - bottom_left), 1.0, -(top_left - bottom_left)
+	).normalized()
+	var lower_normal := generator._surface_normal_at(origin_x + 0.25, origin_z + 0.25)
+	harness.check_almost(
+		lower_normal.distance_to(expected_lower_normal), 0.0, 0.0001,
+		"surface_normal_at matches the lower heightmap triangle"
+	)
+	var expected_upper_normal := Vector3(
+		-(top_right - top_left), 1.0, -(top_right - bottom_right)
+	).normalized()
+	var upper_normal := generator._surface_normal_at(origin_x + 0.75, origin_z + 0.75)
+	harness.check_almost(
+		upper_normal.distance_to(expected_upper_normal), 0.0, 0.0001,
+		"surface_normal_at matches the upper heightmap triangle"
+	)
 
 	# --- bounds --------------------------------------------------------------
 	harness.check_almost(
@@ -209,4 +225,42 @@ static func run_tests(harness: TestHarness) -> void:
 		shaped.build_height_map_data(),
 		other_shaped.build_height_map_data(),
 		"a different seed still changes the shaped landscape"
+	)
+
+	# A rock apron is a soft vertex-colour stamp only: its centre is fully
+	# weighted, its edge fades out, and adding a rock cannot reshape collision.
+	var rock_layout := VillageLayout.new(2468, 79.5)
+	rock_layout.placements.clear()
+	var stamped_rock := VillageLayout.Placement.new()
+	stamped_rock.kind = VillageLayout.KIND_ROCK
+	stamped_rock.position = Vector2(10.0, 10.0)
+	stamped_rock.scale = 1.0
+	stamped_rock.footprint_radius = 0.9
+	rock_layout.placements.append(stamped_rock)
+	var stamped_terrain := TerrainGenerator.new(32, 5.0, 2468, rock_layout)
+	harness.check_almost(
+		stamped_terrain._rock_apron_weight(10.0, 10.0), 1.0, 0.0001,
+		"rock ground treatment is strongest beneath its buried base"
+	)
+	harness.check_almost(
+		stamped_terrain._rock_apron_weight(14.0, 10.0), 0.0, 0.0001,
+		"the stone apron has a finite, soft edge rather than painting the whole field"
+	)
+	var stamped_color := stamped_terrain._vertex_color(25, 25)
+	var plain_layout := VillageLayout.new(2468, 79.5)
+	plain_layout.placements.clear()
+	var plain_terrain := TerrainGenerator.new(32, 5.0, 2468, plain_layout)
+	var plain_color := plain_terrain._vertex_color(25, 25)
+	var color_delta := (
+		absf(stamped_color.r - plain_color.r)
+		+ absf(stamped_color.g - plain_color.g)
+		+ absf(stamped_color.b - plain_color.b)
+	)
+	harness.check(
+		color_delta > 0.001,
+		"the rock stamp visibly changes terrain colour without changing its shape"
+	)
+	harness.check_equals(
+		stamped_terrain.build_height_map_data(), plain_terrain.build_height_map_data(),
+		"rock integration changes no terrain heights or walkable collision"
 	)

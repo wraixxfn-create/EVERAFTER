@@ -1,3 +1,4 @@
+# gdlint: disable=max-file-lines
 class_name TerrainGenerator
 extends RefCounted
 ## Deterministic procedural terrain: one height grid, used for both the visible
@@ -158,6 +159,10 @@ var _pad_bounds := Rect2()
 ## levelled plots. Kept after the pass so [method max_neighbour_step] can tell a
 ## road cut from a random spike.
 var _protected := PackedByteArray()
+## Compact, cached stamps for decorative rocks. They tint only the ground mesh;
+## they never alter height, collision, path masks or placement rules.
+var _rock_centres := PackedVector2Array()
+var _rock_apron_radii := PackedFloat32Array()
 
 
 func _init(
@@ -179,6 +184,7 @@ func _init(
 		_pond_level = _sample_low_height(layout.pond_center.x, layout.pond_center.y)
 		_building_pads = _collect_building_pads()
 		_pad_bounds = _compute_pad_bounds()
+		_cache_rock_stamps()
 	_heights = _compute_heights()
 	# Shape guard: enforce a walkable maximum step between cells on open ground.
 	# It runs on the same grid used by both the mesh and the heightmap, so the
@@ -253,6 +259,47 @@ func slope_at(world_x: float, world_z: float) -> float:
 	var dx := (height_at(world_x + step, world_z) - height_at(world_x - step, world_z)) / (2.0 * step)
 	var dz := (height_at(world_x, world_z + step) - height_at(world_x, world_z - step)) / (2.0 * step)
 	return sqrt(dx * dx + dz * dz)
+
+
+## Exact normal of the same triangle selected by [method height_at]. Decorative
+## stones use it to sit against the real terrain plane, rather than yawing above
+## a hillside with an unrelated horizontal base.
+func _surface_normal_at(world_x: float, world_z: float) -> Vector3:
+	var half := get_half_extent()
+	var fx := clampf((world_x + half) / CELL_SIZE, 0.0, float(size_cells - 1))
+	var fz := clampf((world_z + half) / CELL_SIZE, 0.0, float(size_cells - 1))
+	var ix := mini(floori(fx), size_cells - 2)
+	var iz := mini(floori(fz), size_cells - 2)
+	var u := fx - float(ix)
+	var v := fz - float(iz)
+	var gradient_x: float
+	var gradient_z: float
+	if u + v <= 1.0:
+		gradient_x = (grid_height(ix + 1, iz) - grid_height(ix, iz)) / CELL_SIZE
+		gradient_z = (grid_height(ix, iz + 1) - grid_height(ix, iz)) / CELL_SIZE
+	else:
+		gradient_x = (grid_height(ix + 1, iz + 1) - grid_height(ix, iz + 1)) / CELL_SIZE
+		gradient_z = (grid_height(ix + 1, iz + 1) - grid_height(ix + 1, iz)) / CELL_SIZE
+	return Vector3(-gradient_x, 1.0, -gradient_z).normalized()
+
+
+## Blend weight for the loose gravel / compacted-soil apron around placed rocks.
+## It is a colour-only stamp with a soft outer falloff; it does not affect the
+## generated height grid or its `HeightMapShape3D` collision.
+func _rock_apron_weight(world_x: float, world_z: float) -> float:
+	var point := Vector2(world_x, world_z)
+	var weight := 0.0
+	for index in _rock_centres.size():
+		var radius: float = _rock_apron_radii[index]
+		var inner := radius * 0.62
+		var outer := radius * 1.85 + 0.45
+		var delta := point - _rock_centres[index]
+		if delta.length_squared() > outer * outer:
+			continue
+		var distance := delta.length()
+		var local := 1.0 - clampf((distance - inner) / (outer - inner), 0.0, 1.0)
+		weight = maxf(weight, _smoothstep(local))
+	return weight
 
 
 ## Lowest and highest point of the shaped grid, in metres. `x` is the minimum,
@@ -351,6 +398,18 @@ func build_material() -> StandardMaterial3D:
 
 
 # --- internals ---------------------------------------------------------------
+
+
+func _cache_rock_stamps() -> void:
+	_rock_centres.clear()
+	_rock_apron_radii.clear()
+	if layout == null:
+		return
+	for placement in layout.placements:
+		if placement.kind != VillageLayout.KIND_ROCK:
+			continue
+		_rock_centres.append(placement.position)
+		_rock_apron_radii.append(maxf(placement.footprint_radius * placement.scale, 0.22))
 
 
 func _compute_heights() -> PackedFloat32Array:
@@ -821,6 +880,7 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	var pond_t := 0.0
 	var plaza_t := 0.0
 	var building_t := 0.0
+	var rock_apron_t := 0.0
 
 	if layout == null:
 		# Legacy disc: warm sand apron with a noise-broken edge.
@@ -967,6 +1027,21 @@ func _vertex_color(ix: int, iz: int) -> Color:
 				var skirt := clampf((building_t - 0.62) / 0.38, 0.0, 1.0)
 				color = color.lerp(COLOR_GRAVEL, skirt * 0.32)
 
+		# Loose scree and compacted earth blend placed stones into the meadow.
+		# The broad, soft stamp is masked by paths, the plaza and foundations;
+		# a damp pond edge shifts it toward moss instead of making a hard halo.
+		if not _rock_centres.is_empty():
+			rock_apron_t = _rock_apron_weight(x, z)
+			rock_apron_t *= 1.0 - maxf(road_t, maxf(plaza_t, building_t)) * 0.92
+			rock_apron_t *= 1.0 - clampf((pond_t - 0.84) / 0.16, 0.0, 1.0) * 0.80
+			var apron_noise := clampf(
+				_value_noise(x + 18.6, z - 6.3, 0.23, 1.0) * 0.5 + 0.5, 0.0, 1.0
+			)
+			var apron_color := COLOR_SOIL.lerp(COLOR_GRAVEL, 0.42 + apron_noise * 0.28)
+			apron_color = apron_color.lerp(COLOR_MOSS, clampf(pond_t, 0.0, 1.0) * 0.26)
+			rock_apron_t *= 0.78 + apron_noise * 0.22
+			color = color.lerp(apron_color, rock_apron_t * 0.54)
+
 	# -----------------------------------------------------------------------
 	# 8) Surface mottling — three-scale grain that survives the 1 m vertex
 	#    grid.  Large grain gives field-scale warmth, medium survives the grid,
@@ -980,7 +1055,7 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	var built_weight := 0.0
 	if layout != null:
 		built_weight = maxf(road_t, maxf(pond_t, maxf(plaza_t, building_t)))
-		built_weight = maxf(built_weight, rock_t * 0.45)
+		built_weight = maxf(built_weight, maxf(rock_t * 0.45, rock_apron_t * 0.40))
 	var grain_strength := 0.44 + built_weight * 0.22
 	# Built ground gets a touch more grain so cobble/dirt never look like a
 	# flat colour field — but never so much that it turns into noise.

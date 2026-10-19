@@ -56,6 +56,32 @@ static func run_tests(harness: TestHarness) -> void:
 			"%s variants differ in silhouette (%d distinct shapes)" % [kind, signatures.size()]
 		)
 
+	# Stones are separate designed silhouettes too: they use a broad ledge, a
+	# taller shoulder and a long low form, while every individual seed remains
+	# deterministic and inexpensive to bake.
+	var rock_signatures := {}
+	for variant in 3:
+		var first_rock := _bake(materials, VillageLayout.KIND_ROCK, variant, true)
+		var second_rock := _bake(materials, VillageLayout.KIND_ROCK, variant, true)
+		harness.check_equals(
+			first_rock["triangles"], second_rock["triangles"],
+			"rock variant %d rebuilds with the same triangle count" % variant
+		)
+		var first_size: Vector3 = first_rock["size"]
+		var second_size: Vector3 = second_rock["size"]
+		harness.check_almost(first_size.x, second_size.x, 0.0001, "rock x bounds are deterministic")
+		harness.check_almost(first_size.y, second_size.y, 0.0001, "rock y bounds are deterministic")
+		harness.check_almost(first_size.z, second_size.z, 0.0001, "rock z bounds are deterministic")
+		rock_signatures[_signature(first_size)] = true
+		harness.check(
+			int(first_rock["triangles"]) >= 120 and int(first_rock["triangles"]) <= 240,
+			"rock clusters stay low-poly (%d triangles)" % int(first_rock["triangles"])
+		)
+	harness.check(
+		rock_signatures.size() >= 2,
+		"placed rock variants differ in silhouette (%d distinct shapes)" % rock_signatures.size()
+	)
+
 	# --- trunk and crown structure -------------------------------------------
 	for kind in VillageLayout.TREE_KINDS:
 		var baked := _bake(materials, kind, 0, true)
@@ -107,6 +133,7 @@ static func run_tests(harness: TestHarness) -> void:
 
 	_check_placement(harness, layout)
 	_check_collision(harness)
+	_check_rock_contact(harness, layout, terrain, materials)
 	_check_grass(harness, layout, terrain, materials)
 	_check_budget(harness, layout)
 
@@ -116,6 +143,7 @@ static func run_tests(harness: TestHarness) -> void:
 
 static func _check_placement(harness: TestHarness, layout: VillageLayout) -> void:
 	var trees: Array[Vector2] = []
+	var rocks := layout.get_placements_of_kind(VillageLayout.KIND_ROCK)
 	var species := {}
 	for placement in layout.placements:
 		if not VillageLayout.TREE_KINDS.has(placement.kind):
@@ -123,6 +151,19 @@ static func _check_placement(harness: TestHarness, layout: VillageLayout) -> voi
 		trees.append(placement.position)
 		species[placement.kind] = int(species.get(placement.kind, 0)) + 1
 	harness.check(trees.size() > 100, "there is still a forest (%d trees)" % trees.size())
+	harness.check(
+		rocks.size() > 20,
+		"stones remain scattered around shore and fields (%d)" % rocks.size()
+	)
+	var road_stones := 0
+	for rock in rocks:
+		var clearance := (
+			VillageLayout.ROAD_WIDTH * 0.5
+			+ rock.footprint_radius * rock.scale * 0.6
+		)
+		if layout.distance_to_roads(rock.position) < clearance - 0.001:
+			road_stones += 1
+	harness.check_equals(road_stones, 0, "placed stones keep the carriageway clear")
 	for kind in VillageLayout.TREE_KINDS:
 		harness.check(
 			int(species.get(kind, 0)) >= 5,
@@ -253,9 +294,48 @@ static func _check_collision(harness: TestHarness) -> void:
 	for shape in pebble_shapes:
 		(shape as CollisionShape3D).free()
 	var boulder_shapes := builder.colliders_for(_placement(VillageLayout.KIND_ROCK, 0, 1.2))
-	harness.check_equals(boulder_shapes.size(), 1, "a boulder blocks the player")
-	for shape in boulder_shapes:
-		(shape as CollisionShape3D).free()
+	harness.check_equals(
+		boulder_shapes.size(), 1, "a large placed boulder keeps its existing collider"
+	)
+	if boulder_shapes.size() == 1:
+		var collider := boulder_shapes[0] as CollisionShape3D
+		var shape := collider.shape as BoxShape3D
+		var expected_size := Vector3(1.5, 1.0, 1.4) * 1.2
+		var expected_offset := Vector3(0.0, 0.4, 0.0) * 1.2
+		harness.check_equals(
+			shape.size, expected_size, "the existing boulder collision dimensions are unchanged"
+		)
+		harness.check_equals(
+			collider.position, expected_offset, "the existing boulder collider offset is unchanged"
+		)
+	for collision in boulder_shapes:
+		(collision as CollisionShape3D).free()
+
+
+static func _check_rock_contact(
+	harness: TestHarness, layout: VillageLayout, terrain: TerrainGenerator,
+	materials: VillageMaterials
+) -> void:
+	var rocks := layout.get_placements_of_kind(VillageLayout.KIND_ROCK)
+	harness.check(not rocks.is_empty(), "the world has grounded rock placements to inspect")
+	if rocks.is_empty():
+		return
+	var builder := VillageBuilder.new(layout, terrain, materials)
+	var checked := 0
+	for rock in rocks:
+		var transform := builder._placement_transform(rock)
+		var expected_up := terrain._surface_normal_at(rock.position.x, rock.position.y)
+		harness.check_almost(
+			transform.origin.y, terrain.height_at(rock.position.x, rock.position.y), 0.0001,
+			"rock anchor samples the terrain height"
+		)
+		harness.check(
+			transform.basis.y.dot(expected_up) > 0.999,
+			"rock base follows the exact heightmap triangle normal"
+		)
+		checked += 1
+		if checked >= 4:
+			break
 
 
 # --- grass -------------------------------------------------------------------

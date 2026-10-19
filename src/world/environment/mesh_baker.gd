@@ -432,6 +432,136 @@ func add_foliage_clump(
 			_triangle_count += 2
 
 
+## Closed, stratified boulder with a broad buried foot, fractured shoulder and
+## clipped crown. Unlike the foliage clump this is not a displaced sphere: the
+## five independently shaped rings form deliberate stone planes, with bounded
+## angular and radial variation. Every seed keeps its vertices ordered around
+## the ring, so profiles vary without folds, zero-area faces or self-crossings.
+## `size` is the nominal full width / height / depth; the bottom of the mesh
+## starts below local y=0 so a placement anchored on the terrain cannot float.
+func add_rock(
+	material_key: String,
+	size: Vector3,
+	seed_value: int,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
+	face_variation: float = 0.12
+) -> void:
+	if size.x < 0.02 or size.y < 0.02 or size.z < 0.02:
+		return
+	var half_width := size.x * 0.5
+	var half_depth := size.z * 0.5
+	var side_count := 6 + mini(int(floor(_hash_unit(seed_value, 19, 0) * 3.0)), 2)
+	var profile := posmod(seed_value, 3)
+	var heights := PackedFloat32Array()
+	var radii := PackedFloat32Array()
+	match profile:
+		0:
+			# Low, broad shelf with a broken, nearly horizontal crown.
+			heights = PackedFloat32Array([-0.26, -0.06, 0.28, 0.63, 0.72])
+			radii = PackedFloat32Array([0.68, 0.89, 1.0, 0.82, 0.55])
+		1:
+			# A taller shoulder that narrows decisively toward its chipped top.
+			heights = PackedFloat32Array([-0.25, -0.05, 0.34, 0.72, 0.82])
+			radii = PackedFloat32Array([0.69, 0.90, 0.98, 0.68, 0.38])
+		_:
+			# Low, oblong weathered stone; deliberately distinct from a sphere.
+			heights = PackedFloat32Array([-0.24, -0.045, 0.25, 0.61, 0.70])
+			radii = PackedFloat32Array([0.77, 0.96, 1.0, 0.76, 0.48])
+
+	var phase_a := _hash_unit(seed_value, 23, 1) * TAU
+	var phase_b := _hash_unit(seed_value, 29, 2) * TAU
+	var phase_c := _hash_unit(seed_value, 31, 3) * TAU
+	var angles := PackedFloat32Array()
+	var radial_factors := PackedFloat32Array()
+	var angle_step := TAU / float(side_count)
+	for side in side_count:
+		var base_angle := angle_step * float(side)
+		# Bounded jitter is less than one eighth of a sector: adjacent vertices
+		# can never exchange order, even at the minimum six-sided profile.
+		var angle_jitter := (
+			(_hash_unit(seed_value, side + 41, 4) * 2.0 - 1.0) * angle_step * 0.12
+		)
+		var angle := base_angle + angle_jitter
+		var radial := 0.94 + 0.065 * sin(angle * 2.0 + phase_a)
+		radial += 0.045 * cos(angle * 3.0 + phase_b)
+		angles.append(angle)
+		radial_factors.append(clampf(radial, 0.82, 1.12))
+
+	var shift_factors := PackedFloat32Array([0.0, 0.04, 0.20, 0.70, 1.0])
+	var rings: Array[PackedVector3Array] = []
+	for layer in heights.size():
+		var ring := PackedVector3Array()
+		var t := float(layer) / float(heights.size() - 1)
+		var shift := Vector2(cos(phase_c), sin(phase_c)) * shift_factors[layer]
+		for side in side_count:
+			var angle: float = angles[side]
+			var radial: float = radii[layer] * radial_factors[side]
+			var vertical_wobble := 0.0
+			if layer > 0 and layer < heights.size() - 1:
+				vertical_wobble = sin(angle * 2.0 + phase_b + t) * size.y * 0.018
+			var point := Vector3(
+				cos(angle) * half_width * radial + shift.x * half_width * 0.12,
+				size.y * heights[layer] + vertical_wobble,
+				sin(angle) * half_depth * radial + shift.y * half_depth * 0.12
+			)
+			ring.append(point)
+		rings.append(ring)
+
+	var variation := clampf(face_variation, 0.0, 0.22)
+	for layer in range(rings.size() - 1):
+		var lower := rings[layer]
+		var upper := rings[layer + 1]
+		for side in side_count:
+			var next := (side + 1) % side_count
+			var a := lower[side]
+			var b := lower[next]
+			var c := upper[next]
+			var d := upper[side]
+			# Godot's measured winding uses (c-a) x (b-a). Calculate a
+			# separate normal for each triangle so the chipped planes stay flat.
+			var normal_a := (c - a).cross(b - a)
+			var normal_b := (d - a).cross(c - a)
+			if normal_a.length_squared() < 0.000000000001 or normal_b.length_squared() < 0.000000000001:
+				continue
+			var band_tint := _scaled_tint(tint, 0.94 + float(layer) * 0.025)
+			var facet_tint := _segment_tint(band_tint, side + layer, side_count, variation)
+			_add_triangle(material_key, xform, a, b, c, normal_a.normalized(), facet_tint)
+			_add_triangle(material_key, xform, a, c, d, normal_b.normalized(), facet_tint)
+			_triangle_count += 2
+
+	# Closed fan caps. The basal cap sits below the anchor and is normally
+	# swallowed by the ground; the clipped top catches a broad, readable facet.
+	var bottom_center := Vector3(0.0, size.y * heights[0], 0.0)
+	var top_center := Vector3(
+		cos(phase_c) * half_width * 0.12,
+		size.y * heights[heights.size() - 1],
+		sin(phase_c) * half_depth * 0.12
+	)
+	var bottom := rings[0]
+	var top := rings[rings.size() - 1]
+	for side in side_count:
+		var next := (side + 1) % side_count
+		var bottom_a := bottom[side]
+		var bottom_b := bottom[next]
+		var bottom_normal := (bottom_a - bottom_center).cross(bottom_b - bottom_center)
+		var top_a := top[side]
+		var top_b := top[next]
+		var top_normal := (top_b - top_center).cross(top_a - top_center)
+		if bottom_normal.length_squared() >= 0.000000000001:
+			_add_triangle(
+				material_key, xform, bottom_center, bottom_b, bottom_a,
+				bottom_normal.normalized(), _scaled_tint(tint, 0.88)
+			)
+			_triangle_count += 1
+		if top_normal.length_squared() >= 0.000001:
+			_add_triangle(
+				material_key, xform, top_center, top_a, top_b,
+				top_normal.normalized(), _scaled_tint(tint, 1.04)
+			)
+			_triangle_count += 1
+
+
 ## One tapered blade of grass or one flower stem: a quad in the local XY plane
 ## whose tip is bent in X/Z. The written normal points **up** on purpose. A blade
 ## is a sliver of a surface, not a wall; giving it a sideways normal makes half of

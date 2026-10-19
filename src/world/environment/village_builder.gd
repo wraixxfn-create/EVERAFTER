@@ -23,9 +23,8 @@ extends RefCounted
 
 ## Flat pads drifting on the pond surface.
 const POND_LILY_COUNT := 7
-## Visual polish 14: low rock outcrops on real slopes. They are half buried,
-## knee-high and deliberately collider-free — the slope itself is the obstacle
-## and the player can step over them, so a scenic crest never becomes a wall.
+## Visual polish 17: low rock outcrops on real slopes. They are partly buried,
+## deliberately collider-free, and assembled as a boulder plus downhill chips.
 const SLOPE_OUTCROP_COUNT := 18
 const SLOPE_OUTCROP_MIN_SLOPE := 0.17
 const SLOPE_OUTCROP_MIN_SPACING := 3.4
@@ -33,6 +32,8 @@ const SLOPE_OUTCROP_MIN_SPACING := 3.4
 var layout: VillageLayout = null
 var terrain: TerrainGenerator = null
 var materials: VillageMaterials = null
+## Deterministic centers of the collider-free slope outcrops, exposed for review.
+var slope_outcrop_positions: Array[Vector2] = []
 
 var _buildings: BuildingFactory = null
 var _vegetation: VegetationBuilder = null
@@ -153,6 +154,7 @@ func _build_props() -> Node3D:
 	_bake_pond_lilies(baker)
 	_bake_pond_shore_pebbles(baker)
 	_bake_slope_outcrops(baker)
+	root.set_meta("slope_outcrop_count", slope_outcrop_positions.size())
 	for placement in layout.placements:
 		if BuildingFactory.is_structure(placement.kind):
 			continue
@@ -190,8 +192,16 @@ func _build_vegetation() -> Node3D:
 			baker, placement, origin, _vegetation.needs_detail(layout, placement)
 		)
 		_vegetation_count += 1
+		var collider_origin := origin
+		if placement.kind == VillageLayout.KIND_ROCK:
+			# Preserve the pre-existing upright/yawed boulder collider. The new
+			# slope-aligned rotation is a render-only improvement.
+			var yaw := deg_to_rad(placement.rotation_deg)
+			collider_origin = Transform3D(
+				Basis.from_euler(Vector3(0.0, yaw, 0.0)), origin.origin
+			)
 		for shape in _vegetation.colliders_for(placement):
-			shape.transform = origin * shape.transform
+			shape.transform = collider_origin * shape.transform
 			colliders.add_child(shape)
 			_collider_count += 1
 	for baked in baker.commit(materials):
@@ -227,8 +237,8 @@ func _bake_pond_lilies(baker: MeshBaker) -> void:
 ## Pebble-and-gravel ring at the water line: small, flat stones that hide the
 ## hard circular cut between the water disc and the terrain mesh.  No collider —
 ## the player steps over them — and merged into the prop mesh so they cost no
-## extra draw call.  Visual polish 06: makes the shore read as shore, not as a
-## texture edge.
+## extra draw call. Visual Polish 17 replaces the old boxes with small faceted
+## stones whose bases follow the bank and remain collider-free.
 func _bake_pond_shore_pebbles(baker: MeshBaker) -> void:
 	var center := layout.pond_center
 	var ring := layout.pond_radius
@@ -245,24 +255,17 @@ func _bake_pond_shore_pebbles(baker: MeshBaker) -> void:
 				continue
 			if _near_structure(point, 0.6):
 				continue
-			var h := terrain.height_at(point.x, point.y)
 			var size := Vector3(
-				_detail_rng.randf_range(0.55, 0.95),
-				_detail_rng.randf_range(0.12, 0.18),
-				_detail_rng.randf_range(0.45, 0.75)
+				_detail_rng.randf_range(0.42, 0.76),
+				_detail_rng.randf_range(0.24, 0.42),
+				_detail_rng.randf_range(0.36, 0.68)
 			)
 			var yaw := _detail_rng.randf_range(0.0, 360.0)
-			var key := "rock" if _detail_rng.randf() < 0.55 else "stone"
+			var key := "rock_wet" if _detail_rng.randf() < 0.55 else "rock"
 			var tint := Color.WHITE.darkened(_detail_rng.randf_range(0.04, 0.16))
-			baker.add_box(
-				key,
-				size,
-				Transform3D(
-					Basis.from_euler(Vector3(0, deg_to_rad(yaw), deg_to_rad(_detail_rng.randf_range(-4.0, 4.0)))),
-					Vector3(point.x, h + 0.06, point.y)
-				),
-				tint,
-				0.08
+			var shape_seed := _detail_rng.randi() * 3 + index % 3
+			baker.add_rock(
+				key, size, shape_seed, _surface_transform(point, yaw), tint, 0.10
 			)
 		# Occasional reed clump just outside the water — two crossed quads,
 		# purely decorative, very cheap.
@@ -296,15 +299,15 @@ func _bake_pond_shore_pebbles(baker: MeshBaker) -> void:
 			)
 
 
-## Visual polish 14 — stone showing through the ground where the landform is
-## steep or on a crest. The terrain paints rock by slope, but paint alone cannot
-## give a crest a silhouette; these half-buried, faceted boulders do, at about
-## the cost of a handful of grass blades. Own RNG so the existing kerbs, lilies
-## and shore pebbles keep the exact layout they had before this pass.
+## Visual polish 17 — low stone outcrops on real slopes. The terrain already
+## paints exposed rock and scree; these closed, angular boulders add a silhouette
+## and a small downhill talus group. Their own RNG keeps kerbs, lilies and the
+## existing prop placement sequence deterministic.
 ##
-## No colliders: every boulder is at most knee-high and sunk into the slope, so
-## walking over one is a visual step, not a physics failure.
+## No colliders: these remain scenery over the existing heightfield; no new
+## movement rule or physical obstruction is added to a route.
 func _bake_slope_outcrops(baker: MeshBaker) -> void:
+	slope_outcrop_positions.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = layout.world_seed + 97
 	var placed: Array[Vector2] = []
@@ -325,7 +328,7 @@ func _bake_slope_outcrops(baker: MeshBaker) -> void:
 		var slope := terrain.slope_at(point.x, point.y)
 		if slope < SLOPE_OUTCROP_MIN_SLOPE:
 			continue
-		if _near_structure(point, 0.9):
+		if _near_structure(point, 1.1) or _near_vegetation(point, 0.9):
 			continue
 		var crowded := false
 		for other in placed:
@@ -335,52 +338,47 @@ func _bake_slope_outcrops(baker: MeshBaker) -> void:
 		if crowded:
 			continue
 		placed.append(point)
+		slope_outcrop_positions.append(point)
 		var size := rng.randf_range(0.58, 1.15) * clampf(slope * 2.2, 0.75, 1.25)
-		var ground := terrain.height_at(point.x, point.y)
 		var key := "rock_wet" if layout.pond_weight(point.x, point.y) > 0.02 else "rock"
 		var tint := Color.WHITE.darkened(rng.randf_range(0.02, 0.16))
-		# Main boulder: squashed, tilted, sunk 40 % into the slope. Flat shading
-		# keeps the facets readable at the low polygon budget.
-		var main_basis := Basis.from_euler(
-			Vector3(
-				rng.randf_range(-0.28, 0.28), rng.randf() * TAU, rng.randf_range(-0.22, 0.22)
-			)
-		).scaled(
-			Vector3(
-				rng.randf_range(0.85, 1.25),
-				rng.randf_range(0.42, 0.62),
-				rng.randf_range(0.7, 1.0)
-			)
+		var yaw := rng.randf_range(0.0, 360.0)
+		var main_size := Vector3(1.55, 0.92, 1.34) * size
+		var main_seed := rng.randi() * 3 + (slope_outcrop_positions.size() - 1) % 3
+		# The mesh is rooted below the exact terrain plane and its local up axis
+		# follows the slope. This replaces the old tilted UV sphere whose lower
+		# edge could peek above one side of the hill.
+		baker.add_rock(
+			key, main_size, main_seed, _surface_transform(point, yaw), tint, 0.14
 		)
-		baker.add_sphere(
-			key,
-			0.82 * size,
-			3,
-			6,
-			Transform3D(main_basis, Vector3(point.x, ground + 0.16 * size, point.y)),
-			tint,
-			true
-		)
-		# One or two chips on the downhill side: a boulder that emerged from the
-		# slope should have debris at its foot, not a clean cut. The second chip
-		# is occasional on purpose: the props budget has ~5 k triangles of room.
-		for _chip in (2 if rng.randf() < 0.4 else 1):
-			var chip_angle := rng.randf() * TAU
-			var offset := Vector2(cos(chip_angle), sin(chip_angle)) * size * rng.randf_range(0.5, 0.95)
-			var chip_basis := Basis.from_euler(
-				Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3))
-			).scaled(Vector3(0.7, 0.38, 0.8) * size)
-			baker.add_sphere(
-				key,
-				0.46,
-				3,
-				5,
-				Transform3D(
-					chip_basis,
-					Vector3(point.x + offset.x, ground + 0.05 * size, point.y + offset.y)
-				),
-				tint.lightened(0.04),
-				true
+
+		# A talus ribbon of one or two chips follows gravity downhill. Each piece
+		# re-samples the actual terrain, so chips stay grounded across a slope
+		# instead of copying the parent's height and hovering over a dip.
+		var up := terrain._surface_normal_at(point.x, point.y)
+		var downhill := Vector2(up.x, up.z).normalized()
+		if downhill.length_squared() < 0.001:
+			var fallback_angle := rng.randf() * TAU
+			downhill = Vector2(cos(fallback_angle), sin(fallback_angle))
+		var across := Vector2(-downhill.y, downhill.x)
+		var chip_count := 2 if rng.randf() < 0.40 else 1
+		for chip_index in chip_count:
+			var offset := size * (0.52 + float(chip_index) * 0.30)
+			var lateral := rng.randf_range(-0.16, 0.16) * size
+			var chip_point := point + downhill * offset + across * lateral
+			if layout.road_weight(chip_point.x, chip_point.y) > 0.10:
+				continue
+			if layout.flatten_weight(chip_point.x, chip_point.y) > 0.22:
+				continue
+			if _near_structure(chip_point, 0.45) or _near_vegetation(chip_point, 0.35):
+				continue
+			var chip_size := Vector3(0.56, 0.40, 0.60) * size
+			chip_size *= rng.randf_range(0.88, 1.08)
+			var chip_yaw := yaw + rng.randf_range(-32.0, 32.0)
+			var chip_seed := rng.randi() * 3 + (chip_index + 1) % 3
+			baker.add_rock(
+				key, chip_size, chip_seed, _surface_transform(chip_point, chip_yaw),
+				tint.lightened(rng.randf_range(0.025, 0.075)), 0.12
 			)
 
 
@@ -420,10 +418,44 @@ func _near_structure(point: Vector2, margin: float) -> bool:
 	return false
 
 
-## Grounded, yawed transform of a placement. `VillageLayout` stores XZ only; the
-## height always comes from the terrain, so props sit on the surface instead of
-## floating above it or sinking into it.
+## True when a scenic outcrop would visibly overlap an existing tree, shrub,
+## flower patch or placed stone. These are visual clearances only; no gameplay
+## or NPC navigation data is edited.
+func _near_vegetation(point: Vector2, margin: float) -> bool:
+	for placement in layout.placements:
+		if not VillageLayout.is_vegetation(placement.kind):
+			continue
+		var radius: float = placement.footprint_radius * placement.scale + margin
+		if point.distance_to(placement.position) < radius:
+			return true
+	return false
+
+
+## Terrain-aligned transform for stone only. A projected forward vector fixes
+## the rock's yaw around the actual surface normal while keeping an orthogonal
+## local basis for both the baked mesh and its existing collider.
+func _surface_transform(point: Vector2, yaw_degrees: float) -> Transform3D:
+	var up := terrain._surface_normal_at(point.x, point.y)
+	var yaw := deg_to_rad(yaw_degrees)
+	var forward := Vector3(sin(yaw), 0.0, cos(yaw))
+	forward -= up * forward.dot(up)
+	if forward.length_squared() < 0.0001:
+		forward = Vector3.FORWARD - up * Vector3.FORWARD.dot(up)
+	forward = forward.normalized()
+	var right := up.cross(forward).normalized()
+	forward = right.cross(up).normalized()
+	var basis := Basis(right, up, forward)
+	return Transform3D(
+		basis, Vector3(point.x, terrain.height_at(point.x, point.y), point.y)
+	)
+
+
+## Grounded transform of a placement. `VillageLayout` stores XZ only; the
+## height always comes from the terrain. Stones also follow the exact local
+## slope plane so their partially buried bases meet the mesh instead of hovering.
 func _placement_transform(placement: VillageLayout.Placement) -> Transform3D:
+	if placement.kind == VillageLayout.KIND_ROCK:
+		return _surface_transform(placement.position, placement.rotation_deg)
 	var x := placement.position.x
 	var z := placement.position.y
 	var basis := Basis.from_euler(Vector3(0, deg_to_rad(placement.rotation_deg), 0))
