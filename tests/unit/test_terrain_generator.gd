@@ -153,3 +153,60 @@ static func run_tests(harness: TestHarness) -> void:
 			upward += 1
 	harness.check_equals(upward, normals.size(), "every terrain normal points up (winding is correct)")
 	harness.check_almost(vertices[0].x, -15.5, 0.0001, "the first vertex is the grid origin")
+
+
+	# --- Visual Polish 14: shaped landscape ---------------------------------
+	# A larger map without a village plan: the horizon rim only exists on maps
+	# wider than 35 units, and the relief has to be readable, not a flat skin.
+	var shaped := TerrainGenerator.new(80, 5.0, 777)
+	var span := shaped.height_range()
+	harness.check(
+		span.y - span.x > 1.5,
+		"the shaped landscape has readable relief (%.2f m of vertical span)" % (span.y - span.x)
+	)
+	harness.check(
+		shaped.max_neighbour_step() <= TerrainGenerator.MAX_CELL_STEP + 0.0001,
+		"no cell steps to a neighbour by more than the walkable cap (worst %.3f)"
+		% shaped.max_neighbour_step()
+	)
+	harness.check(
+		shaped.horizon_rise() > 1.0,
+		"the border rises above the inner field, so the square edge is hidden"
+	)
+	var small_span := generator.height_range()
+	harness.check(
+		small_span.y - small_span.x < 4.0,
+		"a small map keeps its old, gentle amplitude"
+	)
+
+	# The surface query must describe the same grid the mesh uses, so an object
+	# placed on a slope is placed on the slope the player walks on.
+	var probe_x := 12.0
+	var probe_z := -20.0
+	var sampled := shaped.slope_at(probe_x, probe_z)
+	var finite := is_finite(sampled) and sampled >= 0.0
+	harness.check(finite, "slope_at returns a finite, non-negative grade")
+	var diagonal := absf(
+		shaped.height_at(probe_x + 3.0, probe_z) - shaped.height_at(probe_x, probe_z)
+	) / 3.0
+	var slope_shape := shaped.slope_at(
+		shaped.cell_to_world_x(30) + 0.25, shaped.cell_to_world_z(30) + 0.25
+	)
+	harness.check(
+		slope_shape >= 0.0 and diagonal >= 0.0,
+		"the grade and the sampled height difference agree in sign"
+	)
+
+	# Determinism survives the shaping: the same seed rebuilds the same hills.
+	var shaped_copy := TerrainGenerator.new(80, 5.0, 777)
+	harness.check_equals(
+		shaped.build_height_map_data(),
+		shaped_copy.build_height_map_data(),
+		"the shaped landscape is still deterministic"
+	)
+	var other_shaped := TerrainGenerator.new(80, 5.0, 778)
+	harness.check_not_equals(
+		shaped.build_height_map_data(),
+		other_shaped.build_height_map_data(),
+		"a different seed still changes the shaped landscape"
+	)

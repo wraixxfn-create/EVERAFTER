@@ -458,6 +458,11 @@ docs/
   WORLD_DETAIL.md              densità ambientale e dettagli del mondo: interventi, regole
   NPC_AND_UI_POLISH.md         rifinitura visiva di NPC, pose procedurali e interfaccia (Polish 05)
   BUILDING_POLISH_07.md         rifinitura architettonica degli edifici procedurali (Polish 07)
+  TERRAIN_POLISH_06.md         terreno e paesaggio: palette, bordi, rilievo (Polish 06)
+  VISUAL_POLISH_11.md          audit strutturale del villaggio (Polish 11)
+  VISUAL_POLISH_12.md          ricostruzione degli edifici (Polish 12)
+  VISUAL_POLISH_13.md          tetti e silhouette architettoniche (Polish 13)
+  VISUAL_POLISH_14.md          paesaggio modellato: rilievo, spalle stradali, orizzonte (Polish 14)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 
@@ -717,3 +722,16 @@ misure e risultati dei test in [`docs/VISUAL_POLISH_12.md`](docs/VISUAL_POLISH_1
 Per confrontare le cinque varianti senza toccare i salvataggi:
 `godot --path . res://tests/visual/building_review.tscn` (1–5: edificio, F1–F4: viste).
 Test strutturali mirati: `godot --headless --path . --script res://tests/run_building_tests.gd`.
+
+## Visual Polish 14 — paesaggio modellato
+
+Il terreno non è più una "pelle tesa" sopra un'onda: l'algoritmo esistente è stato esteso con
+un'armatura a scala ampia (dorsali e valli), micro-rilievo dei campi, creste rocciose con
+affioramenti, spalle stradali digradanti, un bordo dell'orizzonte non più rettilineo e piazzole
+livellate sotto ogni edificio. Un nuovo `TerrainRelaxer` limita il salto massimo tra celle sul
+terreno aperto e fonde le piazzole, sulla **stessa griglia** letta dalla mesh e dalla
+`HeightMapShape3D`: la forma cambia, il contratto tra ciò che si vede e ciò che si cammina no.
+Misure, prima/dopo e limiti dichiarati in [`docs/VISUAL_POLISH_14.md`](docs/VISUAL_POLISH_14.md).
+
+Verifiche: `tests/unit/test_terrain_relaxer.gd` (nuovo), `test_terrain_generator.gd` esteso e
+`check_terrain_shape` nella suite di integrazione.

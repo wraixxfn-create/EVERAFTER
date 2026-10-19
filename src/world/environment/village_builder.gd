@@ -28,6 +28,12 @@ const ROAD_KERB_SPACING := 2.4
 const ROAD_KERB_GAP_CHANCE := 0.12
 ## Flat pads drifting on the pond surface.
 const POND_LILY_COUNT := 7
+## Visual polish 14: low rock outcrops on real slopes. They are half buried,
+## knee-high and deliberately collider-free — the slope itself is the obstacle
+## and the player can step over them, so a scenic crest never becomes a wall.
+const SLOPE_OUTCROP_COUNT := 18
+const SLOPE_OUTCROP_MIN_SLOPE := 0.17
+const SLOPE_OUTCROP_MIN_SPACING := 3.4
 
 var layout: VillageLayout = null
 var terrain: TerrainGenerator = null
@@ -143,6 +149,7 @@ func _build_props() -> Node3D:
 	_bake_road_kerb(baker)
 	_bake_pond_lilies(baker)
 	_bake_pond_shore_pebbles(baker)
+	_bake_slope_outcrops(baker)
 	for placement in layout.placements:
 		if BuildingFactory.is_structure(placement.kind):
 			continue
@@ -213,7 +220,9 @@ func _bake_plaza_kerb(baker: MeshBaker) -> void:
 		var z := sin(angle) * PLAZA_KERB_RADIUS
 		var yaw := rad_to_deg(atan2(x, z))
 		var height := terrain.height_at(x, z)
-		var tint := Color.WHITE.darkened(0.05 + _detail_rng.randf_range(0.0, 0.08) + 0.02 * float(index % 2))
+		var tint := Color.WHITE.darkened(
+			0.05 + _detail_rng.randf_range(0.0, 0.08) + 0.02 * float(index % 2)
+		)
 		var length := _detail_rng.randf_range(1.75, 2.05)
 		var h := _detail_rng.randf_range(0.26, 0.30)
 		baker.add_box(
@@ -371,6 +380,94 @@ func _bake_pond_shore_pebbles(baker: MeshBaker) -> void:
 					Vector3(point.x, h + reed_h * 0.45, point.y)
 				),
 				reed_tint.lightened(0.06),
+				true
+			)
+
+
+## Visual polish 14 — stone showing through the ground where the landform is
+## steep or on a crest. The terrain paints rock by slope, but paint alone cannot
+## give a crest a silhouette; these half-buried, faceted boulders do, at about
+## the cost of a handful of grass blades. Own RNG so the existing kerbs, lilies
+## and shore pebbles keep the exact layout they had before this pass.
+##
+## No colliders: every boulder is at most knee-high and sunk into the slope, so
+## walking over one is a visual step, not a physics failure.
+func _bake_slope_outcrops(baker: MeshBaker) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = layout.world_seed + 97
+	var placed: Array[Vector2] = []
+	var attempts := 0
+	while placed.size() < SLOPE_OUTCROP_COUNT and attempts < SLOPE_OUTCROP_COUNT * 18:
+		attempts += 1
+		var angle := rng.randf() * TAU
+		var distance := rng.randf_range(
+			VillageLayout.PLAZA_RADIUS + 7.0, layout.half_extent - 4.5
+		)
+		var point := Vector2(cos(angle), sin(angle)) * distance
+		if layout.flatten_weight(point.x, point.y) > 0.22:
+			continue
+		if layout.road_weight(point.x, point.y) > 0.10:
+			continue
+		if layout.pond_weight(point.x, point.y) > 0.12:
+			continue
+		var slope := terrain.slope_at(point.x, point.y)
+		if slope < SLOPE_OUTCROP_MIN_SLOPE:
+			continue
+		if _near_structure(point, 0.9):
+			continue
+		var crowded := false
+		for other in placed:
+			if point.distance_to(other) < SLOPE_OUTCROP_MIN_SPACING:
+				crowded = true
+				break
+		if crowded:
+			continue
+		placed.append(point)
+		var size := rng.randf_range(0.58, 1.15) * clampf(slope * 2.2, 0.75, 1.25)
+		var ground := terrain.height_at(point.x, point.y)
+		var key := "rock_wet" if layout.pond_weight(point.x, point.y) > 0.02 else "rock"
+		var tint := Color.WHITE.darkened(rng.randf_range(0.02, 0.16))
+		# Main boulder: squashed, tilted, sunk 40 % into the slope. Flat shading
+		# keeps the facets readable at the low polygon budget.
+		var main_basis := Basis.from_euler(
+			Vector3(
+				rng.randf_range(-0.28, 0.28), rng.randf() * TAU, rng.randf_range(-0.22, 0.22)
+			)
+		).scaled(
+			Vector3(
+				rng.randf_range(0.85, 1.25),
+				rng.randf_range(0.42, 0.62),
+				rng.randf_range(0.7, 1.0)
+			)
+		)
+		baker.add_sphere(
+			key,
+			0.82 * size,
+			3,
+			6,
+			Transform3D(main_basis, Vector3(point.x, ground + 0.16 * size, point.y)),
+			tint,
+			true
+		)
+		# One or two chips on the downhill side: a boulder that emerged from the
+		# slope should have debris at its foot, not a clean cut. The second chip
+		# is occasional on purpose: the props budget has ~5 k triangles of room.
+		for _chip in (2 if rng.randf() < 0.4 else 1):
+			var chip_angle := rng.randf() * TAU
+			var offset := Vector2(cos(chip_angle), sin(chip_angle)) * size * rng.randf_range(0.5, 0.95)
+			var chip_basis := Basis.from_euler(
+				Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3))
+			).scaled(Vector3(0.7, 0.38, 0.8) * size)
+			baker.add_sphere(
+				key,
+				0.46,
+				3,
+				5,
+				Transform3D(
+					chip_basis,
+					Vector3(point.x + offset.x, ground + 0.05 * size, point.y + offset.y)
+				),
+				tint.lightened(0.04),
 				true
 			)
 

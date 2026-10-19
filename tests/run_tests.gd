@@ -38,6 +38,7 @@ func _run_tests() -> void:
 	TestSimulationLoop.run_tests(harness)
 	TestDayCycleSystem.run_tests(harness)
 	TestTerrainGenerator.run_tests(harness)
+	TestTerrainRelaxer.run_tests(harness)
 	TestAreaRegistry.run_tests(harness)
 	TestVillageLayout.run_tests(harness)
 	TestVillageMaterials.run_tests(harness)

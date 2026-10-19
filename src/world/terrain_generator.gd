@@ -20,7 +20,26 @@ extends RefCounted
 ## plain bilinear filter: objects placed with `height_at` sit exactly on the
 ## surface the engine simulates.
 ##
-## Unit tests: `tests/unit/test_terrain_generator.gd`.
+## Visual Polish 14 turned the "stretched skin" height field into a shaped
+## landscape **without adding a second terrain system**. One height function,
+## evaluated in this order for every grid point:
+## 1. landform — five low octaves, two of them at continent scale (150–300 m),
+##    shared with every platform so nothing can disagree about the ground;
+## 2. detail octaves, faded by an irregular verge weight around roads and plots;
+## 3. field warp, micro-relief (small hills and hollows) and rocky spines;
+## 4. road shoulder — cut-and-fill grading toward the landform at the nearest
+##    road point, so a path is a shelf, not a trench;
+## 5. horizon rim — a soft, noisy rise toward the border that hides the square
+##    edge, with a saddle where the roads leave the map;
+## 6. village terrace — a wide grading toward the plaza level, so the square is
+##    a shelf in the hill rather than a disc cut into it;
+## 7. pond basin, building pads, plaza and water carve.
+## [TerrainRelaxer] then caps the height difference between neighbouring cells
+## on open ground and blends the building pads, on this very grid: the shape
+## changes, the mesh/physics contract does not.
+##
+## Unit tests: `tests/unit/test_terrain_generator.gd` and
+## `tests/unit/test_terrain_relaxer.gd`.
 
 const CELL_SIZE := 1.0
 const DEFAULT_SIZE_CELLS := 160
@@ -33,6 +52,50 @@ const DEFAULT_SEED := 20261016
 const LOW_FREQUENCY := 0.021
 const MID_FREQUENCY := 0.053
 const HIGH_FREQUENCY := 0.121
+
+## Broad landscape armature — two very low frequencies that create the readable
+## ridge/valley at 150–300 m scale. They survive everywhere (even on roads,
+## masked only by plaza) so the horizon itself has gentle variation.
+const CONTINENT_FREQ_A := 0.0048
+const CONTINENT_AMP_A := 0.52
+const CONTINENT_FREQ_B := 0.0075
+const CONTINENT_AMP_B := 0.28
+
+## Horizon rim — a gentle, noisy rise toward the map border that hides the
+## square edge when seen at eye level. Visible only on large maps.
+const HORIZON_RIM_WIDTH := 14.0
+const HORIZON_RIM_HEIGHT := 0.70
+
+## Village terrace — the ground under the village is graded toward the plaza
+## level over a wide radius, so the square is a shelf in the landscape rather
+## than a flat disc cut into a slope. Weight is full at the plaza rim and fades
+## out long before the fields, so it never flattens the countryside.
+const TERRACE_INNER := 12.0
+const TERRACE_OUTER := 34.0
+const TERRACE_STRENGTH := 0.42
+
+
+## Road shoulder — the ground either side of every road is graded, like the cut
+## and fill of a real track, so a path through a hillside has a walkable verge
+## instead of a bank. Full grading inside this width, easing out over the next
+## [constant ROAD_FALLOFF] metres, always toward the natural landform at the
+## nearest point of the road itself.
+const ROAD_SHOULDER := 6.0
+const ROAD_SHOULDER_STRENGTH := 0.82
+
+## Pond basin — the ground around the pond is eased toward the water level over
+## a wide radius, so the hollow has soft banks instead of a bowl punched into
+## whatever hill happened to be there.
+const POND_BASIN_RADIUS := 18.0
+const POND_BASIN_STRENGTH := 0.35
+
+## Talus relaxation. After every feature has shaped the height field, a short
+## pass enforces a maximum height difference between neighbouring cells
+## (~38 degrees) outside built ground. It keeps the sharper rocky silhouettes
+## from ever producing a cliff the player capsule cannot climb, and it removes
+## accidental spikes without flattening roads, plaza or building terraces.
+const MAX_CELL_STEP := 0.72
+const RELAX_PASSES := 12
 
 ## Legacy plaza used when no [VillageLayout] is supplied (unit tests, and any
 ## caller that only wants raw hills). With a layout the plaza comes from it.
@@ -77,6 +140,17 @@ var layout: VillageLayout = null
 var _heights := PackedFloat32Array()
 var _plaza_level := 0.0
 var _pond_level := 0.0
+## Building pads — gentle terraces under levelling kinds to seat foundations
+## without floating or burying. Filled in `_init` when a layout is present.
+var _building_pads: Array[Dictionary] = []
+## Bounds of every pad plus its falloff. Points outside it cannot belong to any
+## pad, so the per-point blend is skipped with four comparisons instead of a
+## scan over every house: most of the map is open country.
+var _pad_bounds := Rect2()
+## 1 where the talus relaxation must not move the grid: plaza, carriageways and
+## levelled plots. Kept after the pass so [method max_neighbour_step] can tell a
+## road cut from a random spike.
+var _protected := PackedByteArray()
 
 
 func _init(
@@ -94,12 +168,15 @@ func _init(
 	# sits on, so it does not become a bowl in the middle of the map.
 	_plaza_level = 0.0
 	if layout != null:
-		_plaza_level = _value_noise(0.0, 0.0, LOW_FREQUENCY, 1.0) * height_scale
-		_pond_level = (
-			_value_noise(layout.pond_center.x, layout.pond_center.y, LOW_FREQUENCY, 1.0)
-			* height_scale
-		)
+		_plaza_level = _sample_low_height(0.0, 0.0)
+		_pond_level = _sample_low_height(layout.pond_center.x, layout.pond_center.y)
+		_building_pads = _collect_building_pads()
+		_pad_bounds = _compute_pad_bounds()
 	_heights = _compute_heights()
+	# Shape guard: enforce a walkable maximum step between cells on open ground.
+	# It runs on the same grid used by both the mesh and the heightmap, so the
+	# view and the collision stay identical.
+	_relax_steep_cells()
 
 
 ## Height of the pond surface. The basin is carved below `_pond_level`, so the
@@ -159,6 +236,39 @@ func height_at(world_x: float, world_z: float) -> float:
 		return bottom_left + u * (bottom_right - bottom_left) + v * (top_left - bottom_left)
 	# Triangle (top_left, top_right, bottom_right).
 	return top_right + (1.0 - u) * (top_left - top_right) + (1.0 - v) * (bottom_right - top_right)
+
+
+## Magnitude of the surface gradient at a world position, sampled on the same
+## piecewise-planar surface the physics uses. 0.0 is level ground, 1.0 is 45°.
+## Used to place rock outcrops on real slopes and to assert walkability.
+func slope_at(world_x: float, world_z: float) -> float:
+	var step := 0.75
+	var dx := (height_at(world_x + step, world_z) - height_at(world_x - step, world_z)) / (2.0 * step)
+	var dz := (height_at(world_x, world_z + step) - height_at(world_x, world_z - step)) / (2.0 * step)
+	return sqrt(dx * dx + dz * dz)
+
+
+## Lowest and highest point of the shaped grid, in metres. `x` is the minimum,
+## `y` the maximum: the readable vertical span of the landscape.
+func height_range() -> Vector2:
+	return TerrainRelaxer.height_range(_heights)
+
+
+## Largest height difference between a cell and any of its four neighbours.
+## With [param open_ground_only] the query ignores any pair that touches built
+## ground (plaza, roads, levelled plots), where a deliberate bank is expected;
+## what remains is the honest measure of "is there a spike or a cliff left".
+func max_neighbour_step(open_ground_only: bool = false) -> float:
+	return TerrainRelaxer.max_neighbour_step(
+		_heights, size_cells, _protected, open_ground_only
+	)
+
+
+## Mean height of the outermost ring minus the mean height of the inner field.
+## Positive on every large map: the horizon rim lifts the border just enough to
+## hide the square edge. Near zero on small maps, which have no rim by design.
+func horizon_rise() -> float:
+	return TerrainRelaxer.horizon_rise(_heights, size_cells)
 
 
 func get_vertex_count() -> int:
@@ -246,51 +356,321 @@ func _compute_heights() -> PackedFloat32Array:
 	return data
 
 
+## Jacobi-style talus relaxation. Each pass clamps a cell so that it never
+## differs from any of its four neighbours by more than [constant MAX_CELL_STEP],
+## but only on open ground: a plaza, a road or a levelled plot is never pulled
+## out of level. The mesh and the physics shape both read this grid, so the pass
+## changes the silhouette, never the contract between what you see and what you
+## walk on.
+func _relax_steep_cells() -> void:
+	if _heights.is_empty():
+		return
+	_protected = TerrainRelaxer.build_protected_mask(size_cells, layout, _building_pads)
+	TerrainRelaxer.relax_heights(_heights, size_cells, MAX_CELL_STEP, RELAX_PASSES, _protected)
+
+
 func _base_height(x: float, z: float) -> float:
-	var low := _value_noise(x, z, LOW_FREQUENCY, 1.0)
-	# Structural correction 11: broad ridge/valley — gentle but readable
-	# at aerial. Two overlapping low frequencies with phase offset create
-	# an undulating field pattern, not one perfect wave.
-	low += _value_noise(x + 17.3, z - 11.7, 0.011, 0.38)
-	low += _value_noise(x - 43.2, z + 28.4, 0.0065, 0.22)
+	# --- layout fields, sampled once per grid point ---------------------------
+	# `flatten_weight` already walks every placement, so calling it twice per
+	# point would double the start-up cost. Every derived field is computed from
+	# these four numbers instead of re-querying the layout.
+	var flat := flatten_weight(x, z)
+	var road_distance := INF
+	var pond := 0.0
+	var plaza := plaza_weight(x, z)
+	if layout != null:
+		road_distance = layout.road_distance(x, z)
+		pond = layout.pond_weight(x, z)
+	# 1.0 exactly on the carriageway, 0.0 past the verge: same curve as
+	# `VillageLayout.road_weight`, derived from the distance already measured.
+	var road_w := 0.0
+	if road_distance < INF:
+		road_w = 1.0 - clampf(
+			(road_distance - VillageLayout.ROAD_WIDTH * 0.5) / VillageLayout.ROAD_FALLOFF,
+			0.0,
+			1.0
+		)
+
+	# --- broad armature -------------------------------------------------------
+	# `low` carries the readable landform; `_landform_noise` is shared with the
+	# plaza and building pads so every levelled platform samples exactly the
+	# same field the surrounding ground is built from.
+	var low := _landform_noise(x, z)
+
+	# Irregular flatten: the road centre stays dead level (walkable), but the
+	# margin where the detail octaves fade wobbles with noise, so the *shape*
+	# of the verge — not only its colour — is no longer a vector offset.
+	var flat_irregular := _irregular_flatten_weight(x, z, flat, road_distance)
+	# Graded verge: 1 on the carriageway, 0 at the foot of the shoulder. Used
+	# both to mask the small-scale features and to shape the cut-and-fill bank.
+	var shoulder := 0.0
+	if road_distance < INF:
+		shoulder = 1.0 - _smoothstep(
+			clampf(
+				(road_distance - VillageLayout.ROAD_WIDTH * 0.5) / ROAD_SHOULDER,
+				0.0,
+				1.0
+			)
+		)
+	# The painted verge is tighter than the ground features that live beside
+	# it: a 1 m knoll one cell from the carriageway would be a 2 m bank.
+	var flat_wide := maxf(flat_irregular, maxf(shoulder, plaza))
+	var flat_for_detail := _smoothstep(flat_irregular)
 	var detail := _value_noise(x, z, MID_FREQUENCY, 0.45)
 	detail += _value_noise(x, z, HIGH_FREQUENCY, 0.18)
-	var flat := flatten_weight(x, z)
-	var height := (low + detail * (1.0 - flat)) * height_scale
-	# Field warp — open country only, walkable slope preserved.
-	# Increased from 0.13 to 0.22 for visible rolling at medium distance,
-	# still <0.75 m peak on 5.0 scale.
-	if layout != null and flat < 0.95:
-		var field_weight := 1.0 - flat
+	var height := (low + detail * (1.0 - flat_for_detail)) * height_scale
+
+	# Field-level warp, roadbed crown, swale, micro-relief and the rocky
+	# spine — all masked by `flat_irregular`, so roads, plaza and building
+	# terraces stay walkable.
+	if layout != null and flat_irregular < 0.95:
+		var field_weight := 1.0 - flat_irregular
 		var field_warp := _value_noise(x, z, 0.038, 1.0) * 0.42
 		field_warp += _value_noise(x + 91.4, z - 47.2, 0.074, 1.0) * 0.24
 		field_warp += _value_noise(x - 27.0, z + 64.0, 0.016, 1.0) * 0.20
 		height += field_warp * field_weight * height_scale * 0.22
-		# Subtle roadside swale: very shallow ditch where road meets field,
-		# makes the carriageway read as built, not painted. Masked strictly
-		# to road edge (weight 0.25-0.65) so the centre stays flat for walking.
-		var rw := layout.road_weight(x, z)
-		if rw > 0.28 and rw < 0.68:
-			var swale := sin((rw - 0.28) / 0.40 * PI) * field_weight
+
+		# Soft micro-relief: small hills and shallow hollows that break the
+		# “stretched skin” look of the open fields at eye level.
+		height += _micro_relief_height(x, z, flat_wide)
+		# Rocky spine: narrow, low ridges on higher ground, more silhouette
+		# than volume, always walkable where the player can reach them.
+		height += _rock_ridge_height(x, z, flat_wide, height)
+
+	# Road shoulder: grade the ground toward the natural landform *at the
+	# nearest road point*, so the road sits on a cut-and-fill shelf instead of
+	# a trench. The carriageway is untouched (weight 1 there already equals
+	# the road ground), and the verge rises over ~6 m: a walkable bank.
+	if layout != null and shoulder > 0.0:
+		var nearest := TerrainRelaxer.nearest_road_point(layout.roads, Vector2(x, z))
+		var road_ground := _landform_noise(nearest.x, nearest.y) * height_scale
+		height = lerpf(height, road_ground, shoulder * ROAD_SHOULDER_STRENGTH)
+
+	if layout != null and flat_irregular < 0.95:
+		var field_weight := 1.0 - flat_irregular
+		# Roadbed crown: a 4–7 cm lift at the centre line, fading to zero at
+		# the verge. It reads as a built-up track, slope well under 2 %.
+		if road_w > 0.20:
+			var crown := 1.0 - clampf(
+				road_distance / (VillageLayout.ROAD_WIDTH * 0.5), 0.0, 1.0
+			)
+			crown = _smoothstep(crown) * field_weight
+			height += crown * height_scale * 0.014
+
+		# Roadside swale: a shallow ditch only at the verge (0.28–0.68), so the
+		# carriageway itself stays flat for walking.
+		if road_w > 0.28 and road_w < 0.68:
+			var swale := sin((road_w - 0.28) / 0.40 * PI) * field_weight
 			height -= swale * height_scale * 0.032
-	var plaza := plaza_weight(x, z)
+
+	# Horizon rim: a gentle, noisy rise toward the square border, breaking the
+	# perfectly straight mesh edge seen at eye level. The three roads out of
+	# town keep a lower saddle so they stay open.
+	height += _horizon_height(x, z, flat_irregular, road_w)
+
+	# Village terrace: a wide, gentle grading toward the plaza level so the
+	# square and its ring of houses sit on a shelf instead of a cut platform.
+	# It fades out at TERRACE_OUTER, well before the fields, and only exists
+	# when there is a village to sit on it.
+	if layout != null:
+		height = lerpf(height, _plaza_level, _terrace_weight(x, z) * TERRACE_STRENGTH)
+
+	# Pond basin: ease the surrounding ground toward the water level so the
+	# shore is a bank and not the wall of a bowl punched into a slope.
+	if layout != null:
+		height = lerpf(
+			height, _pond_level, _pond_basin_weight(x, z) * POND_BASIN_STRENGTH
+		)
+
 	if plaza > 0.0:
 		height = lerpf(height, _plaza_level, plaza)
-	if layout != null:
-		var pond := layout.pond_weight(x, z)
-		if pond > 0.0:
-			height = lerpf(height, _pond_level, clampf(pond * 2.0, 0.0, 1.0))
-			height += layout.terrain_offset(x, z) * height_scale
-		# Shore berm: readable lip before the basin drops — now 0.42 m peak
-		# (was 0.27) so the hollow reads as hollow at eye level.
-		var pond_w2 := layout.pond_weight(x, z)
-		if pond_w2 > 0.05 and pond_w2 < 0.88:
-			var berm := sin(pond_w2 * PI) * (1.0 - flat * 0.35)
+	if layout != null and pond > 0.0:
+		height = lerpf(height, _pond_level, clampf(pond * 2.0, 0.0, 1.0))
+		height += layout.terrain_offset(x, z) * height_scale
+		# Shore berm: readable lip before the basin drops — 0.42 m peak, with
+		# a secondary undulation on the crest.
+		if pond > 0.05 and pond < 0.88:
+			var berm := sin(pond * PI) * (1.0 - flat_irregular * 0.35)
 			height += berm * height_scale * 0.082
-			# Secondary undulation on berm crest for naturalism
 			var berm_n := _value_noise(x, z, 0.086, 1.0) * 0.12
-			height += berm_n * height_scale * 0.02 * (1.0 - flat)
+			height += berm_n * height_scale * 0.02 * (1.0 - flat_irregular)
+	# Building terraces last, so a foundation always wins over the plaza edge,
+	# the pond bank and the shoulder grading: every levelling placement seats on
+	# a levelled pad whose height comes from the *platform* field. The pad is
+	# exactly flat inside its footprint and the ground eases out over
+	# PLOT_FALLOFF; the low mound on the falloff ring turns the cut into a
+	# natural footing instead of a plinth floating over a slope.
+	var pad := _building_pad_blend(x, z)
+	var pad_w: float = pad["weight"]
+	if pad_w > 0.01:
+		# The carriageway is protected from a pad: raising a roadbed with a
+		# neighbouring foundation would make the path bumpy. The cut fades out
+		# over one metre, so a verge plot still meets the road smoothly, while
+		# every structure footprint (which the layout keeps clear of the
+		# carriageway) stays fully level.
+		var road_cut := 1.0 - _smoothstep(
+			clampf((road_distance - VillageLayout.ROAD_WIDTH * 0.5) / 1.0, 0.0, 1.0)
+		)
+		pad_w *= 1.0 - road_cut
+		if pad_w > 0.01:
+			height = lerpf(height, float(pad["height"]), pad_w)
+			if pad_w > 0.18 and pad_w < 0.82 and road_w < 0.22:
+				var mound := sin(pad_w * PI) * (1.0 - flat_irregular * 0.45)
+				height += mound * height_scale * 0.018
+
 	return height
+
+
+# --- Visual Polish 14 helpers: landform, horizon, terraces, micro-relief --------
+
+
+## Normalised (pre height-scale) landform: the original three low octaves plus
+## the two continent-scale ones added by Visual Polish 14. Shared by the raw
+## height field and by every platform that has to sit on it (plaza, pond rim,
+## building pads).
+func _landform_noise(x: float, z: float) -> float:
+	var low := _value_noise(x, z, LOW_FREQUENCY, 1.0)
+	low += _value_noise(x + 17.3, z - 11.7, 0.011, 0.38)
+	low += _value_noise(x - 43.2, z + 28.4, 0.0065, 0.22)
+	low += _value_noise(x + 124.0, z - 89.0, CONTINENT_FREQ_A, CONTINENT_AMP_A)
+	low += _value_noise(x - 67.0, z + 143.0, CONTINENT_FREQ_B, CONTINENT_AMP_B)
+	return low
+
+
+func _sample_low_height(x: float, z: float) -> float:
+	return _landform_noise(x, z) * height_scale
+
+
+## 0.0 outside the village shelf, 1.0 at the plaza rim. The smoothstep keeps the
+## shelf edge soft: no ring-shaped step in the field.
+func _terrace_weight(x: float, z: float) -> float:
+	var radius := sqrt(x * x + z * z)
+	return 1.0 - _smoothstep(
+		clampf((radius - TERRACE_INNER) / (TERRACE_OUTER - TERRACE_INNER), 0.0, 1.0)
+	)
+
+
+## Height at which a building platform should sit: the landform, graded toward
+## the plaza level by the village terrace. Pads sample this, so a house is never
+## levelled against ground that the terrace has already moved away from it.
+func _platform_height(x: float, z: float) -> float:
+	var landform := _sample_low_height(x, z)
+	return lerpf(landform, _plaza_level, _terrace_weight(x, z) * TERRACE_STRENGTH)
+
+
+## 0.0 outside the pond basin, 1.0 at the inner shore. Wide and soft by design:
+## the basin is a valley, the actual water basin is carved separately below.
+func _pond_basin_weight(x: float, z: float) -> float:
+	if layout == null:
+		return 0.0
+	var inner := layout.pond_radius * 0.6
+	var distance := Vector2(x, z).distance_to(layout.pond_center)
+	if distance <= inner:
+		return 1.0
+	if distance >= POND_BASIN_RADIUS:
+		return 0.0
+	return 1.0 - _smoothstep(
+		clampf((distance - inner) / (POND_BASIN_RADIUS - inner), 0.0, 1.0)
+	)
+
+
+func _collect_building_pads() -> Array[Dictionary]:
+	var pads: Array[Dictionary] = []
+	if layout == null:
+		return pads
+	for placement in layout.placements:
+		if not VillageLayout.GROUND_LEVELLING_KINDS.has(placement.kind):
+			continue
+		var pos: Vector2 = placement.position
+		var radius: float = placement.footprint_radius * placement.scale
+		var h := _platform_height(pos.x, pos.y)
+		pads.append({"pos": pos, "radius": radius, "height": h})
+	return pads
+
+
+func _irregular_flatten_weight(
+	x: float, z: float, base: float, road_distance: float
+) -> float:
+	if layout == null:
+		return base
+	if road_distance < VillageLayout.ROAD_WIDTH * 0.5 + VillageLayout.ROAD_FALLOFF + 3.0:
+		var jitter := _value_noise(x, z, 0.052, 1.0) * 0.65
+		jitter += _value_noise(x + 23.0, z - 17.0, 0.11, 1.0) * 0.32
+		jitter += _value_noise(x - 41.0, z + 12.0, 0.037, 1.0) * 0.18
+		var warped_dist := maxf(0.0, road_distance + jitter)
+		var warped_road_w := 1.0 - clampf(
+			(warped_dist - VillageLayout.ROAD_WIDTH * 0.5) / VillageLayout.ROAD_FALLOFF,
+			0.0,
+			1.0
+		)
+		# max() only ever flattens extra ground next to the road: it can never
+		# raise a bump inside the carriageway.
+		base = maxf(base, warped_road_w)
+	return clampf(base, 0.0, 1.0)
+
+
+func _micro_relief_height(x: float, z: float, flat: float) -> float:
+	if flat > 0.92:
+		return 0.0
+	var weight := 1.0 - flat
+	var n1 := _value_noise(x, z, 0.065, 1.0) * 0.18
+	var n2 := _value_noise(x + 71.0, z + 31.0, 0.12, 1.0) * 0.09
+	var n3 := _value_noise(x - 53.0, z - 19.0, 0.042, 1.0) * 0.11
+	return (n1 + n2 + n3) * weight * height_scale * 0.30
+
+
+func _rock_ridge_height(x: float, z: float, flat: float, base_height: float) -> float:
+	if flat > 0.45 or base_height < height_scale * 0.12:
+		return 0.0
+	# Stretched sample space: the outcrop field reads as broken spines along a
+	# direction, not as a field of round bumps.
+	var ridge_n := _value_noise(x * 1.55 + z * 0.45, z * 1.15 - x * 0.30, 0.095, 1.0)
+	if ridge_n < 0.46:
+		return 0.0
+	var t := _smoothstep((ridge_n - 0.46) / 0.54)
+	var break_n := _value_noise(x + 19.0, z - 27.0, 0.18, 1.0) * 0.22 + 1.0
+	return t * break_n * (1.0 - flat * 0.6) * height_scale * 0.09
+
+
+func _horizon_height(x: float, z: float, flat: float, road_w: float) -> float:
+	var half := get_half_extent()
+	if half < 35.0:
+		return 0.0
+	var edge_distance := half - maxf(absf(x), absf(z))
+	if edge_distance > HORIZON_RIM_WIDTH:
+		return 0.0
+	var t := _smoothstep(1.0 - edge_distance / HORIZON_RIM_WIDTH)
+	var n := _value_noise(x, z, 0.028, 1.0) * 0.35 + 0.65
+	var n2 := _value_noise(x * 0.6, z * 0.6, 0.012, 1.0) * 0.30
+	var shape := t * (0.72 + n * 0.28 + n2)
+	if layout != null:
+		if road_w > 0.10:
+			shape *= lerpf(1.0, 0.28, clampf((road_w - 0.10) / 0.50, 0.0, 1.0))
+		shape *= 1.0 - flat * 0.55
+	return shape * height_scale * HORIZON_RIM_HEIGHT
+
+
+func _building_pad_blend(x: float, z: float) -> Dictionary:
+	if _building_pads.is_empty() or not _pad_bounds.has_point(Vector2(x, z)):
+		return {"weight": 0.0, "height": 0.0}
+	return TerrainRelaxer.pad_blend(x, z, _building_pads)
+
+
+## Tight rectangle covering every pad grown by its falloff and by the widest
+## footprint: the smallest box that can ever contain a pad influence.
+func _compute_pad_bounds() -> Rect2:
+	if _building_pads.is_empty():
+		return Rect2()
+	var first: Vector2 = _building_pads[0]["pos"]
+	var bounds := Rect2(first, Vector2.ZERO)
+	var widest := 0.0
+	for pad in _building_pads:
+		var point: Vector2 = pad["pos"]
+		var radius: float = pad["radius"]
+		widest = maxf(widest, radius)
+		bounds = bounds.expand(point)
+	var grow := widest + VillageLayout.PLOT_FALLOFF
+	return Rect2(bounds.position - Vector2.ONE * grow, bounds.size + Vector2.ONE * grow * 2.0)
 
 
 ## 1.0 where the ground must be walkable and level (plaza, roads, plots), 0.0 in
@@ -346,9 +726,26 @@ func _slope_at(ix: int, iz: int) -> float:
 	return sqrt(dx * dx + dz * dz)
 
 
+## Height minus the mean of the four grid neighbours, in metres. Positive on a
+## crest (the ground falls away), negative in a hollow. It is the cheapest
+## honest description of the landform's *shape*: the terrain generator uses it
+## to paint sun-bleached grass on the ridges and darker, damp ground in the
+## little valleys, so the new relief reads even under flat lighting.
+func _curvature_at(ix: int, iz: int) -> float:
+	var centre := grid_height(ix, iz)
+	var around := (
+		grid_height(ix - 1, iz)
+		+ grid_height(ix + 1, iz)
+		+ grid_height(ix, iz - 1)
+		+ grid_height(ix, iz + 1)
+	) * 0.25
+	return centre - around
+
+
 func _vertex_color(ix: int, iz: int) -> Color:
 	var height := grid_height(ix, iz)
 	var slope := _slope_at(ix, iz)
+	var curvature := _curvature_at(ix, iz)
 	var height_t := clampf((height + height_scale) / (2.0 * maxf(height_scale, 0.001)), 0.0, 1.0)
 	var x := cell_to_world_x(ix)
 	var z := cell_to_world_z(iz)
@@ -373,6 +770,14 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	var heath_noise := clampf(_value_noise(x + 53.1, z - 71.4, 0.009, 1.0) * 0.5 + 0.5, 0.0, 1.0)
 	var heath_t := clampf((heath_noise - 0.58) / 0.32, 0.0, 1.0) * 0.16
 	color = color.lerp(COLOR_HEATH, heath_t * (1.0 - clampf((slope - 0.25) / 0.4, 0.0, 1.0)))
+	# Landform readability: crests catch the sun and drain, hollows stay damp.
+	# Purely a vertex tint, but it is what makes the new micro-relief legible
+	# from a standing height where a 40 cm hollow casts almost no shadow.
+	var crest_t := clampf(curvature * 2.4, 0.0, 1.0)
+	var hollow_t := clampf(-curvature * 2.4, 0.0, 1.0)
+	crest_t *= 1.0 - clampf((slope - 0.30) / 0.35, 0.0, 1.0) * 0.6
+	color = color.lerp(COLOR_GRASS_DRY, crest_t * 0.20)
+	color = color.lerp(COLOR_MOSS, hollow_t * 0.16)
 
 	# -----------------------------------------------------------------------
 	# 2) Rock & scree — slope-driven, with altitude bias and noise wobble.
@@ -383,6 +788,10 @@ func _vertex_color(ix: int, iz: int) -> Color:
 	# Higher ground is naturally a touch more exposed.
 	var altitude_rock := clampf((height / maxf(height_scale, 0.001) - 0.25) / 0.75, 0.0, 1.0) * 0.18
 	rock_t = clampf(rock_t + altitude_rock, 0.0, 1.0)
+	# Rock outcrops follow the crest of the new rocky ridges: broken stone on
+	# a raised spine, never a continuous grey ribbon along the whole slope.
+	var outcrop := clampf(curvature * 3.0, 0.0, 1.0) * clampf((slope_adj - 0.16) / 0.22, 0.0, 1.0)
+	rock_t = maxf(rock_t, outcrop * 0.62)
 	# Wet, pond-adjacent rock reads as moss-covered rather than pale stone.
 	var pond_hint := 0.0
 	if layout != null:
@@ -410,8 +819,13 @@ func _vertex_color(ix: int, iz: int) -> Color:
 		# Legacy disc: warm sand apron with a noise-broken edge.
 		var distance := sqrt(x * x + z * z)
 		var edge_n := _value_noise(x, z, 0.068, 1.0) * 2.2
-		var sand_t := clampf(1.0 - (distance + edge_n - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
-		var sand_col := COLOR_SAND.lerp(COLOR_SAND_LIGHT, clampf(_value_noise(x, z, 0.12, 1.0) * 0.5 + 0.5, 0.0, 1.0) * 0.18)
+		var sand_t := (
+			clampf(1.0 - (distance + edge_n - PLAZA_RADIUS) / 8.0, 0.0, 1.0) * (1.0 - rock_t)
+		)
+		var sand_col := COLOR_SAND.lerp(
+			COLOR_SAND_LIGHT,
+			clampf(_value_noise(x, z, 0.12, 1.0) * 0.5 + 0.5, 0.0, 1.0) * 0.18
+		)
 		color = color.lerp(sand_col, sand_t)
 	else:
 		# -------------------------------------------------------------------
@@ -427,7 +841,10 @@ func _vertex_color(ix: int, iz: int) -> Color:
 		edge_jitter += _value_noise(x + 41.2, z - 27.6, 0.156, 1.0) * 0.10
 		# Small secondary wobble at a different phase for the road verge.
 		var road_extra_jitter := _value_noise(x - 18.4, z + 33.9, 0.19, 1.0) * 0.08
-		var road_w := clampf(raw_road + edge_jitter * 0.65 + road_extra_jitter - 0.04, 0.0, 1.0) * (1.0 - rock_t * 0.45)
+		var road_w := (
+			clampf(raw_road + edge_jitter * 0.65 + road_extra_jitter - 0.04, 0.0, 1.0)
+			* (1.0 - rock_t * 0.45)
+		)
 		var plaza_w := clampf(raw_plaza + edge_jitter * 0.55 - 0.03, 0.0, 1.0) * (1.0 - rock_t * 0.35)
 		var pond_w := raw_pond
 		road_t = road_w

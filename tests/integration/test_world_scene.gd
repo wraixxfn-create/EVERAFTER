@@ -123,6 +123,90 @@ static func check_terrain_collision(
 	)
 
 
+
+## Visual Polish 14: the landscape must be *shaped* and still walkable.
+## Checks that cannot be made on the generator alone because they depend on the
+## real village plan: the earth under the houses is levelled, roads are not
+## cliffs, and the open country the player can reach never exceeds the slope the
+## capsule can climb (`PlayerExplorer.floor_max_angle` is 50 degrees).
+static func check_terrain_shape(harness: TestHarness, world: Node3D) -> void:
+	harness.suite("TerrainShape")
+	var terrain: TerrainGenerator = world.get_terrain()
+	var layout: VillageLayout = world.get_layout()
+	if terrain == null or layout == null:
+		harness.check(false, "world exposes terrain and layout")
+		return
+
+	# 1. Readable relief: a shaped landscape is not a flat sheet.
+	var span := terrain.height_range()
+	harness.check(
+		span.y - span.x > 4.0,
+		"the landscape has readable relief (%.1f m of vertical span)" % (span.y - span.x)
+	)
+	# 2. No residual spike or cliff on open ground: the talus pass caps every
+	#    neighbouring pair away from roads, plaza and levelled plots.
+	var worst := terrain.max_neighbour_step(true)
+	harness.check(
+		worst <= TerrainGenerator.MAX_CELL_STEP + 0.1,
+		"open ground never steps more than the walkable cap (worst %.3f m)" % worst
+	)
+	# 3. The horizon rim exists: the border stands above the inner field, so the
+	#    square edge of the height field is hidden at eye level.
+	harness.check(
+		terrain.horizon_rise() > 1.0,
+		"the border rises above the inner field (%.2f m)" % terrain.horizon_rise()
+	)
+	# 4. Every building sits on ground that is level within a few centimetres.
+	var flat_plots := 0
+	var plots := 0
+	for placement in layout.placements:
+		# Structures only: a cart or a log pile beside a road is allowed to
+		# follow the verge, a house is not allowed to be tilted.
+		if not BuildingFactory.is_structure(placement.kind):
+			continue
+		plots += 1
+		var centre := Vector2(placement.position.x, placement.position.y)
+		var reference := terrain.height_at(centre.x, centre.y)
+		var worst_plot := 0.0
+		for index in 8:
+			var angle := TAU * float(index) / 8.0
+			var point := centre + Vector2(cos(angle), sin(angle)) * 0.8
+			worst_plot = maxf(worst_plot, absf(terrain.height_at(point.x, point.y) - reference))
+		if worst_plot < 0.12:
+			flat_plots += 1
+	harness.check(plots > 0, "the village has levelling placements to test")
+	harness.check_equals(
+		flat_plots, plots, "every building sits on ground level within 12 cm"
+	)
+	# 5. Walkability sample across the reachable map. Built ground is skipped:
+	#    a road cut is a deliberate bank, not a bug.
+	var steep := 0
+	var samples := 0
+	var worst_slope := 0.0
+	var step := 7.0
+	var position := -terrain.get_half_extent() + 6.0
+	while position < terrain.get_half_extent() - 6.0:
+		var other := -terrain.get_half_extent() + 6.0
+		while other < terrain.get_half_extent() - 6.0:
+			# Beyond the graded shoulder of any road and away from every plot:
+			# this is the ground the player reaches on foot with no built edge
+			# to justify a bank.
+			if layout.flatten_weight(position, other) < 0.2 \
+					and layout.road_distance(position, other) > 8.0:
+				var grade := terrain.slope_at(position, other)
+				samples += 1
+				worst_slope = maxf(worst_slope, grade)
+				if grade > 1.0:
+					steep += 1
+			other += step
+		position += step
+	harness.check(samples > 100, "sampled the walkable ground (%d samples)" % samples)
+	harness.check_equals(
+		steep, 0,
+		"open country stays below the 50-degree climbing limit (worst grade %.2f)"
+		% worst_slope
+	)
+
 ## The player rests on the ground and stays there.
 static func check_player_settles(harness: TestHarness, world: Node3D) -> void:
 	harness.suite("PlayerOnGround")

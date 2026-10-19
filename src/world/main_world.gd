@@ -218,7 +218,12 @@ func _add_save_panel() -> void:
 
 
 func _build_summary() -> String:
+	# Relief, worst open-ground step and horizon rise are measured on the same
+	# grid the mesh and the heightmap use: if a future change flattens the
+	# landscape or smuggles in a cliff, the boot log says so.
+	var span := _terrain.height_range()
 	var message := "MainWorld ready — terrain %dx%d cells (%.0f x %.0f u, %d tris), "
+	message += "relief %.1f m (worst open step %.2f m, horizon +%.2f m), "
 	message += "%d named areas, %d inhabitants, spawn %s"
 	return message % [
 		_terrain.size_cells,
@@ -226,6 +231,9 @@ func _build_summary() -> String:
 		_terrain.get_extent(),
 		_terrain.get_extent(),
 		_terrain.get_triangle_count(),
+		span.y - span.x,
+		_terrain.max_neighbour_step(true),
+		_terrain.horizon_rise(),
 		_areas.get_area_count(),
 		_npc_system.get_record_count() if _npc_system != null else 0,
 		_player.global_position,

@@ -180,7 +180,13 @@ Il mondo è costruito **interamente a codice**, senza asset binari, partendo da 
 * **`TerrainGenerator`** produce un height field deterministico (value noise a più ottave) e
   consegna **due cose coerenti**: la mesh visibile e la `HeightMapShape3D` di collisione. Le
   strade e le aree edificate appiattiscono solo le ottave di dettaglio (`flatten_weight`), così
-  un sentiero è percorribile senza scavare una trincea nelle colline.
+  un sentiero è percorribile senza scavare una trincea nelle colline. Dalla Visual Polish 14 il
+  generatore scolpisce anche il paesaggio attorno al villaggio: dorsale a scala ampia,
+  micro-rilievo dei campi, creste rocciose, terrazzamento del sedime del villaggio, spalle
+  stradali digradanti e bordo dell'orizzonte. `TerrainRelaxer` è il guardiano geometrico che
+  limita il salto massimo tra celle sul terreno aperto e fonde i piazzali degli edifici, così la
+  silhouette può essere più varia senza mai produrre un dislivello che la capsula non possa
+  salire.
 * **`MeshBaker`** fonde primitive in **una mesh per materiale**. È il motivo per cui un villaggio
   di centinaia di solidi costa 145 draw call invece di migliaia.
 * **`VillageMaterials`** è una palette unica di materiali condivisi. La variazione cromatica tra
