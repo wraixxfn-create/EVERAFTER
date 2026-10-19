@@ -37,6 +37,7 @@ var _boot_summary: Dictionary = {}
 @onready var _village_root: Node3D = $Village
 @onready var _npc_presenter: NpcPresenter = $NPCs
 @onready var _player: PlayerExplorer = $Player
+@onready var _world_map: WorldMap = $WorldMap
 
 
 func _ready() -> void:
@@ -52,9 +53,6 @@ func _ready() -> void:
 	_build_terrain()
 	_build_village()
 	_configure_player(config)
-	# Use the saved population size when a save exists, so houses and routes
-	# match the records we will restore. Without this a 16-NPC save loaded
-	# into a 10-NPC world would lose 6 inhabitants.
 	var population := Game.get_saved_population_size()
 	_build_inhabitants(config, population)
 	GameLog.info(TAG, _build_summary())
@@ -64,10 +62,25 @@ func _ready() -> void:
 		if _boot_summary.has("catchup"):
 			var c: Dictionary = _boot_summary["catchup"]
 			GameLog.info(TAG, "catchup: %s" % c.get("message", ""))
-	# Sync the presenter to whatever state (fresh or loaded) the records have.
 	_npc_presenter.force_refresh()
-	# Attach the save/load/chronicle panel now that all systems exist.
+	_world_map.player = _player
+	_world_map.npc_system = _npc_system
+	_world_map.world_extent = _terrain.get_half_extent()
 	_add_save_panel()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
+		_toggle_world_map()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel") and _world_map.visible:
+		_toggle_world_map()
+		get_viewport().set_input_as_handled()
+
+
+func _toggle_world_map() -> void:
+	_world_map.visible = not _world_map.visible
+	_player.set_mouse_captured(not _world_map.visible)
 
 
 func _process(_delta: float) -> void:

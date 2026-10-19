@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://src/world/npcs/npc_presenter.gd" id="6_npcpresenter"]
 [ext_resource type="PackedScene" path="res://src/ui/scenes/npc_panel.tscn" id="7_npcpanel"]
 [ext_resource type="PackedScene" path="res://src/ui/scenes/economy_panel.tscn" id="8_ecopanel"]
+[ext_resource type="Script" path="res://src/ui/world_map.gd" id="9_worldmap"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.15, 0.34, 0.66, 1)
@@ -125,3 +126,6 @@ far = 420.0
 
 [node name="DiagnosticsHud" parent="." instance=ExtResource("5_diaghud")]
 visible = false
+
+[node name="WorldMap" type="Control" parent="."]
+script = ExtResource("9_worldmap")
