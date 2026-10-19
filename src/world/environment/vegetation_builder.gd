@@ -129,6 +129,13 @@ func colliders_for(placement: VillageLayout.Placement) -> Array:
 	return shapes
 
 
+func build_grass(
+	layout: VillageLayout, terrain: TerrainGenerator, materials: VillageMaterials,
+	count: int = MeadowBuilder.GRASS_COUNT
+) -> MultiMeshInstance3D:
+	return _meadow.build_grass(layout, terrain, materials, count)
+
+
 # --- species -----------------------------------------------------------------
 #
 # Every builder starts from a profile dictionary. Three numbers decide a
