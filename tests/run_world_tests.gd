@@ -21,6 +21,12 @@ var _tests: GDScript = null
 
 
 func _initialize() -> void:
+	# MainWorld references autoload singletons; let SceneTree register them
+	# before compiling/instantiating the scene from this script entry point.
+	call_deferred("_boot")
+
+
+func _boot() -> void:
 	print("==========================================================")
 	print("EVERAFTER world integration suite")
 	print("Godot %s" % Engine.get_version_info().string)

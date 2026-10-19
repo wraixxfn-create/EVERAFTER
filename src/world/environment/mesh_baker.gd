@@ -41,8 +41,11 @@ var _triangle_count := 0
 
 ## Axis aligned box of [param size], placed by [param xform].
 func add_box(
-	material_key: String, size: Vector3, xform: Transform3D = Transform3D.IDENTITY,
-	tint: Color = Color.WHITE, face_variation: float = 0.0
+	material_key: String,
+	size: Vector3,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
+	face_variation: float = 0.0
 ) -> void:
 	var half := size * 0.5
 	for face in BOX_FACES:
@@ -51,14 +54,15 @@ func add_box(
 		var v: Vector3 = face["v"]
 		var hu := _half_extent_along(u, half)
 		var hv := _half_extent_along(v, half)
-		var a := -u * hu - v * hv
-		var b := u * hu - v * hv
-		var c := u * hu + v * hv
-		var d := -u * hu + v * hv
-		_add_quad(
-			material_key, xform, a, b, c, d, normal,
-			_face_tint(tint, normal, face_variation)
-		)
+		# Faces must lie on the box boundary, not on the three centre planes.
+		# Without this offset every beam/wall is a hollow cross of intersecting
+		# sheets, producing missing corners and false seams at every joint.
+		var center := normal * _half_extent_along(normal, half)
+		var a := center - u * hu - v * hv
+		var b := center + u * hu - v * hv
+		var c := center + u * hu + v * hv
+		var d := center - u * hu + v * hv
+		_add_quad(material_key, xform, a, b, c, d, normal, _face_tint(tint, normal, face_variation))
 	_triangle_count += 12
 
 
@@ -66,8 +70,13 @@ func add_box(
 ## matching cap is skipped so no degenerate triangles are emitted. Each cap is
 ## emitted once after the side facets, avoiding coincident duplicate surfaces.
 func add_cylinder(
-	material_key: String, top_radius: float, bottom_radius: float, height: float,
-	segments: int, xform: Transform3D = Transform3D.IDENTITY, tint: Color = Color.WHITE,
+	material_key: String,
+	top_radius: float,
+	bottom_radius: float,
+	height: float,
+	segments: int,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
 	face_variation: float = 0.0
 ) -> void:
 	var sides := maxi(segments, 3)
@@ -80,15 +89,20 @@ func add_cylinder(
 		var bottom_1 := _rim(bottom_radius, angle_1, -half_height)
 		var top_0 := _rim(top_radius, angle_0, half_height)
 		var top_1 := _rim(top_radius, angle_1, half_height)
-		var flat_normal := Vector3(
-			cos((angle_0 + angle_1) * 0.5), 0.0, sin((angle_0 + angle_1) * 0.5)
-		)
+		var flat_normal := (top_1 - bottom_0).cross(bottom_1 - bottom_0).normalized()
 		var segment_tint := _segment_tint(tint, index, sides, face_variation)
-		_add_quad(
-			material_key, xform, bottom_0, bottom_1, top_1, top_0, flat_normal,
-			segment_tint
-		)
-		_triangle_count += 2
+		if top_radius <= 0.0001:
+			_add_triangle(material_key, xform, bottom_0, bottom_1, top_0, flat_normal, segment_tint)
+			_triangle_count += 1
+		elif bottom_radius <= 0.0001:
+			flat_normal = (top_0 - bottom_0).cross(top_1 - bottom_0).normalized()
+			_add_triangle(material_key, xform, bottom_0, top_1, top_0, flat_normal, segment_tint)
+			_triangle_count += 1
+		else:
+			_add_quad(
+				material_key, xform, bottom_0, bottom_1, top_1, top_0, flat_normal, segment_tint
+			)
+			_triangle_count += 2
 	if top_radius > 0.0001:
 		_add_cap(material_key, xform, top_radius, half_height, step, sides, 1.0, tint)
 	if bottom_radius > 0.0001:
@@ -178,6 +192,59 @@ func add_prism(
 	# Two gable faces plus two slope quads (or six triangles when the gable is
 	# inset and leaves a material-matched verge at both ends).
 	_triangle_count += 10 if split_gable else 6
+
+
+## Closed extrusion of a simple XY profile along Z. Used for architectural
+## sections (chamfered slabs, gables, corbels), not surface decoration.
+## Profiles may be concave; cap triangulation and side winding are derived from
+## the polygon, so mirrored roof halves keep outward normals and closed ends.
+func add_profile(
+	material_key: String,
+	profile: PackedVector2Array,
+	depth: float,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE
+) -> void:
+	assert(profile.size() >= 3 and depth > 0.0)
+	var points := profile
+	if Geometry2D.is_polygon_clockwise(points):
+		points.reverse()
+	var indices := Geometry2D.triangulate_polygon(points)
+	assert(not indices.is_empty(), "Architectural profile must be a simple polygon")
+	for index in range(0, indices.size(), 3):
+		var a := Vector3(points[indices[index]].x, points[indices[index]].y, depth * 0.5)
+		var b := Vector3(points[indices[index + 1]].x, points[indices[index + 1]].y, depth * 0.5)
+		var c := Vector3(points[indices[index + 2]].x, points[indices[index + 2]].y, depth * 0.5)
+		if (c - a).cross(b - a).z < 0.0:
+			var swap := b
+			b = c
+			c = swap
+		_add_triangle(material_key, xform, a, b, c, Vector3.BACK, tint)
+		_add_triangle(
+			material_key,
+			xform,
+			Vector3(a.x, a.y, -a.z),
+			Vector3(c.x, c.y, -c.z),
+			Vector3(b.x, b.y, -b.z),
+			Vector3.FORWARD,
+			tint
+		)
+		_triangle_count += 2
+	for index in points.size():
+		var start := points[index]
+		var end := points[(index + 1) % points.size()]
+		var normal := Vector3(end.y - start.y, start.x - end.x, 0.0).normalized()
+		_add_quad(
+			material_key,
+			xform,
+			Vector3(start.x, start.y, -depth * 0.5),
+			Vector3(start.x, start.y, depth * 0.5),
+			Vector3(end.x, end.y, depth * 0.5),
+			Vector3(end.x, end.y, -depth * 0.5),
+			normal,
+			tint
+		)
+		_triangle_count += 2
 
 
 ## UV sphere. `rings` is the number of latitude bands, `segments` the number of

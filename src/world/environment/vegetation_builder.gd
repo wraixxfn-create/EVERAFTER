@@ -361,8 +361,15 @@ func _grass_tint() -> Color:
 	return base.darkened(rng.randf_range(0.0, 0.2))
 
 
-func _transform(position: Vector3) -> Transform3D:
-	return _origin * Transform3D(Basis.IDENTITY, position)
+func _transform(
+	position: Vector3, yaw_deg: float = 0.0, pitch_deg: float = 0.0, roll_deg: float = 0.0
+) -> Transform3D:
+	# Existing callers supply trunk lean / crown twist; accept those rotations
+	# so the world can compile when reviewing the rebuilt architecture in situ.
+	var basis := Basis.from_euler(
+		Vector3(deg_to_rad(pitch_deg), deg_to_rad(yaw_deg), deg_to_rad(roll_deg))
+	)
+	return _origin * Transform3D(basis, position)
 
 
 func _cylinder_collider(radius: float, height: float, offset: Vector3) -> Node3D:
