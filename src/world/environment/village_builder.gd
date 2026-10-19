@@ -21,11 +21,6 @@ extends RefCounted
 ## address "house 7" as a thing with an owner and a door. Scenery does not, so
 ## scenery is merged until it is nearly free.
 
-const PLAZA_KERB_SEGMENTS := 44
-const PLAZA_KERB_RADIUS := 12.2
-## Road edging: stone spacing along the verge, and how often one is missing.
-const ROAD_KERB_SPACING := 2.4
-const ROAD_KERB_GAP_CHANCE := 0.12
 ## Flat pads drifting on the pond surface.
 const POND_LILY_COUNT := 7
 ## Visual polish 14: low rock outcrops on real slopes. They are half buried,
@@ -41,6 +36,7 @@ var materials: VillageMaterials = null
 
 var _buildings: BuildingFactory = null
 var _vegetation: VegetationBuilder = null
+var _ground: GroundSurfaces = null
 var _detail_rng := RandomNumberGenerator.new()
 var _structure_count := 0
 var _prop_count := 0
@@ -59,6 +55,7 @@ func _init(
 	materials = initial_materials
 	_buildings = BuildingFactory.new(materials, layout.world_seed)
 	_vegetation = VegetationBuilder.new(layout.world_seed + 7)
+	_ground = GroundSurfaces.new(layout, terrain, materials)
 	_detail_rng.seed = layout.world_seed + 31
 
 
@@ -69,9 +66,14 @@ func build_village() -> Node3D:
 	root.add_child(_build_structures())
 	root.add_child(_build_props())
 	root.add_child(_build_vegetation())
+	var paving := _ground.build()
+	root.add_child(paving)
+	for child in paving.get_children():
+		if child is MeshInstance3D:
+			_mesh_count += 1
+			_triangle_count += _mesh_triangles((child as MeshInstance3D).mesh)
 	root.add_child(_vegetation.build_grass(layout, terrain, materials))
 	root.add_child(_build_water())
-	_mesh_count += 1
 	return root
 
 
@@ -105,11 +107,13 @@ func get_triangle_count() -> int:
 
 func summary() -> String:
 	return (
-		"%d structures, %d props, %d plants/rocks, %d meshes, %d colliders, ~%d tris"
+		"%d structures, %d props, %d plants/rocks, %d kerb stones, %d meshes, "
+		+ "%d colliders, ~%d tris"
 		% [
 			_structure_count,
 			_prop_count,
 			_vegetation_count,
+			_ground.kerb_stone_count if _ground != null else 0,
 			_mesh_count,
 			_collider_count,
 			_triangle_count,
@@ -145,8 +149,7 @@ func _build_props() -> Node3D:
 	var baker := MeshBaker.new()
 	var colliders := StaticBody3D.new()
 	colliders.name = "PropCollision"
-	_bake_plaza_kerb(baker)
-	_bake_road_kerb(baker)
+	_ground.bake_kerbs(baker)
 	_bake_pond_lilies(baker)
 	_bake_pond_shore_pebbles(baker)
 	_bake_slope_outcrops(baker)
@@ -205,89 +208,6 @@ func _build_vegetation() -> Node3D:
 	_triangle_count += baker.get_triangle_count()
 	root.add_child(colliders)
 	return root
-
-
-## A low stone kerb around the plaza: the cheapest possible way to make the
-## square read as built ground rather than a patch of yellow grass.
-## Visual polish 06 slightly varies each segment length and height so the ring
-## never reads as a perfect extruded torus — a few centimetres of irregularity
-## are enough to suggest hand-laid stone.
-func _bake_plaza_kerb(baker: MeshBaker) -> void:
-	var step := TAU / float(PLAZA_KERB_SEGMENTS)
-	for index in PLAZA_KERB_SEGMENTS:
-		var angle := step * (float(index) + 0.5)
-		var x := cos(angle) * PLAZA_KERB_RADIUS
-		var z := sin(angle) * PLAZA_KERB_RADIUS
-		var yaw := rad_to_deg(atan2(x, z))
-		var height := terrain.height_at(x, z)
-		var tint := Color.WHITE.darkened(
-			0.05 + _detail_rng.randf_range(0.0, 0.08) + 0.02 * float(index % 2)
-		)
-		var length := _detail_rng.randf_range(1.75, 2.05)
-		var h := _detail_rng.randf_range(0.26, 0.30)
-		baker.add_box(
-			"cobble",
-			Vector3(length, h, 0.66 + _detail_rng.randf_range(-0.06, 0.06)),
-			Transform3D(
-				Basis.from_euler(Vector3(0, deg_to_rad(yaw + _detail_rng.randf_range(-2.0, 2.0)), 0)),
-				Vector3(x, height + 0.11 + _detail_rng.randf_range(-0.015, 0.015), z)
-			),
-			tint,
-			0.06
-		)
-
-
-## The same edging along both verges of every road: it turns the painted dirt
-## strip into a built path and gives the eye a line where pavement meets
-## ground. Stones are irregularly spaced and occasionally missing, so the edge
-## reads as hand-laid. Merged into the prop meshes, no colliders: the player
-## steps over it like the plaza kerb.
-func _bake_road_kerb(baker: MeshBaker) -> void:
-	for road in layout.roads:
-		for index in road.size() - 1:
-			var start: Vector2 = road[index]
-			var end: Vector2 = road[index + 1]
-			var span := end - start
-			var length := span.length()
-			if length < 3.0:
-				continue
-			var along := span / length
-			var outward := Vector2(-along.y, along.x)
-			var yaw := atan2(-along.y, along.x)
-			var steps := int(length / ROAD_KERB_SPACING)
-			for step in steps:
-				var t := (float(step) + 0.5 + _detail_rng.randf_range(-0.35, 0.35)) \
-					* ROAD_KERB_SPACING / length
-				t = clampf(t, 0.02, 0.98)
-				if _detail_rng.randf() < ROAD_KERB_GAP_CHANCE:
-					continue
-				for side: float in [-1.0, 1.0]:
-					var lateral: float = (VillageLayout.ROAD_WIDTH * 0.5 + 0.32) * side
-					var point: Vector2 = start + span * t + outward * lateral
-					if point.length() < VillageLayout.PLAZA_RADIUS + 2.0:
-						continue
-					if layout.pond_weight(point.x, point.y) > 0.25:
-						continue
-					# Leave a gap wherever a building fronts the road: the
-					# break in the edging is where a doorstep or a path to a
-					# door crosses it, so nothing collides with a stoop.
-					if _near_structure(point, 1.0):
-						continue
-					var height := terrain.height_at(point.x, point.y)
-					var tint := Color.WHITE.darkened(_detail_rng.randf_range(0.02, 0.14))
-					var size := Vector3(
-						_detail_rng.randf_range(0.8, 1.1), 0.22, 0.38
-					)
-					baker.add_box(
-						"cobble",
-						size,
-						Transform3D(
-							Basis.from_euler(Vector3(0.0, yaw, 0.0)),
-							Vector3(point.x, height + 0.08, point.y)
-						),
-						tint,
-						0.06
-					)
 
 
 ## Flat lily pads drifting near the pond shore: a handful of horizontal quads

@@ -12,6 +12,7 @@ extends SceneTree
 
 const MAIN_SCENE := "res://src/world/scenes/main_world.tscn"
 const WORLD_TESTS := "res://tests/integration/test_world_scene.gd"
+const PAVED_TESTS := "res://tests/integration/test_paved_surfaces.gd"
 const SETTLE_FRAMES := 45
 const WATCH_FRAMES := 120
 
@@ -62,6 +63,10 @@ func _run() -> void:
 		return
 	_tests.call("check_structure", _harness, _world)
 	_tests.call("check_player_settles", _harness, _world)
+	var paved_tests: GDScript = load(PAVED_TESTS)
+	_harness.check(paved_tests != null, "the paved surface module compiles: %s" % PAVED_TESTS)
+	if paved_tests != null:
+		paved_tests.call("check_paved_surfaces", _harness, _world)
 
 	# Let the world run and watch the player's clearance from the ground: this is
 	# the check that catches "the player slowly sinks through the terrain".

@@ -59,6 +59,12 @@ const PALETTE := {
 	# Ground: packed earth roads, worn cobbles, deep pond water.
 	"dirt": Color(0.58, 0.43, 0.25),
 	"cobble": Color(0.59, 0.55, 0.48),
+	# Visual polish 15 — paved sheets. The cobble sheet is tinted with the warm
+	# stone family; the road sheet is white because its colour comes entirely
+	# from vertex colours (dirt core, gravel verge, meadow edge), exactly like
+	# the painted terrain it replaces.
+	"paving_cobble": Color(0.70, 0.66, 0.58),
+	"paving_road": Color(1.0, 1.0, 1.0),
 	"water": Color(0.15, 0.33, 0.40),
 	# Emissive parts: dark albedo by day, lit by `apply_night_glow()` at night.
 	"window": Color(0.15, 0.18, 0.26),
@@ -160,6 +166,33 @@ func _make_material(key: String) -> StandardMaterial3D:
 			material.roughness = 0.62 if key == "window" else 0.72
 		"stone", "stone_dark", "cobble", "rock":
 			material.roughness = 0.94
+		"paving_cobble":
+			# The procedural cobble pattern: an almost-grey tiling albedo carries
+			# the courses and joints, the palette colour carries the warm stone,
+			# and a normal map gives the bevels real relief under the sun.
+			material.albedo_texture = PavingTextures.cobble_albedo()
+			material.normal_enabled = true
+			material.normal_texture = PavingTextures.cobble_normal()
+			material.normal_scale = 0.9
+			material.roughness = 0.93
+			# A paving sheet is flat ground seen from one side. Turning off
+			# culling makes the surface independent of quad winding — one less
+			# way for a whole square to vanish because a ring was authored
+			# clockwise instead of counter-clockwise.
+			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+			material.texture_filter = (
+				BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			)
+		"paving_road":
+			material.albedo_texture = PavingTextures.road_albedo()
+			material.normal_enabled = true
+			material.normal_texture = PavingTextures.road_normal()
+			material.normal_scale = 0.55
+			material.roughness = 0.96
+			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+			material.texture_filter = (
+				BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			)
 		"rock_wet":
 			material.roughness = 0.72
 		"leaf_deep", "leaf_mid", "leaf_bright", "leaf_autumn", "pine", "grass":

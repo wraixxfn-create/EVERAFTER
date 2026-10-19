@@ -94,8 +94,15 @@ const POND_BASIN_STRENGTH := 0.35
 ## (~38 degrees) outside built ground. It keeps the sharper rocky silhouettes
 ## from ever producing a cliff the player capsule cannot climb, and it removes
 ## accidental spikes without flattening roads, plaza or building terraces.
+##
+## The pass is Jacobi-style and only *reads* its neighbours, so a chain of cells
+## needs one pass per link to settle. Twelve passes were enough for the coarse
+## Visual Polish 14 roads but not for a 1 m shelf cut beside a curve: the world
+## test measured a 0.99 m step on open ground (the pre-existing 0.96 m baseline
+## had the same defect). Forty passes reach the 0.72 m cap everywhere in about
+## the same build time, because each pass is a single linear sweep.
 const MAX_CELL_STEP := 0.72
-const RELAX_PASSES := 12
+const RELAX_PASSES := 40
 
 ## Legacy plaza used when no [VillageLayout] is supplied (unit tests, and any
 ## caller that only wants raw hills). With a layout the plaza comes from it.

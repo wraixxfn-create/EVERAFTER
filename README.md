@@ -421,6 +421,8 @@ src/
       mesh_baker.gd              fonde primitive in una mesh per materiale
       building_factory.gd        case, locanda, sala, pozzo, banchi, oggetti
       vegetation_builder.gd      alberi, cespugli, massi, erba (MultiMesh)
+      ground_surfaces.gd         pavimentazione della piazza e delle strade (Polish 15)
+      paving_textures.gd         texture procedurali di acciottolato e sterrato
       village_builder.gd         assembla il villaggio: mesh, collider, acqua
       sky_rig.gd                 sole, cielo, nebbia, bagliore notturno
   ui/
@@ -444,11 +446,14 @@ tests/
                                simulazione NPC, luoghi del villaggio, inventari/transazioni,
                                economia simulata, relazioni e memoria
                                (test_social_relationships, test_social_simulation), illuminazione
-                               (test_sky_rig)
+                               (test_sky_rig), geometria della pavimentazione
+                               (test_ground_surfaces)
   integration/
     test_world_scene.gd        scena, terreno vs fisica, collisioni, budget, abitanti,
                                selezione, pannello NPC, pannello economico, strato sociale,
                                illuminazione oraria e tour della mappa
+    test_paved_surfaces.gd     la pavimentazione esiste, è testurizzata e segue il suolo
+  visual/paving_review.tscn    scena di confronto della piazza e delle strade (tasti 1–5)
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
@@ -463,6 +468,7 @@ docs/
   VISUAL_POLISH_12.md          ricostruzione degli edifici (Polish 12)
   VISUAL_POLISH_13.md          tetti e silhouette architettoniche (Polish 13)
   VISUAL_POLISH_14.md          paesaggio modellato: rilievo, spalle stradali, orizzonte (Polish 14)
+  VISUAL_POLISH_15.md          strade curve, piazza composta e superfici calpestabili (Polish 15)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 
@@ -735,3 +741,18 @@ Misure, prima/dopo e limiti dichiarati in [`docs/VISUAL_POLISH_14.md`](docs/VISU
 
 Verifiche: `tests/unit/test_terrain_relaxer.gd` (nuovo), `test_terrain_generator.gd` esteso e
 `check_terrain_shape` nella suite di integrazione.
+
+## Visual Polish 15 — strade, piazza e superfici calpestabili
+
+Piazza e strade non sono più solo colore dipinto sulla griglia del terreno: un sottile strato
+pavimentato (`GroundSurfaces`, nuovo) segue la stessa altezza della `HeightMapShape3D`, con
+cordoli inclinati sul pendio, bordi irregolari e una transizione pietra → terra → erba affidata
+ai colori per vertice. Le tre strade sono ora curve continue invece di spezzate a 17 m; la piazza
+ha un bordo non circolare, un marciapiede di ghiaia e campiture leggibili attorno al pozzo.
+Le superfici non aggiungono collider: il giocatore continua a camminare sul heightmap, quindi
+pendenze, accessi, porte e percorsi NPC restano identici. Due sole draw call e poche migliaia di
+triangoli, con texture procedurali (nessuna immagine nel repository).
+Misure, difetti corretti e verifiche in [`docs/VISUAL_POLISH_15.md`](docs/VISUAL_POLISH_15.md).
+
+Confronto a occhio senza toccare i salvataggi:
+`godot --path . res://tests/visual/paving_review.tscn` (1–5: viste dalla camera di gioco).

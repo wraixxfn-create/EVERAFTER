@@ -66,12 +66,12 @@ static func build_protected_mask(
 	return mask
 
 
-## Jacobi-style talus relaxation, in place. A cell is clamped so that it never
-## differs from any of its four neighbours by more than [param max_step]; if the
-## two bounds cross (a cell between two very different neighbours) it takes the
-## midpoint, which is the least surprising answer. Protected cells are never
-## written, but they still act as neighbours, so the pass automatically builds a
-## walkable skirt against a road cut or a plaza edge.
+## Two-sided talus relaxation, in place, written as two monotone halves so that
+## it converges instead of oscillating. Open ground below a protected neighbour
+## is filled up to one step below it (a pad gets a skirt, not a plinth); open
+## ground above any neighbour is then cut down to one step above it (a road cut
+## gets a walkable ramp). Protected cells are never written but act as
+## neighbours. Deterministic: same grid, same mask, same result.
 static func relax_heights(
 	heights: PackedFloat32Array,
 	size_cells: int,
@@ -81,45 +81,59 @@ static func relax_heights(
 ) -> void:
 	if heights.is_empty() or size_cells < 3:
 		return
+	# Two monotone halves instead of one bidirectional clamp. A cell can be
+	# *filled* only toward a protected neighbour (a foundation, a road or the
+	# square), which keeps a levelled pad from becoming a plinth with a wall
+	# around it; then open ground is *cut* toward its lowest neighbour, which is
+	# what grading a road into a slope needs. Each half only moves heights in one
+	# direction, so it converges: reading a neighbour and then overwriting the
+	# current cell (Gauss–Seidel) propagates a constraint one cell per pass. The
+	# old symmetric clamp used the midpoint whenever the two bounds crossed and
+	# repeated passes amplified the contradiction into steps of several metres.
+	var has_mask := protected.size() == heights.size()
 	for _pass in passes:
-		var source := heights.duplicate()
 		var changed := false
-		# The border takes part as well: leaving the outermost ring unrelaxed
-		# was exactly where the horizon rim kept a hard step.
+		# Fill: raise open ground that sits below protected ground.
+		for iz in size_cells:
+			for ix in size_cells:
+				var index := iz * size_cells + ix
+				if index < protected.size() and protected[index] == 1:
+					continue
+				var target := -INF
+				if ix > 0 and has_mask and protected[index - 1] == 1:
+					target = maxf(target, heights[index - 1] - max_step)
+				if ix < size_cells - 1 and has_mask and protected[index + 1] == 1:
+					target = maxf(target, heights[index + 1] - max_step)
+				if iz > 0 and has_mask and protected[index - size_cells] == 1:
+					target = maxf(target, heights[index - size_cells] - max_step)
+				if iz < size_cells - 1 and has_mask and protected[index + size_cells] == 1:
+					target = maxf(target, heights[index + size_cells] - max_step)
+				if target > heights[index] + 0.00001:
+					heights[index] = target
+					changed = true
+		# Cut: lower open ground that sits above any neighbour.
 		for iz in size_cells:
 			for ix in size_cells:
 				var index := iz * size_cells + ix
 				if index < protected.size() and protected[index] == 1:
 					continue
 				var lowest := INF
-				var highest := -INF
 				if ix > 0:
-					lowest = minf(lowest, source[index - 1])
-					highest = maxf(highest, source[index - 1])
+					lowest = minf(lowest, heights[index - 1])
 				if ix < size_cells - 1:
-					lowest = minf(lowest, source[index + 1])
-					highest = maxf(highest, source[index + 1])
+					lowest = minf(lowest, heights[index + 1])
 				if iz > 0:
-					lowest = minf(lowest, source[index - size_cells])
-					highest = maxf(highest, source[index - size_cells])
+					lowest = minf(lowest, heights[index - size_cells])
 				if iz < size_cells - 1:
-					lowest = minf(lowest, source[index + size_cells])
-					highest = maxf(highest, source[index + size_cells])
+					lowest = minf(lowest, heights[index + size_cells])
 				if lowest == INF:
 					continue
-				var lower := highest - max_step
-				var upper := lowest + max_step
-				var clamped := source[index]
-				if lower > upper:
-					clamped = (highest + lowest) * 0.5
-				else:
-					clamped = clampf(source[index], lower, upper)
-				if not is_equal_approx(clamped, source[index]):
-					heights[index] = clamped
+				var cap := lowest + max_step
+				if heights[index] > cap + 0.00001:
+					heights[index] = cap
 					changed = true
 		if not changed:
 			break
-
 
 ## Nearest point on any of the layout's road centrelines. Roads are polylines
 ## of a handful of vertices, so a linear scan is both correct and cheap; the
