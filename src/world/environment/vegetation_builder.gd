@@ -677,7 +677,7 @@ func _build_flower_patch(
 	var start := baker.get_triangle_count()
 	var scale := placement.scale
 	var variant := placement.variant % 3
-	var head_key := ["cloth_cream", "cloth_red", "leaf_autumn"][variant]
+	var head_key: String = ["cloth_cream", "cloth_red", "leaf_autumn"][variant]
 	var stem_tint := Color.WHITE.darkened(rng.randf_range(0.0, 0.10))
 	var stems := 6 if detail else 4
 	for index in stems:
