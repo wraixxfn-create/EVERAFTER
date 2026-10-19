@@ -706,3 +706,14 @@ salvataggio precedente.
    nessuna API dichiarata ma non usata.
 4. Prima di proporre una modifica: `bash tools/run_checks.sh`. Una modifica che tocca mondo,
    terreno o giocatore deve mantenere verde anche `tests/run_world_tests.gd`.
+
+## Visual Polish 12 — edifici ricostruiti
+
+Le case esistenti, la locanda e il municipio usano ora un kit geometrico condiviso con
+pareti spesse e aperture reali, telai portanti, falde chiuse, gronde e colmi distinti.
+Collisioni, ID, percorsi e interazioni rimangono compatibili. Audit delle tipologie,
+misure e risultati dei test in [`docs/VISUAL_POLISH_12.md`](docs/VISUAL_POLISH_12.md).
+
+Per confrontare le cinque varianti senza toccare i salvataggi:
+`godot --path . res://tests/visual/building_review.tscn` (1–5: edificio, F1–F4: viste).
+Test strutturali mirati: `godot --headless --path . --script res://tests/run_building_tests.gd`.

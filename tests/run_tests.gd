@@ -23,6 +23,10 @@ extends SceneTree
 ##   reason.
 
 func _initialize() -> void:
+	call_deferred("_run_tests")
+
+
+func _run_tests() -> void:
 	print("==========================================================")
 	print("EVERAFTER headless test suite")
 	print("Godot %s" % Engine.get_version_info().string)
@@ -40,7 +44,10 @@ func _initialize() -> void:
 	TestMeshBaker.run_tests(harness)
 	TestVillageArt.run_tests(harness)
 	TestBuildingArchitecture.run_tests(harness)
-	TestSkyRig.run_tests(harness)
+	TestBuildingReconstruction.run_tests(harness)
+	# SkyRig references Game. Loading this one suite after autoload startup
+	# avoids compiling that singleton dependency before it is registered.
+	load("res://tests/unit/test_sky_rig.gd").run_tests(harness)
 	TestNpcData.run_tests(harness)
 	TestNpcRoster.run_tests(harness)
 	TestNpcVisuals.run_tests(harness)
