@@ -84,6 +84,7 @@ func _run() -> void:
 	_tests.call(
 		"check_terrain_collision", _harness, _world, root.world_3d.direct_space_state
 	)
+	_tests.call("check_terrain_shape", _harness, _world)
 	# Lighting runs last: it moves the clock and the player on purpose.
 	await _tests.call("check_lighting", _harness, _world, self)
 	_finish()
