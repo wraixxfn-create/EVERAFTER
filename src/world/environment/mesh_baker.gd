@@ -298,6 +298,193 @@ func add_sphere(
 			_triangle_count += 2
 
 
+## Bent, tapered tube through a polyline of points and radii.
+##
+## Trees are the reason this exists: a trunk is not a cylinder, it is a curve
+## that flares at the roots and narrows into the crown, and a branch is the same
+## shape rotated. Each ring is built on a **parallel transported** frame, so a
+## limb can bend sharply without the facets twisting or pinching halfway up.
+## `radii` may end at zero, which emits a point instead of a cap.
+func add_limb(
+	material_key: String,
+	points: PackedVector3Array,
+	radii: PackedFloat32Array,
+	sides: int = 6,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
+	face_variation: float = 0.0
+) -> void:
+	var count := mini(points.size(), radii.size())
+	if count < 2:
+		return
+	var ring := maxi(sides, 3)
+	var step := TAU / float(ring)
+	var tangents := PackedVector3Array()
+	for index in count:
+		var tangent: Vector3
+		if index == 0:
+			tangent = points[1] - points[0]
+		elif index == count - 1:
+			tangent = points[count - 1] - points[count - 2]
+		else:
+			tangent = points[index + 1] - points[index - 1]
+		if tangent.length_squared() < 0.000001:
+			tangent = Vector3.UP
+		tangents.append(tangent.normalized())
+	# Carry one perpendicular axis from ring to ring. Recomputing it from a
+	# global up vector would flip the cross-section when a branch turns vertical.
+	var first := tangents[0]
+	var helper := Vector3.UP if absf(first.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var carried := (helper - first * helper.dot(first)).normalized()
+	var ring_points: Array[PackedVector3Array] = []
+	for index in count:
+		var axis := tangents[index]
+		carried = carried - axis * carried.dot(axis)
+		if carried.length_squared() < 0.000001:
+			helper = Vector3.UP if absf(axis.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+			carried = (helper - axis * helper.dot(axis)).normalized()
+		carried = carried.normalized()
+		var side_axis := carried.cross(axis).normalized()
+		var points_on_ring := PackedVector3Array()
+		for step_index in ring:
+			var angle := step * float(step_index)
+			points_on_ring.append(
+				points[index]
+				+ (carried * cos(angle) + side_axis * sin(angle)) * radii[index]
+			)
+		ring_points.append(points_on_ring)
+	for index in count - 1:
+		var lower := ring_points[index]
+		var upper := ring_points[index + 1]
+		for step_index in ring:
+			var next := (step_index + 1) % ring
+			var a := lower[step_index]
+			var b := lower[next]
+			var c := upper[next]
+			var d := upper[step_index]
+			var local_normal := (c - a).cross(b - a)
+			if local_normal.length_squared() < 0.000001:
+				continue
+			_add_quad(
+				material_key, xform, a, b, c, d, local_normal.normalized(),
+				_segment_tint(tint, step_index, ring, face_variation)
+			)
+			_triangle_count += 2
+	if radii[count - 1] > 0.0001:
+		_add_limb_cap(material_key, xform, ring_points[count - 1], tangents[count - 1], false, tint)
+	if radii[0] > 0.0001:
+		_add_limb_cap(material_key, xform, ring_points[0], -tangents[0], true, tint)
+
+
+## Irregular ellipsoidal foliage mass — a crown that is not a sphere.
+##
+## A canopy made of UV spheres reads as rows of identical lollipops: every angle
+## has the same radius, every tree has the same ring. This keeps the cheap
+## topology of a sphere but displaces each vertex by a smooth, phase-shifted,
+## lobed function of the angle and the latitude, so the silhouette is ragged and
+## `seed_value` makes the same seed rebuild the same crown. The wobble is a sum
+## of sines of the *wrapped* angle, so opposite slices meet without a crack.
+func add_foliage_clump(
+	material_key: String,
+	radii: Vector3,
+	rings: int = 3,
+	segments: int = 6,
+	seed_value: int = 0,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
+	flat_shading: bool = false
+) -> void:
+	var band_count := maxi(rings, 2)
+	var slice_count := maxi(segments, 3)
+	var shaped := xform * Transform3D(Basis.IDENTITY.scaled(radii), Vector3.ZERO)
+	var normal_basis := shaped.basis.inverse().transposed()
+	var surface := _surface(material_key)
+	var apex := Vector3.UP
+	var nadir := Vector3.DOWN
+	for slice in slice_count:
+		var angle_0 := TAU * float(slice) / float(slice_count)
+		var angle_1 := TAU * float(slice + 1) / float(slice_count)
+		var top_0 := _clump_point(angle_0, 1, band_count, seed_value)
+		var top_1 := _clump_point(angle_1, 1, band_count, seed_value)
+		_add_sphere_triangle(surface, shaped, normal_basis, apex, top_0, top_1, tint, flat_shading)
+		_triangle_count += 1
+		var last := band_count - 1
+		var bottom_0 := _clump_point(angle_0, last, band_count, seed_value)
+		var bottom_1 := _clump_point(angle_1, last, band_count, seed_value)
+		_add_sphere_triangle(
+			surface, shaped, normal_basis, nadir, bottom_1, bottom_0, tint, flat_shading
+		)
+		_triangle_count += 1
+	for band in range(1, band_count - 1):
+		for slice in slice_count:
+			var angle_0 := TAU * float(slice) / float(slice_count)
+			var angle_1 := TAU * float(slice + 1) / float(slice_count)
+			var p00 := _clump_point(angle_0, band, band_count, seed_value)
+			var p10 := _clump_point(angle_1, band, band_count, seed_value)
+			var p11 := _clump_point(angle_1, band + 1, band_count, seed_value)
+			var p01 := _clump_point(angle_0, band + 1, band_count, seed_value)
+			_add_sphere_triangle(
+				surface, shaped, normal_basis, p00, p11, p10, tint, flat_shading
+			)
+			_add_sphere_triangle(
+				surface, shaped, normal_basis, p00, p01, p11, tint, flat_shading
+			)
+			_triangle_count += 2
+
+
+## One tapered blade of grass or one flower stem: a quad in the local XY plane
+## whose tip is bent in X/Z. The written normal points **up** on purpose. A blade
+## is a sliver of a surface, not a wall; giving it a sideways normal makes half of
+## every tuft go black from the wrong side, while a meadow-lit normal keeps the
+## whole tuft the colour the terrain under it says it should be. The grass
+## material therefore has back face culling disabled (see `VillageMaterials`).
+func add_blade(
+	material_key: String,
+	height: float,
+	base_width: float,
+	tip_width: float,
+	bend: Vector2 = Vector2.ZERO,
+	xform: Transform3D = Transform3D.IDENTITY,
+	tint: Color = Color.WHITE,
+	root_shade: float = 0.22,
+	double_sided: bool = false
+) -> void:
+	if height <= 0.0:
+		return
+	var half_base := maxf(base_width, 0.0) * 0.5
+	var half_tip := maxf(tip_width, 0.0) * 0.5
+	var a := Vector3(-half_base, 0.0, 0.0)
+	var b := Vector3(half_base, 0.0, 0.0)
+	var c := Vector3(half_tip + bend.x, height, bend.y)
+	var d := Vector3(-half_tip + bend.x, height, bend.y)
+	var surface := _surface(material_key)
+	var normal := (xform.basis.inverse().transposed() * Vector3.UP).normalized()
+	var root_tint := _scaled_tint(tint, 1.0 - clampf(root_shade, 0.0, 0.9))
+	var pa := xform * a
+	var pb := xform * b
+	var pc := xform * c
+	var pd := xform * d
+	_add_vertex(surface, pa, normal, root_tint)
+	_add_vertex(surface, pb, normal, root_tint)
+	_add_vertex(surface, pc, normal, tint)
+	_add_vertex(surface, pa, normal, root_tint)
+	_add_vertex(surface, pc, normal, tint)
+	_add_vertex(surface, pd, normal, tint)
+	_triangle_count += 2
+	if not double_sided:
+		return
+	# A leaf or a stem hangs on a material that culls back faces, so the same
+	# quad is emitted again with the opposite winding. Grass does not need this:
+	# its material is double-sided already.
+	_add_vertex(surface, pa, normal, root_tint)
+	_add_vertex(surface, pd, normal, tint)
+	_add_vertex(surface, pc, normal, tint)
+	_add_vertex(surface, pa, normal, root_tint)
+	_add_vertex(surface, pc, normal, tint)
+	_add_vertex(surface, pb, normal, root_tint)
+	_triangle_count += 2
+
+
 ## Flat rectangle, useful for signs, blades of grass and water.
 func add_quad(
 	material_key: String, size: Vector2, xform: Transform3D = Transform3D.IDENTITY,
@@ -403,6 +590,71 @@ func _add_cap(
 			_add_vertex(surface, second, normal, tint)
 			_add_vertex(surface, first, normal, tint)
 	_triangle_count += sides
+
+
+## Fan cap for a limb. `flip` reverses the winding for the start of the tube,
+## whose outward direction is opposite to the tangent.
+func _add_limb_cap(
+	material_key: String, xform: Transform3D, ring_points: PackedVector3Array,
+	outward: Vector3, flip: bool, tint: Color
+) -> void:
+	if ring_points.is_empty():
+		return
+	var surface := _surface(material_key)
+	var normal := (xform.basis.inverse().transposed() * outward).normalized()
+	var center := Vector3.ZERO
+	for point in ring_points:
+		center += point
+	center /= float(ring_points.size())
+	var center_world := xform * center
+	for index in ring_points.size():
+		var first := xform * ring_points[index]
+		var second := xform * ring_points[(index + 1) % ring_points.size()]
+		_add_vertex(surface, center_world, normal, tint)
+		if flip:
+			_add_vertex(surface, second, normal, tint)
+			_add_vertex(surface, first, normal, tint)
+		else:
+			_add_vertex(surface, first, normal, tint)
+			_add_vertex(surface, second, normal, tint)
+	_triangle_count += ring_points.size()
+
+
+## Unit-sphere point with the clump wobble applied. Poles are exact, so the cap
+## fan closes without a hole and without a spike.
+func _clump_point(angle: float, band: int, band_count: int, seed_value: int) -> Vector3:
+	if band <= 0:
+		return Vector3.UP
+	if band >= band_count:
+		return Vector3.DOWN
+	var polar := PI * float(band) / float(band_count)
+	var t := float(band) / float(band_count)
+	var radial := 1.0 + _clump_wobble(angle, t, seed_value)
+	return Vector3(sin(polar) * cos(angle), cos(polar), sin(polar) * sin(angle)) * radial
+
+
+## Smooth low-frequency deformation of a foliage clump. Integer lobe counts make
+## the function periodic in the angle, so slice 0 and slice N close seamlessly.
+func _clump_wobble(angle: float, t: float, seed_value: int) -> float:
+	var phase_a := _hash_unit(seed_value, 1, 0) * TAU
+	var phase_b := _hash_unit(seed_value, 2, 0) * TAU
+	var phase_c := _hash_unit(seed_value, 3, 0) * TAU
+	var lobes_a := 3.0 + floorf(_hash_unit(seed_value, 4, 0) * 3.0)
+	var lobes_b := 6.0 + floorf(_hash_unit(seed_value, 5, 0) * 4.0)
+	var taper := sin(clampf(t, 0.0, 1.0) * PI)
+	var wobble := 0.085 * sin(angle * lobes_a + phase_a + t * 1.7)
+	wobble += 0.050 * sin(angle * lobes_b - phase_b + t * 3.4)
+	wobble += 0.045 * sin(t * 4.2 + phase_c)
+	return wobble * (0.30 + 0.70 * taper)
+
+
+## Deterministic 0..1 hash on three integers, used to derive stable phases for
+## foliage shapes without depending on the caller's RNG stream.
+func _hash_unit(a: int, b: int, c: int) -> float:
+	var h: int = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791)
+	h = (h ^ (h >> 13)) * 1274126177
+	h = h ^ (h >> 16)
+	return float(h & 0xFFFF) / 65535.0
 
 
 func _add_sphere_triangle(

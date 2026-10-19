@@ -43,6 +43,22 @@ const KIND_TREE_OAK := "tree_oak"
 const KIND_TREE_BIRCH := "tree_birch"
 const KIND_BUSH := "bush"
 const KIND_ROCK := "rock"
+## Visual polish 16 — meadow flowers are their own placement kind, not a
+## decoration painted on the grass. They are baked vegetation (stems, low
+## leaves and heads), so they survive the walk, cast no separate draw call and
+## can be kept out of roads and doorways by the same rules as every other plant.
+const KIND_FLOWER_PATCH := "flower_patch"
+
+## Every kind handled by `VegetationBuilder` instead of `BuildingFactory`.
+const VEGETATION_KINDS := [
+	KIND_TREE_PINE, KIND_TREE_OAK, KIND_TREE_BIRCH, KIND_BUSH, KIND_ROCK,
+	KIND_FLOWER_PATCH
+]
+const TREE_KINDS := [KIND_TREE_PINE, KIND_TREE_OAK, KIND_TREE_BIRCH]
+
+
+static func is_vegetation(kind: String) -> bool:
+	return VEGETATION_KINDS.has(kind)
 
 ## Buildings with a doorway on their +Z face. `BuildingFactory.is_structure()`
 ## stays the authority on what gets its own node; this list only says which
@@ -59,7 +75,8 @@ const GROUND_LEVELLING_KINDS := [
 const ROAD_CLEARING_KINDS := [
 	KIND_HOUSE, KIND_INN, KIND_HALL, KIND_WELL, KIND_STALL, KIND_CART, KIND_CRATE,
 	KIND_BARREL, KIND_LOGPILE, KIND_SIGNPOST, KIND_FLOWER_BOX, KIND_BENCH,
-	KIND_TREE_PINE, KIND_TREE_OAK, KIND_TREE_BIRCH, KIND_BUSH, KIND_ROCK
+	KIND_TREE_PINE, KIND_TREE_OAK, KIND_TREE_BIRCH, KIND_BUSH, KIND_ROCK,
+	KIND_FLOWER_PATCH
 ]
 
 const PLAZA_RADIUS := 11.0
@@ -71,6 +88,15 @@ const ROAD_WIDTH := 3.6
 const DOOR_CORRIDOR_HALF_WIDTH := 1.5
 ## How far past a building's footprint the door corridor is kept clear.
 const DOOR_CORRIDOR_REACH := 1.5
+## Visual polish 16 — a tree is not a crate: it may not stand just outside the
+## door corridor either, because a trunk two metres to the side still hides the
+## door from the road. Tall vegetation therefore keeps a longer, wider sightline
+## in front of every entrance. Low shrubs keep the shorter corridor.
+const TREE_DOOR_SIGHTLINE := 3.2
+const TREE_DOOR_EXTRA_WIDTH := 0.9
+## Extra verge between a tree trunk and the carriageway. Without it the forest
+## closed over the roads and the paths stopped reading from inside the village.
+const TREE_ROAD_VERGE := 1.0
 ## Half a fence is 1.5 m long; the extra margin keeps the gate wider than the
 ## fence module so a 0.4 m player capsule and a 0.42 m NPC never clip a post.
 const FENCE_GATE_MARGIN := 1.6
@@ -127,6 +153,9 @@ var roads: Array[PackedVector2Array] = []
 var placements: Array[Placement] = []
 var pond_center := Vector2(33.0, -27.0)
 var pond_radius: float = POND_RADIUS
+## Open glades kept inside the tree ring. Exposed so the suite can prove the
+## clearings exist rather than trusting the placement loop.
+var forest_clearings: Array[Vector2] = []
 ## Level of the water surface, in the same units as the terrain height field.
 ## Computed by `TerrainGenerator` once it knows its height scale.
 var water_level: float = 0.0
@@ -156,6 +185,7 @@ func _init(initial_seed: int = 0, initial_half_extent: float = 63.5) -> void:
 	_build_field_fence()
 	_build_forest()
 	_build_scatter()
+	_build_meadow_flowers()
 
 
 # --- queries -----------------------------------------------------------------
@@ -585,48 +615,82 @@ func _build_field_fence() -> void:
 
 
 func _build_forest() -> void:
-	var target := int(half_extent * 3.5)
+	var target := int(half_extent * 3.4)
+	# Three glades first: real openings the player can walk into. They are what
+	# keeps the tree line from reading as a wall around the map, and they are
+	# stored so the suite can prove the clearings really stayed clear.
+	forest_clearings.clear()
+	var clearing_phase := _rng.randf() * TAU
+	for index in 3:
+		var angle := (
+			clearing_phase + TAU * float(index) / 3.0 + _rng.randf_range(-0.30, 0.30)
+		)
+		var distance := lerpf(half_extent * 0.66, half_extent * 0.88, _rng.randf())
+		forest_clearings.append(Vector2(cos(angle), sin(angle)) * distance)
+	var density_phase := _rng.randf() * TAU
 	var placed := 0
 	var attempts := 0
-	while placed < target and attempts < target * 12:
+	while placed < target and attempts < target * 14:
 		attempts += 1
 		var angle := _rng.randf() * TAU
-		# Trees crowd the border and thin out towards the village.
-		var distance := lerpf(half_extent * 0.62, half_extent * 1.02, pow(_rng.randf(), 0.7))
+		# Trees crowd the border and thin out towards the village. A slow density
+		# wave and a radial wobble remove both the perfectly circular edge and
+		# the evenly spaced ring that the previous polar scatter produced.
+		var distance := lerpf(half_extent * 0.60, half_extent * 1.02, pow(_rng.randf(), 0.7))
+		distance += sin(angle * 4.0 + density_phase) * half_extent * 0.022
 		var position := Vector2(cos(angle), sin(angle)) * distance
 		if absf(position.x) > half_extent - 3.0 or absf(position.y) > half_extent - 3.0:
 			continue
+		if _in_forest_clearing(position, 1.2):
+			continue
+		var density := 0.55 + 0.45 * (0.5 + 0.5 * sin(angle * 3.0 + density_phase * 0.8))
+		if _rng.randf() > density:
+			continue
 		if _overlaps(position, 2.6):
 			continue
-		var roll := _rng.randf()
+		# Species grow in belts, not as a confetti of needles and leaves: a slow
+		# angular wave decides which stand a tree belongs to, with a little
+		# mixing at the seams.
+		var stand := 0.5 + 0.5 * sin(angle * 2.0 + density_phase * 1.3)
 		var kind := KIND_TREE_OAK
-		if roll < 0.42:
+		if stand > 0.64:
 			kind = KIND_TREE_PINE
-		elif roll < 0.58:
+		elif stand < 0.22:
 			kind = KIND_TREE_BIRCH
+		if _rng.randf() < 0.20:
+			kind = [KIND_TREE_OAK, KIND_TREE_PINE, KIND_TREE_BIRCH][_rng.randi_range(0, 2)]
+		var before := placements.size()
 		_add_placement(
 			kind,
 			position,
 			_rng.randf_range(0.0, 360.0),
 			_rng.randi_range(0, 2),
-			_rng.randf_range(0.75, 1.35),
+			_rng.randf_range(0.72, 1.32),
 			1.6
 		)
-		placed += 1
-	# A few tight groves inside the ring: uniform scatter reads as noise, real
-	# woods grow in knots of one species with an understorey between them.
+		if placements.size() > before:
+			placed += 1
+	# A few tight groves inside the ring: real woods grow in knots of one
+	# species, elliptical rather than on a compass circle.
 	for grove in 3:
 		var grove_angle := _rng.randf() * TAU
 		var grove_distance := lerpf(half_extent * 0.46, half_extent * 0.6, _rng.randf())
 		var grove_center := Vector2(cos(grove_angle), sin(grove_angle)) * grove_distance
 		if road_distance(grove_center.x, grove_center.y) < 6.0:
 			continue
+		if _in_forest_clearing(grove_center, 4.0):
+			continue
 		var species: String = [KIND_TREE_OAK, KIND_TREE_PINE, KIND_TREE_BIRCH][grove % 3]
+		var stretch := Vector2(
+			_rng.randf_range(0.75, 1.35), _rng.randf_range(0.75, 1.35)
+		)
 		for member in _rng.randi_range(3, 5):
 			var spread := _rng.randf() * TAU
-			var offset := Vector2(cos(spread), sin(spread)) * _rng.randf_range(1.8, 4.2)
-			var position := grove_center + offset
+			var offset := Vector2(cos(spread), sin(spread)) * _rng.randf_range(1.6, 4.2)
+			var position := grove_center + offset * stretch
 			if absf(position.x) > half_extent - 3.0 or absf(position.y) > half_extent - 3.0:
+				continue
+			if _in_forest_clearing(position, 0.0):
 				continue
 			if _overlaps(position, 2.4):
 				continue
@@ -638,54 +702,149 @@ func _build_forest() -> void:
 				_rng.randf_range(0.7, 1.2),
 				1.5
 			)
-	# Shrubs filling the edge between the fields and the wood.
-	for index in int(half_extent * 0.7):
+	# Understorey in knots at the edge of the wood, not a bead necklace of
+	# shrubs at one radius. Flowering variants cluster together, because a
+	# stand of the same plant is what the meadow would actually grow.
+	for cluster in 9:
+		var angle := _rng.randf() * TAU
+		var distance := _rng.randf_range(half_extent * 0.44, half_extent * 0.74)
+		var center := Vector2(cos(angle), sin(angle)) * distance
+		if road_distance(center.x, center.y) < 4.5:
+			continue
+		if _in_forest_clearing(center, 3.5):
+			continue
+		var variant := _rng.randi_range(0, 2)
+		for member in _rng.randi_range(3, 5):
+			var spread := _rng.randf() * TAU
+			var offset := Vector2(cos(spread), sin(spread)) * _rng.randf_range(0.9, 3.4)
+			_add_placement(
+				KIND_BUSH,
+				center + offset,
+				_rng.randf_range(0.0, 360.0),
+				variant,
+				_rng.randf_range(0.72, 1.30),
+				1.0
+			)
+	for index in 16:
 		var angle := _rng.randf() * TAU
 		var distance := _rng.randf_range(half_extent * 0.42, half_extent * 0.72)
-		var position := Vector2(cos(angle), sin(angle)) * distance
-		if _overlaps(position, 1.6):
-			continue
 		_add_placement(
 			KIND_BUSH,
-			position,
+			Vector2(cos(angle), sin(angle)) * distance,
 			_rng.randf_range(0.0, 360.0),
 			_rng.randi_range(0, 2),
-			_rng.randf_range(0.7, 1.4),
+			_rng.randf_range(0.70, 1.20),
 			1.0
 		)
 
 
 func _build_scatter() -> void:
-	# Lone trees, shrubs and rocks inside the village so it does not read as a
-	# bare stage set, plus boulders out in the fields. The mix matters as much
-	# as the count: three tree species, flowering shrubs and stone break the
-	# "oak or nothing" pattern the old scatter had.
-	for index in 44:
+	# Trees and boulders inside the village, in loose knots rather than one even
+	# ring. The mix still matters: three species, flowering shrubs and stone
+	# break the "oak or nothing" pattern, but the spacing is now irregular.
+	for cluster in 16:
 		var angle := _rng.randf() * TAU
-		var distance := _rng.randf_range(PLAZA_RADIUS + 7.0, half_extent * 0.58)
-		var position := Vector2(cos(angle), sin(angle)) * distance
-		var roll := _rng.randf()
-		var kind := KIND_TREE_OAK
-		var footprint := 1.8
-		if roll < 0.22:
-			kind = KIND_TREE_PINE
-		elif roll < 0.38:
-			kind = KIND_TREE_BIRCH
-		elif roll < 0.58:
-			kind = KIND_BUSH
-			footprint = 1.1
-		elif roll < 0.72:
-			kind = KIND_ROCK
-		if _overlaps(position, footprint):
+		var distance := _rng.randf_range(PLAZA_RADIUS + 8.0, half_extent * 0.56)
+		var center := Vector2(cos(angle), sin(angle)) * distance
+		for member in _rng.randi_range(1, 3):
+			var spread := _rng.randf() * TAU
+			var position := center + Vector2(cos(spread), sin(spread)) * _rng.randf_range(1.4, 4.6)
+			var roll := _rng.randf()
+			var kind := KIND_TREE_OAK
+			var footprint := 1.8
+			if roll < 0.20:
+				kind = KIND_TREE_PINE
+			elif roll < 0.36:
+				kind = KIND_TREE_BIRCH
+			elif roll < 0.56:
+				kind = KIND_BUSH
+				footprint = 1.1
+			elif roll < 0.70:
+				kind = KIND_ROCK
+				footprint = 0.9
+			_add_placement(
+				kind,
+				position,
+				_rng.randf_range(0.0, 360.0),
+				_rng.randi_range(0, 2),
+				_rng.randf_range(0.75, 1.25),
+				footprint
+			)
+	# A handful of field stones further out: they belong to the open country,
+	# not to the village, so they are scattered instead of clustered.
+	for index in 14:
+		var angle := _rng.randf() * TAU
+		var distance := _rng.randf_range(half_extent * 0.52, half_extent * 0.80)
+		_add_placement(
+			KIND_ROCK,
+			Vector2(cos(angle), sin(angle)) * distance,
+			_rng.randf_range(0.0, 360.0),
+			_rng.randi_range(0, 2),
+			_rng.randf_range(0.35, 1.10),
+			0.9
+		)
+
+
+## Flowers are placed last: they fill the gaps left by trees, shrubs and props,
+## and the placer's own rules keep them off the carriageway, out of doorways and
+## out of the pond. Three deliberately composed groups are added on top of the
+## meadow clusters: the plaza rim (where the eye leaves the square), the pond
+## bank (damp meadow) and the field margins.
+func _build_meadow_flowers() -> void:
+	for cluster in 22:
+		var angle := _rng.randf() * TAU
+		var distance := _rng.randf_range(PLAZA_RADIUS + 2.0, half_extent * 0.62)
+		var center := Vector2(cos(angle), sin(angle)) * distance
+		if pond_weight(center.x, center.y) > 0.05:
+			continue
+		var variant := _rng.randi_range(0, 2)
+		for member in _rng.randi_range(3, 6):
+			var spread := _rng.randf() * TAU
+			var position := center + Vector2(cos(spread), sin(spread)) * _rng.randf_range(0.3, 2.0)
+			if absf(position.x) > half_extent - 3.0 or absf(position.y) > half_extent - 3.0:
+				continue
+			_add_placement(
+				KIND_FLOWER_PATCH,
+				position,
+				_rng.randf_range(0.0, 360.0),
+				variant,
+				_rng.randf_range(0.85, 1.25),
+				0.55
+			)
+	for index in 12:
+		var angle := TAU * float(index) / 12.0 + _rng.randf_range(-0.16, 0.16)
+		var distance := _rng.randf_range(PLAZA_RADIUS + 1.6, PLAZA_RADIUS + 2.9)
+		_add_placement(
+			KIND_FLOWER_PATCH,
+			Vector2(cos(angle), sin(angle)) * distance,
+			_rng.randf_range(0.0, 360.0),
+			_rng.randi_range(0, 2),
+			_rng.randf_range(0.90, 1.20),
+			0.50
+		)
+	for index in 8:
+		var angle := _rng.randf() * TAU
+		var distance := pond_radius * _rng.randf_range(1.10, 1.35)
+		var position := pond_center + Vector2(cos(angle), sin(angle)) * distance
+		if road_weight(position.x, position.y) > 0.10:
 			continue
 		_add_placement(
-			kind,
+			KIND_FLOWER_PATCH,
 			position,
 			_rng.randf_range(0.0, 360.0),
 			_rng.randi_range(0, 2),
-			_rng.randf_range(0.75, 1.25),
-			footprint
+			_rng.randf_range(0.80, 1.15),
+			0.50
 		)
+
+
+## True inside a glade (plus a margin). Glades are kept clear of trunks and of
+## the understorey, so they read as open grass rather than as thinner woods.
+func _in_forest_clearing(point: Vector2, margin: float) -> bool:
+	for clearing in forest_clearings:
+		if point.distance_to(clearing) < 9.0 + margin:
+			return true
+	return false
 
 
 # --- helpers -----------------------------------------------------------------
@@ -744,11 +903,17 @@ func _add_placement(
 		return
 	# Doors and stoops stay open: the placer rejects anything that would stand
 	# in the doorway corridor of a building, whichever pass wanted it there.
-	if _blocks_a_doorway(position, extent):
+	# Tall vegetation keeps a longer sightline than a crate or a barrel.
+	if _blocks_a_doorway(position, extent, kind):
 		return
 	if ROAD_CLEARING_KINDS.has(kind):
-		# Keep the carriageway walkable.
-		if distance_to_roads(position) < ROAD_WIDTH * 0.5 + extent * 0.6:
+		# Keep the carriageway walkable, and give trees a real verge: a trunk at
+		# the very edge of the falloff closes the road visually even when the
+		# player can physically walk past it.
+		var road_clearance := ROAD_WIDTH * 0.5 + extent * 0.6
+		if TREE_KINDS.has(kind):
+			road_clearance += TREE_ROAD_VERGE
+		if distance_to_roads(position) < road_clearance:
 			return
 		# Nothing taller than a shrub may stand in the water.
 		if kind != KIND_BUSH and kind != KIND_ROCK and pond_weight(position.x, position.y) > 0.2:
@@ -783,19 +948,25 @@ func _overlaps(position: Vector2, radius: float) -> bool:
 ## [constant DOOR_CORRIDOR_HALF_WIDTH] plus half the prop. The corridor faces
 ## the road by construction (houses are yawed towards it), so keeping it clear
 ## keeps the walk from every door open for the player and for the NPC door
-## anchors.
-func _blocks_a_doorway(position: Vector2, extent: float) -> bool:
+## anchors. A tree gets an even longer and wider corridor
+## ([constant TREE_DOOR_SIGHTLINE]): a trunk beside the path still hides the
+## door from the square, even when it does not block the walk.
+func _blocks_a_doorway(position: Vector2, extent: float, kind: String = "") -> bool:
+	var extra_reach := TREE_DOOR_SIGHTLINE if TREE_KINDS.has(kind) else 0.0
+	var extra_width := TREE_DOOR_EXTRA_WIDTH if TREE_KINDS.has(kind) else 0.0
 	for placement in placements:
 		if not DOOR_BUILDING_KINDS.has(placement.kind):
 			continue
 		var yaw := deg_to_rad(placement.rotation_deg)
 		var delta := position - placement.position
 		var local_z := delta.x * sin(yaw) + delta.y * cos(yaw)
-		var reach := placement.footprint_radius * placement.scale + DOOR_CORRIDOR_REACH
+		var reach := (
+			placement.footprint_radius * placement.scale + DOOR_CORRIDOR_REACH + extra_reach
+		)
 		if local_z <= 0.0 or local_z > reach:
 			continue
 		var local_x := delta.x * cos(yaw) - delta.y * sin(yaw)
-		if absf(local_x) < DOOR_CORRIDOR_HALF_WIDTH + extent * 0.5:
+		if absf(local_x) < DOOR_CORRIDOR_HALF_WIDTH + extent * 0.5 + extra_width:
 			return true
 	return false
 

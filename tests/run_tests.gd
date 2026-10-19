@@ -45,6 +45,7 @@ func _run_tests() -> void:
 	TestVillageMaterials.run_tests(harness)
 	TestMeshBaker.run_tests(harness)
 	TestVillageArt.run_tests(harness)
+	TestVegetation.run_tests(harness)
 	TestBuildingArchitecture.run_tests(harness)
 	TestBuildingReconstruction.run_tests(harness)
 	# SkyRig references Game. Loading this one suite after autoload startup

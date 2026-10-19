@@ -197,6 +197,13 @@ func _make_material(key: String) -> StandardMaterial3D:
 			material.roughness = 0.72
 		"leaf_deep", "leaf_mid", "leaf_bright", "leaf_autumn", "pine", "grass":
 			material.roughness = 0.94
-		"grass_blade", "trunk", "trunk_birch", "dirt":
+		"grass_blade":
+			# Visual polish 16 — a blade is one tapered quad, not two crossed
+			# double-sided quads. Turning off culling is what makes that half
+			# of the geometry possible: the tuft stays visible from every angle
+			# while the baked mesh keeps its vertex-colour gradient.
+			material.roughness = 0.92
+			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		"trunk", "trunk_birch", "dirt":
 			material.roughness = 0.92
 	return material

@@ -28,6 +28,7 @@ const ALL_KINDS := [
 	VillageLayout.KIND_TREE_BIRCH,
 	VillageLayout.KIND_BUSH,
 	VillageLayout.KIND_ROCK,
+	VillageLayout.KIND_FLOWER_PATCH,
 ]
 
 
@@ -126,10 +127,7 @@ static func _baked_keys(
 	placement: VillageLayout.Placement, materials: VillageMaterials
 ) -> PackedStringArray:
 	var baker := MeshBaker.new()
-	var plants := [
-		VillageLayout.KIND_TREE_PINE, VillageLayout.KIND_TREE_OAK,
-		VillageLayout.KIND_TREE_BIRCH, VillageLayout.KIND_BUSH, VillageLayout.KIND_ROCK,
-	]
+	var plants := VillageLayout.VEGETATION_KINDS
 	if plants.has(placement.kind):
 		vegetation.append(baker, placement, Transform3D.IDENTITY)
 	else:
