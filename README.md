@@ -108,9 +108,9 @@ Su Windows l'output su console è visibile solo con l'eseguibile `_console.exe`.
 | **Clic sinistro** (mouse libero) | Seleziona l'abitante sotto il puntatore e cattura di nuovo il mouse |
 | **Elenco "Abitanti"** | Sceglie un abitante dal pannello, anche se è lontano e non è disegnato |
 
-Quando il mouse è libero, in basso allo schermo compare la scritta
-*"Clic sinistro o F per riprendere il controllo"*: nessuno deve dover indovinare come si torna a
-giocare. Perdendo il fuoco della finestra il mouse viene liberato automaticamente.
+Quando il mouse è libero, in basso allo schermo compare la barra dei comandi con i tasti
+(`F`, `C`, `P`, `+ −`, `M`): nessuno deve dover indovinare come si torna a giocare. Perdendo il
+fuoco della finestra il mouse viene liberato automaticamente.
 
 Tutti gli input sono mappati come **azioni** in `project.godot` (sezione `[input]`), quindi sono
 rimappabili dall'editor senza toccare il codice.
@@ -173,9 +173,11 @@ Un villaggio di confine, al mattino del giorno 1 (ore 07:00 simulate):
 * **Cielo e luce** che seguono l'ora simulata, non quella reale: il sole si sposta, il cielo
   cambia colore, la nebbia si infittisce, le finestre e i lampioni si accendono al tramonto.
   È la dimostrazione visibile che la simulazione ha un orologio proprio.
-* **Interfaccia** in alto a sinistra: nome del gioco, giorno simulato con l'ora, e il nome
-  dell'area in cui ti trovi (8 aree: piazza, tre strade, stagno, locanda, sala del consiglio,
-  bosco; fuori da tutte, "Campi di Everafter").
+* **Interfaccia** in alto a sinistra: una sola card con nome del gioco, giorno simulato con
+  l'ora, fase del giorno, velocità della simulazione e nome dell'area in cui ti trovi (8 aree:
+  piazza, tre strade, stagno, locanda, sala del consiglio, bosco; fuori da tutte, "Campi di
+  Everafter"). Il linguaggio visivo è condiviso da tutti i pannelli
+  (vedi [`docs/UI_REDESIGN.md`](docs/UI_REDESIGN.md) e l'anteprima [`docs/ui_preview.html`](docs/ui_preview.html)).
 
 ### Gli abitanti (novità di questa fase)
 
@@ -247,9 +249,9 @@ comunità:
 * **Progetti comunitari**: `Legno`, `Pietra` e `Moneta` vengono impiegati in progetti del villaggio
   (*Rinforzo del Granaio Comune*, *Cavalletto della Segheria*, *Armatura del Banco di Pietra*,
   *Manutenzione del Pozzo*) che migliorano la resa produttiva (`+1` per lotto) o il benessere.
-* **Pannello economico** (`EconomyPanel`, a sinistra sotto `WorldHud`): mostra scorte disponibili,
-  produzione e consumo del periodo (`+prod / -cons`), stato dei progetti, carenze attive e ultime
-  transazioni importanti leggendo direttamente `EconomySystem`.
+* **Pannello economico** (`EconomyPanel`, a sinistra sotto `WorldHud`): registro compatto con
+  scorte disponibili, produzione e consumo del periodo (`+prod / -cons`), stato dei progetti,
+  carenze attive e ultime transazioni importanti, letto direttamente da `EconomySystem`.
 
 ### Relazioni, interazioni e memoria (novità di questa fase)
 
@@ -434,7 +436,7 @@ src/
       village_builder.gd         assembla il villaggio: mesh, collider, acqua
       sky_rig.gd                 sole, cielo, nebbia, bagliore notturno
   ui/
-    ui_theme.gd                  tema medievale condiviso (palette, tipografia, stili, tooltip)
+    ui_theme.gd                  sistema di design condiviso (palette, tipografia, spaziature, stili)
     scenes/world_hud.tscn        interfaccia discreta: titolo, giorno, fase, velocità, area
     world_hud.gd
     scenes/diagnostics_hud.tscn  pannello diagnostico centrato (F1)
@@ -473,6 +475,8 @@ docs/
   LIGHTING.md                  illuminazione e atmosfera: problemi, valori, budget, futuro
   WORLD_DETAIL.md              densità ambientale e dettagli del mondo: interventi, regole
   NPC_AND_UI_POLISH.md         rifinitura visiva di NPC, pose procedurali e interfaccia (Polish 05)
+  UI_REDESIGN.md               ridisegno dell'interfaccia: diagnosi, design system, layout (UI 2.0)
+  ui_preview.html              anteprima statica dell'interfaccia (apribile in un browser)
   BUILDING_POLISH_07.md         rifinitura architettonica degli edifici procedurali (Polish 07)
   TERRAIN_POLISH_06.md         terreno e paesaggio: palette, bordi, rilievo (Polish 06)
   VISUAL_POLISH_11.md          audit strutturale del villaggio (Polish 11)

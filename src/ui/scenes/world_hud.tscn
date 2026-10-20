@@ -1,57 +1,25 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://src/ui/world_hud.gd" id="1_worldhud"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hud"]
-content_margin_left = 14.0
-content_margin_top = 10.0
-content_margin_right = 14.0
-content_margin_bottom = 10.0
-bg_color = Color(0.08, 0.065, 0.055, 0.84)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ring"]
+bg_color = Color(1, 1, 1, 0)
 border_width_left = 1
-border_width_top = 2
+border_width_top = 1
 border_width_right = 1
-border_width_bottom = 2
-border_color = Color(0.66, 0.53, 0.3, 0.85)
+border_width_bottom = 1
+border_color = Color(0.93, 0.91, 0.87, 0.22)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
-shadow_color = Color(0, 0, 0, 0.35)
-shadow_size = 5
-shadow_offset = Vector2(0, 2)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_badge"]
-content_margin_left = 7.0
-content_margin_top = 2.0
-content_margin_right = 7.0
-content_margin_bottom = 2.0
-bg_color = Color(0.15, 0.12, 0.095, 0.9)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.52, 0.42, 0.25, 0.65)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hint"]
-content_margin_left = 18.0
-content_margin_top = 8.0
-content_margin_right = 18.0
-content_margin_bottom = 8.0
-bg_color = Color(0.08, 0.065, 0.055, 0.88)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.66, 0.53, 0.3, 0.82)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
+bg_color = Color(0.93, 0.91, 0.87, 0.5)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
 
 [node name="WorldHud" type="CanvasLayer"]
 layer = 5
@@ -66,89 +34,87 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Corner" type="PanelContainer" parent="Root"]
+[node name="Status" type="PanelContainer" parent="Root"]
 layout_mode = 0
-offset_left = 20.0
-offset_top = 16.0
-offset_right = 376.0
-offset_bottom = 128.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 336.0
+offset_bottom = 164.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
 
-[node name="Margin" type="MarginContainer" parent="Root/Corner"]
+[node name="Pad" type="MarginContainer" parent="Root/Status"]
 layout_mode = 2
 mouse_filter = 2
 
-[node name="Lines" type="VBoxContainer" parent="Root/Corner/Margin"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 3
-
-[node name="TitleLabel" type="Label" parent="Root/Corner/Margin/Lines"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
-theme_override_font_sizes/font_size = 20
-text = "EVERAFTER"
-
-[node name="DayLabel" type="Label" parent="Root/Corner/Margin/Lines"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 1)
-theme_override_font_sizes/font_size = 15
-text = "Giorno 1 · 07:00"
-
-[node name="StatusRow" type="HBoxContainer" parent="Root/Corner/Margin/Lines"]
+[node name="Lines" type="VBoxContainer" parent="Root/Status/Pad"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="AreaLabel" type="Label" parent="Root/Corner/Margin/Lines"]
+[node name="TitleLabel" type="Label" parent="Root/Status/Pad/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.76, 0.84, 0.68, 1)
-theme_override_font_sizes/font_size = 13
-text = "Campi di Everafter"
+text = "EVERAFTER"
 
-[node name="PhaseBadge" type="Label" parent="Root/Corner/Margin/Lines/StatusRow"]
+[node name="DayLabel" type="Label" parent="Root/Status/Pad/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.9, 0.84, 0.68, 1)
-theme_override_font_sizes/font_size = 12
-theme_override_styles/normal = SubResource("StyleBoxFlat_badge")
+text = "Giorno 1 · 07:00"
+
+[node name="StatusRow" type="HBoxContainer" parent="Root/Status/Pad/Lines"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="PhaseBadge" type="Label" parent="Root/Status/Pad/Lines/StatusRow"]
+layout_mode = 2
+mouse_filter = 2
 text = "Mattino"
 
-[node name="SpeedBadge" type="Label" parent="Root/Corner/Margin/Lines/StatusRow"]
+[node name="SpeedBadge" type="Label" parent="Root/Status/Pad/Lines/StatusRow"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.62, 0.84, 0.52, 1)
-theme_override_font_sizes/font_size = 12
-theme_override_styles/normal = SubResource("StyleBoxFlat_badge")
-text = "▶ x1"
+text = "×1"
 
-[node name="Crosshair" type="Label" parent="Root"]
+[node name="AreaLabel" type="Label" parent="Root/Status/Pad/Lines"]
+layout_mode = 2
+mouse_filter = 2
+text = "Campi di Everafter"
+
+[node name="Crosshair" type="Control" parent="Root"]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -16.0
-offset_top = -16.0
-offset_right = 16.0
-offset_bottom = 16.0
+offset_left = -9.0
+offset_top = -9.0
+offset_right = 9.0
+offset_bottom = 9.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-horizontal_alignment = 1
-vertical_alignment = 1
-theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 0.72)
-theme_override_colors/font_outline_color = Color(0.05, 0.04, 0.03, 0.85)
-theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 14
-text = "❖"
 
-[node name="Hint" type="Label" parent="Root"]
+[node name="Ring" type="Panel" parent="Root/Crosshair"]
+layout_mode = 0
+offset_left = 2.0
+offset_top = 2.0
+offset_right = 16.0
+offset_bottom = 16.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_ring")
+
+[node name="Dot" type="Panel" parent="Root/Crosshair"]
+layout_mode = 0
+offset_left = 7.0
+offset_top = 7.0
+offset_right = 11.0
+offset_bottom = 11.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
+
+[node name="Hint" type="PanelContainer" parent="Root"]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -156,16 +122,88 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -330.0
-offset_top = -62.0
+offset_top = -68.0
 offset_right = 330.0
-offset_bottom = -22.0
+offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
-horizontal_alignment = 1
-vertical_alignment = 1
-theme_override_colors/font_color = Color(0.94, 0.9, 0.82, 0.96)
-theme_override_font_sizes/font_size = 14
-theme_override_styles/normal = SubResource("StyleBoxFlat_hint")
-text = "Clic sinistro o F per riprendere il controllo"
-visible = false
+
+[node name="Pad" type="MarginContainer" parent="Root/Hint"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="Root/Hint/Pad"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 7
+
+[node name="KeyF" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "F"
+
+[node name="TextF" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "riprendi il controllo"
+
+[node name="DotA" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "·"
+
+[node name="KeyC" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "C"
+
+[node name="TextC" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "cronache"
+
+[node name="DotB" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "·"
+
+[node name="KeyP" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "P"
+
+[node name="TextP" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "pausa"
+
+[node name="DotC" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "·"
+
+[node name="KeySpeed" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "+ −"
+
+[node name="TextSpeed" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "velocità"
+
+[node name="DotD" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "·"
+
+[node name="KeyM" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "M"
+
+[node name="TextM" type="Label" parent="Root/Hint/Pad/Row"]
+layout_mode = 2
+mouse_filter = 2
+text = "mappa"
