@@ -464,6 +464,7 @@ tests/
     test_paved_surfaces.gd     la pavimentazione esiste, è testurizzata e segue il suolo
   visual/paving_review.tscn    scena di confronto della piazza e delle strade (tasti 1–5)
   visual/vegetation_review.tscn scena di confronto di alberi, cespugli, fiori ed erba (tasti 1–5)
+  visual/composition_review.tscn scena di confronto della composizione del villaggio (tasti 1–6)
 tools/
   check_project.py             verifiche statiche di coerenza del progetto (solo Python 3)
   run_checks.sh                esegue tutti i controlli disponibili
@@ -481,6 +482,7 @@ docs/
   VISUAL_POLISH_15.md          strade curve, piazza composta e superfici calpestabili (Polish 15)
   VISUAL_POLISH_16.md          ricostruzione della vegetazione: alberi, cespugli, fiori, erba (Polish 16)
   VISUAL_POLISH_18.md          alberi ricostruiti (verticilli, scheletro + foglie) e movimento rallentato (Polish 18)
+  VISUAL_POLISH_19.md          composizione artistica e leggibilità del villaggio (Polish 19)
   ROADMAP.md                   fasi successive, criteri di accettazione, rischi
 ```
 
