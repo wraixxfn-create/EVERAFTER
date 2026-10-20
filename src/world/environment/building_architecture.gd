@@ -134,6 +134,19 @@ func _house_variation(
 		cfg.roof_key = "roof_shingle"
 	elif num in [21, 25]:
 		cfg.roof_key = "roof_tile"
+	else:
+		# Visual Polish 20 — più sfumature di copertura: un 12 % di muschio
+		# spontaneo rompe la ripetizione tile→shingle→slate senza toccare le
+		# case-simbolo già fissate sopra. Deterministico su num+v, quindi stabile
+		# tra i salvataggi.
+		var moss_hash := posmod(num * 17 + v * 31, 100)
+		if moss_hash < 12:
+			cfg.roof_key = "roof_moss"
+		elif moss_hash < 18 and base_roof == "roof_tile":
+			cfg.roof_key = "roof_slate"
+	# Variazione cromatica leggermente più ampia: la palette resta identica,
+	# ma la tinta per-vertice evita il “copia-incolla” da distanza media.
+	cfg.tint_shift += float(posmod(num * 29 + v * 7, 5) - 2) * 0.006
 	return cfg
 
 
@@ -510,10 +523,12 @@ func _portal(rect: Rect2, kind: String, frame: Transform3D, masonry: bool) -> vo
 
 
 func _foundation(width: float, depth: float, frame: Transform3D = Transform3D.IDENTITY) -> void:
+	# Visual Polish 20 — zoccolo leggermente interrato (-5 cm) per chiudere il
+	# filo su pendenze senza filo di luce sotto il plinto.
 	_box(
 		"stone_dark",
-		Vector3(width + 0.18, PLINTH, depth + 0.18),
-		Vector3(0.0, PLINTH * 0.5, 0.0),
+		Vector3(width + 0.18, PLINTH + 0.06, depth + 0.18),
+		Vector3(0.0, PLINTH * 0.5 - 0.03, 0.0),
 		frame
 	)
 	# Staggered bonded courses, recessed mortar, and a continuous dressed cap.
@@ -574,8 +589,9 @@ func _entry_hood(face_z: float, top: float, width: float) -> void:
 
 
 func _steps(depth: float, width: float) -> void:
-	_box("stone_dark", Vector3(width + 0.48, 0.14, 0.75), Vector3(0.0, 0.07, depth * 0.5 + 0.3))
-	_box("stone", Vector3(width + 0.26, 0.28, 0.45), Vector3(0.0, 0.14, depth * 0.5 + 0.14))
+	# Interrati di 3 cm come il plinto: i gradini non galleggiano su pendenze.
+	_box("stone_dark", Vector3(width + 0.48, 0.14, 0.75), Vector3(0.0, 0.04, depth * 0.5 + 0.3))
+	_box("stone", Vector3(width + 0.26, 0.28, 0.45), Vector3(0.0, 0.11, depth * 0.5 + 0.14))
 
 
 func _chimney_on_roof(
