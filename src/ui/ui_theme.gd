@@ -8,12 +8,12 @@ extends RefCounted
 ## `DiagnosticsHud` share a cohesive parchment-and-walnut aesthetic instead of
 ## looking like default engine debug widgets.
 
-const BG_PANEL := Color(0.08, 0.065, 0.055, 0.90)
-const BG_HUD := Color(0.08, 0.065, 0.055, 0.82)
-const BG_MODAL := Color(0.07, 0.058, 0.048, 0.95)
-const BG_INSET := Color(0.12, 0.098, 0.082, 0.86)
-const BG_BADGE := Color(0.16, 0.13, 0.10, 0.92)
-const BG_BAR_TRACK := Color(0.13, 0.11, 0.095, 0.95)
+const BG_PANEL := Color(0.075, 0.062, 0.052, 0.94)
+const BG_HUD := Color(0.075, 0.062, 0.052, 0.90)
+const BG_MODAL := Color(0.055, 0.047, 0.039, 0.97)
+const BG_INSET := Color(0.105, 0.087, 0.070, 0.96)
+const BG_BADGE := Color(0.16, 0.13, 0.10, 0.96)
+const BG_BAR_TRACK := Color(0.10, 0.085, 0.072, 0.98)
 
 const BG_BUTTON := Color(0.15, 0.12, 0.095, 0.95)
 const BG_BUTTON_HOVER := Color(0.22, 0.175, 0.13, 0.98)
@@ -51,6 +51,14 @@ static func shared_theme() -> Theme:
 	_configure_popups(theme)
 	_configure_tooltips(theme)
 	_configure_separators(theme)
+	_configure_fields_and_bars(theme)
+	# Consistent dense-information defaults for labels and lists; bespoke title
+	# hierarchy remains applied by the semantic helpers below.
+	theme.set_color("font_color", "Label", TEXT_PARCHMENT)
+	theme.set_color("font_color", "ItemList", TEXT_PARCHMENT)
+	theme.set_color("font_selected_color", "ItemList", TEXT_GOLD)
+	theme.set_color("font_hovered_color", "ItemList", TEXT_GOLD)
+	theme.set_stylebox("focus", "LineEdit", make_inset_style(BG_INSET, BORDER_GOLD_BRIGHT, 4, 8.0, 5.0))
 	_shared_theme = theme
 	return _shared_theme
 
@@ -288,4 +296,25 @@ static func _configure_separators(theme: Theme) -> void:
 	sep.content_margin_top = 1.0
 	sep.content_margin_bottom = 1.0
 	theme.set_stylebox("separator", "HSeparator", sep)
-	theme.set_constant("separation", "HSeparator", 6)
+	theme.set_constant("separation", "HSeparator", 8)
+
+
+static func _configure_fields_and_bars(theme: Theme) -> void:
+	var field := make_inset_style(BG_INSET, BORDER_SUBTLE, 4, 8.0, 5.0)
+	var field_focus := make_inset_style(BG_INSET, BORDER_GOLD_BRIGHT, 4, 8.0, 5.0)
+	var bar_track := make_inset_style(BG_BAR_TRACK, BORDER_SUBTLE, 4, 2.0, 2.0)
+	var bar_fill := make_bar_fill_style(TEXT_GOOD)
+	for control_type in ["LineEdit", "TextEdit"]:
+		theme.set_stylebox("normal", control_type, field)
+		theme.set_stylebox("focus", control_type, field_focus)
+		theme.set_color("font_color", control_type, TEXT_PARCHMENT)
+		theme.set_color("font_placeholder_color", control_type, TEXT_MUTED)
+		theme.set_color("caret_color", control_type, TEXT_GOLD)
+	for control_type in ["ProgressBar"]:
+		theme.set_stylebox("background", control_type, bar_track)
+		theme.set_stylebox("fill", control_type, bar_fill)
+		theme.set_color("font_color", control_type, TEXT_PARCHMENT)
+	# A restrained hover lift: brighter brass edge, not glow or animation.
+	var active := make_inset_style(BG_BUTTON_ACTIVE, BORDER_GOLD_BRIGHT, 5, 10.0, 6.0)
+	theme.set_stylebox("pressed", "Button", active)
+	theme.set_stylebox("hover", "OptionButton", make_inset_style(BG_BUTTON_HOVER, BORDER_GOLD_BRIGHT, 5, 10.0, 6.0))

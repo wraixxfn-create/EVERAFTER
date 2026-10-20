@@ -47,6 +47,8 @@ var _confirm_save: bool = false
 func _ready() -> void:
 	set_layer(8)
 	_build_ui()
+	_resize_modal()
+	get_viewport().size_changed.connect(_resize_modal)
 	EventBus.save_performed.connect(_on_save_performed)
 	_refresh()
 
@@ -71,7 +73,20 @@ func is_panel_open() -> bool:
 	return _visible
 
 
+func _resize_modal() -> void:
+	if _panel == null or get_viewport() == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var width := minf(PANEL_WIDTH, maxf(300.0, viewport_size.x - 32.0))
+	var height := minf(PANEL_HEIGHT, maxf(300.0, viewport_size.y - 32.0))
+	_panel.offset_left = -width * 0.5
+	_panel.offset_right = width * 0.5
+	_panel.offset_top = -height * 0.5
+	_panel.offset_bottom = height * 0.5
+
+
 func _show_panel() -> void:
+	_resize_modal()
 	_visible = true
 	_root.visible = true
 	# Clear stale feedback only when the panel opens: `_refresh()` also runs
