@@ -416,8 +416,11 @@ func _build_fence(baker: MeshBaker) -> void:
 			Color.WHITE.darkened(rng.randf_range(0.0, 0.04)),
 			0.04
 		)
+	var rail_heights: Array[float] = [0.55, 0.95]
 	for idx in 2:
-		var height := [0.55, 0.95][idx]
+		# Explicitly typed array: indexing an untyped literal returns a Variant,
+		# which Godot refuses to use as the source of a `:=` inference.
+		var height := rail_heights[idx]
 		var rail_w := 3.0 + rng.randf_range(-0.04, 0.04)
 		baker.add_box(
 			"timber_warm",
