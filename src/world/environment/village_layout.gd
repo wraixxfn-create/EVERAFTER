@@ -121,6 +121,18 @@ const ROAD_MOUTH_BLEND := 24.0
 ## polyline: one plot every nine metres, never on consecutive segments.
 const ROAD_PLOT_SPACING := 9.0
 const ROAD_PLOT_START := 16.0
+## Visual polish 19 — which side of the street the first plot
+## stands on, per road. On the roads whose approach otherwise
+## walls the square (the spawn road and the north-east road),
+## the first plot stands on the outer side, so the walk in
+## ends on an open view of the plaza and its landmarks instead
+## of a gable.
+const PLOT_START_SIDE := [1.0, -1.0, -1.0]
+## Visual polish 19 — the first plot beside every road mouth is
+## a wood yard, not a house: the street opens onto the square
+## and the village edge reads as a yard. A log pile is low
+## enough to see over.
+const PLOT_MOUTH_YARD_DEPTH := 6.0
 const PLOT_FALLOFF := 2.6
 ## Compass bearings (degrees, 0 = +X, counter-clockwise in XZ) of the three
 ## roads leaving the plaza. The plaza ring buildings sit between them.
@@ -128,6 +140,41 @@ const ROAD_BEARINGS_DEG := [270.0, 30.0, 150.0]
 const POND_RADIUS := 8.5
 const POND_DEPTH := 0.085
 const POND_FALLOFF := 5.0
+## Visual polish 19 — composed sightlines. A road is not just
+## a path; it is a frame for what it arrives at. Tall
+## vegetation keeps clear of the axis from the pond to the
+## square, of the chords from each road's far end to the
+## square, and of the arrival sightlines from the two points
+## along each road where the square opens into view (the
+## plaza, the inn, the hall and its belfry). The allowances
+## cover a crown radius, so the whole silhouette stays clear.
+const POND_VISTA_HALF_WIDTH := 5.0
+const ROAD_VISTA_HALF_WIDTH := 4.5
+const ARRIVAL_DISTANCES := [22.0, 45.0]
+const ARRIVAL_CORRIDOR_HALF_WIDTH := 3.2
+const ARRIVAL_CROWN_ALLOWANCE := 2.2
+## The hall's ring bearing and the belfry's offset on its
+## local -X face, used to protect the tower's sightline.
+const HALL_BEARING_DEG := 210.0
+const HALL_RING_RADIUS := 18.5
+const BELFRY_LOCAL_X := -5.4
+## Visual polish 19 — composed tree knots in the angular
+## sectors the random passes leave empty, so the village
+## silhouette from the plaza reads all the way around instead
+## of in arcs. Azimuth follows the compass convention of the
+## layout review: 0 degrees faces +Z (the inn), 90 faces +X.
+## Members are [azimuth offset deg, radial offset m, kind],
+## and each knot tries a small lateral step before giving up
+## on its centre, because the scatter pass owns the same
+## band and a knot that lands on a scatter bush would lose
+## its crown to an overlap rejection.
+const VISTA_KNOTS := [
+	[100.0, 36.0, [[0.0, 0.0, KIND_TREE_OAK], [-11.0, 3.6, KIND_TREE_PINE]]],
+	[142.0, 33.0, [[0.0, 0.0, KIND_TREE_OAK], [12.0, 3.5, KIND_TREE_BIRCH]]],
+	[222.0, 36.0, [[0.0, 0.0, KIND_TREE_PINE], [11.0, 3.6, KIND_TREE_OAK]]],
+	[258.0, 36.0, [[0.0, 0.0, KIND_TREE_OAK], [-10.0, 3.5, KIND_TREE_BIRCH]]],
+	[335.0, 28.0, [[0.0, 0.0, KIND_TREE_BIRCH], [9.0, 3.5, KIND_TREE_OAK]]],
+]
 
 ## One object to place in the world.
 class Placement extends RefCounted:
@@ -183,6 +230,7 @@ func _init(initial_seed: int = 0, initial_half_extent: float = 63.5) -> void:
 	_build_road_details()
 	_build_pond()
 	_build_field_fence()
+	_build_vista_knots()
 	_build_forest()
 	_build_scatter()
 	_build_meadow_flowers()
@@ -404,11 +452,15 @@ func _build_plaza_landmarks() -> void:
 	_add_ring(KIND_HALL, 210.0, 18.5, 0, 1.0, 6.5)
 	_add_ring(KIND_HOUSE, 330.0, 15.5, 0, 1.0, 3.6)
 	_add_ring(KIND_HOUSE, 5.0, 16.0, 1, 1.0, 3.6)
-	# Market row: stalls now distributed across two plaza sectors so the
-	# market does not read as a single clump east of the inn — structural
-	# composition fix 11: even skyline, more readable from aerial.
-	_add_ring(KIND_STALL, 48.0, 14.0, 0, 1.0, 2.4)
-	_add_ring(KIND_STALL, 64.0, 14.6, 1, 1.0, 2.4)
+	# Market row: three stalls on a regular arc across two plaza
+	# sectors, so the market reads as a row with a gap instead of
+	# one stall by the inn and one lonely stall across the square.
+	# Visual polish 19: the middle stall of the old arc sat 16 degrees
+	# from its neighbour — 3.9 m at this radius, under the 4.4 m two
+	# stalls need — so the overlap rule silently dropped it and the
+	# row never existed. 22 degrees of separation places all three.
+	_add_ring(KIND_STALL, 44.0, 15.5, 0, 1.0, 2.4)
+	_add_ring(KIND_STALL, 63.0, 16.0, 1, 1.0, 2.4)
 	_add_ring(KIND_STALL, 286.0, 14.3, 2, 1.0, 2.4)
 	_add_ring(KIND_SIGNPOST, 178.0, 12.4, 0, 1.0, 1.0)
 	_add_ring(KIND_BARREL, 108.0, 13.2, 0, 1.0, 0.8)
@@ -420,6 +472,15 @@ func _build_plaza_landmarks() -> void:
 	_add_ring(KIND_BENCH, 252.0, 10.4, 0, 1.0, 1.1)
 	_add_ring(KIND_FLOWER_BOX, 58.0, 10.8, 0, 1.0, 0.9)
 	_add_ring(KIND_FLOWER_BOX, 135.0, 11.8, 0, 1.0, 0.9)
+	# Visual polish 19 — the south-west rim, the hall side of the
+	# square, carried nothing but benches, so the plaza read as a
+	# market corner and an empty lawn. One bench facing the well and
+	# two planters dress the civic arc between the hall and the west
+	# road mouth. All three sit between the road mouths, so the
+	# carriageways stay open, and outside the hall's door corridor.
+	_add_ring(KIND_BENCH, 232.0, 10.5, 0, 1.0, 1.1)
+	_add_ring(KIND_FLOWER_BOX, 198.0, 11.4, 0, 1.0, 0.9)
+	_add_ring(KIND_FLOWER_BOX, 244.0, 11.6, 0, 1.0, 0.9)
 
 
 ## Houses along the roads, alternating sides, always facing the road.
@@ -429,9 +490,11 @@ func _build_plaza_landmarks() -> void:
 ## verge. Alternating sides and a small along-track jitter keep the row from
 ## reading as a measured colonnade of identical plots.
 func _build_road_plots() -> void:
-	for road in roads:
+	for road_index in roads.size():
+		var road := roads[road_index]
 		var length := polyline_length(road)
-		var side := 1.0
+		var side := PLOT_START_SIDE[road_index]
+		var last_was_logpile := false
 		var distance := ROAD_PLOT_START
 		while distance < length - 4.0:
 			var sample := sample_polyline(road, distance + _rng.randf_range(-1.4, 1.4))
@@ -446,7 +509,15 @@ func _build_road_plots() -> void:
 					atan2(at.x - position.x, at.y - position.y)
 				)
 				var kind := KIND_HOUSE
-				if _rng.randf() < 0.22:
+				if _rng.randf() < 0.22 and not last_was_logpile:
+					kind = KIND_LOGPILE
+				last_was_logpile = kind == KIND_LOGPILE
+				if distance < ROAD_PLOT_START + PLOT_MOUTH_YARD_DEPTH:
+					# Visual polish 19 — the village edge is a
+					# yard: the first plot beside every road
+					# mouth is a wood pile, so the street opens
+					# onto the square instead of into a gable.
+					# A log pile is low enough to see over.
 					kind = KIND_LOGPILE
 				_add_placement(
 					kind,
@@ -521,9 +592,34 @@ func _build_road_details() -> void:
 			var outward := Vector2(-along.y, along.x)
 			var at: Vector2 = sample.point
 			side = -side
-			if _rng.randf() < 0.82:
+			var lamp_roll := _rng.randf()
+			# Visual polish 19 — the first street-furniture
+			# slot of every road always tries a lamp: it
+			# is the light that marks the road mouth, the
+			# gate of the village. The roll still happens,
+			# so the stream is unchanged.
+			if lamp_roll < 0.82 or distance < ROAD_PLOT_START:
 				var lamp_out := ROAD_WIDTH * 0.5 + _rng.randf_range(0.9, 1.5)
 				var position := at + outward * lamp_out * side
+				if _prop_stands_clear(position, 0.7):
+					# Visual polish 19 — the kerb is taken by
+					# a plot's yard: the lamp crosses to the
+					# other side instead of disappearing.
+					# Street lighting is part of a road's
+					# identity.
+					position = at - outward * lamp_out * side
+				var retries := 0
+				while _prop_stands_clear(position, 0.7) \
+						and retries < 6:
+					# Both kerbs are taken at this point:
+					# the lamp walks a little further up
+					# the street until it finds a clear
+					# one, instead of vanishing. No random
+					# draw, so the stream is unchanged.
+					retries += 1
+					var moved := sample_polyline(
+						road, distance + float(retries) * 4.0)
+					position = moved.point + outward * lamp_out * side
 				if position.length() <= half_extent - 8.0:
 					_add_placement(KIND_LAMP, position, 0.0, 0, 1.0, 0.7)
 			if _rng.randf() < 0.3:
@@ -613,6 +709,51 @@ func _build_field_fence() -> void:
 			KIND_FENCE, position, rad_to_deg(atan2(turn.x, turn.y)), 0, 1.0, 1.5
 		)
 
+
+## Visual polish 19 — composed tree knots in the angular sectors
+## the random passes leave empty, so the village silhouette from
+## the plaza reads all the way around instead of in arcs. The knots
+## are placed before the forest and the scatter, so the deliberate
+## composition wins the ground and the random passes fill around it.
+func _build_vista_knots() -> void:
+	for knot in VISTA_KNOTS:
+		var azimuth := deg_to_rad(float(knot[0]))
+		var distance := float(knot[1])
+		var center := Vector2(sin(azimuth), cos(azimuth)) * distance
+		var radial := center / distance
+		var lateral := Vector2(-radial.y, radial.x)
+		# The scatter pass owns the same band, so a knot that
+		# lands on a scatter bush tries a small lateral step
+		# before giving up on its centre.
+		var candidates := [
+			center,
+			center + lateral * 3.5,
+			center - lateral * 3.5
+		]
+		for candidate in candidates:
+			var placed_any := false
+			for member in knot[2]:
+				var spread := deg_to_rad(float(knot[0]) + float(member[0]))
+				var position := candidate \
+					+ Vector2(sin(spread), cos(spread)) * float(member[1])
+				var kind := String(member[2])
+				if TREE_KINDS.has(kind) and (
+					_in_pond_vista(position) or _in_road_vista(position)
+				):
+					continue
+				var before := placements.size()
+				_add_placement(
+					kind,
+					position,
+					_rng.randf_range(0.0, 360.0),
+					_rng.randi_range(0, 2),
+					_rng.randf_range(0.85, 1.15),
+					1.6 if TREE_KINDS.has(kind) else 1.0
+				)
+				if placements.size() > before:
+					placed_any = true
+			if placed_any:
+				break
 
 func _build_forest() -> void:
 	var target := int(half_extent * 3.4)
@@ -762,6 +903,16 @@ func _build_scatter() -> void:
 			elif roll < 0.70:
 				kind = KIND_ROCK
 				footprint = 0.9
+			# Visual polish 19 — two composed corridors the
+			# random scatter must leave open, so the village
+			# reads from its two best viewpoints: the pond
+			# shore (the square on its axis) and each road's
+			# far end (the street arriving home). Low shrubs
+			# and stones stay: they frame without screening.
+			if TREE_KINDS.has(kind) and _in_pond_vista(position):
+				continue
+			if TREE_KINDS.has(kind) and _in_road_vista(position):
+				continue
 			_add_placement(
 				kind,
 				position,
@@ -838,6 +989,79 @@ func _build_meadow_flowers() -> void:
 		)
 
 
+## Visual polish 19 — true inside the kept-open axis from the
+## pond to the square: a crown on the axis screens the whole
+## plaza from the shore.
+func _in_pond_vista(point: Vector2) -> bool:
+	return _segment_near(point, pond_center, Vector2.ZERO,
+		POND_VISTA_HALF_WIDTH)
+
+## Visual polish 19 — true inside the kept-open chords from
+## each road's far end to the square, so every street reads
+## as a corridor that arrives at the village centre.
+func _in_road_vista(point: Vector2) -> bool:
+	for road in roads:
+		if _segment_near(point, Vector2.ZERO, road[road.size() - 1],
+			ROAD_VISTA_HALF_WIDTH):
+			return true
+	return false
+
+## Visual polish 19 — true when [param point] stands in one of
+## the arrival sightlines: the segments from the two points
+## along each road where the square opens into view to the
+## plaza, the inn, the hall and its belfry.
+func _blocks_arrival_sightline(point: Vector2) -> bool:
+	for road_index in roads.size():
+		for distance in ARRIVAL_DISTANCES:
+			var arrival := point_on_road(road_index, distance)
+			for target in _arrival_targets():
+				if _segment_near(point, arrival, target,
+					ARRIVAL_CORRIDOR_HALF_WIDTH + ARRIVAL_CROWN_ALLOWANCE):
+					return true
+	return false
+
+## The landmarks a walk up a road should reveal: the well at
+## the centre, the inn, the hall and the hall's belfry tower
+## (the tallest silhouette in the village, on the hall's
+## local -X face).
+func _arrival_targets() -> Array:
+	var hall_bearing := deg_to_rad(HALL_BEARING_DEG)
+	var hall_position := Vector2(cos(hall_bearing), sin(hall_bearing)) \
+		* HALL_RING_RADIUS
+	var hall_yaw := atan2(-hall_position.x, -hall_position.y)
+	var belfry := hall_position + Vector2(
+		BELFRY_LOCAL_X * cos(hall_yaw),
+		-BELFRY_LOCAL_X * sin(hall_yaw)
+	)
+	return [Vector2.ZERO,
+		_ring_position(90.0, 17.5),
+		hall_position,
+		belfry]
+
+## Ring-building position at a bearing, shared by the plaza
+## landmarks and the arrival sightline maths.
+static func _ring_position(bearing_deg: float, radius: float) -> Vector2:
+	var bearing := deg_to_rad(bearing_deg)
+	return Vector2(cos(bearing), sin(bearing)) * radius
+
+## True when [param point] lies within [param half_width] of
+## the segment [param start] -> [param end].
+static func _segment_near(
+	point: Vector2, start: Vector2, end: Vector2, half_width: float
+) -> bool:
+	var span := end - start
+	var length_sq := span.length_squared()
+	if length_sq <= 0.0001:
+		return point.distance_to(start) < half_width
+	var t := clampf((point - start).dot(span) / length_sq, 0.0, 1.0)
+	return point.distance_to(start + span * t) < half_width
+
+## True when a prop of [param extent] would be rejected for
+## overlap or for standing in a doorway: used by the lamp
+## placer to try the opposite kerb before giving up.
+func _prop_stands_clear(position: Vector2, extent: float) -> bool:
+	return _overlaps(position, extent) or _blocks_a_doorway(position, extent)
+
 ## True inside a glade (plus a margin). Glades are kept clear of trunks and of
 ## the understorey, so they read as open grass rather than as thinner woods.
 func _in_forest_clearing(point: Vector2, margin: float) -> bool:
@@ -905,6 +1129,12 @@ func _add_placement(
 	# in the doorway corridor of a building, whichever pass wanted it there.
 	# Tall vegetation keeps a longer sightline than a crate or a barrel.
 	if _blocks_a_doorway(position, extent, kind):
+		return
+	# Visual polish 19 — arrival sightlines: a crown on the
+	# line from a road's arrival point to a landmark screens
+	# that landmark from everyone walking in, exactly the
+	# way a trunk in a doorway corridor does.
+	if TREE_KINDS.has(kind) and _blocks_arrival_sightline(position):
 		return
 	if ROAD_CLEARING_KINDS.has(kind):
 		# Keep the carriageway walkable, and give trees a real verge: a trunk at
