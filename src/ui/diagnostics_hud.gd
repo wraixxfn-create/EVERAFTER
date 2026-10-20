@@ -1,12 +1,15 @@
 extends CanvasLayer
 ## DiagnosticsHud — the diagnostic overlay toggled with `F1`.
 ##
-## Positioned at the top-centre of the screen so it never overlaps `WorldHud`
-## or `EconomyPanel` on the left, nor `NpcPanel` on the right. Read-only by
-## design: it never mutates the simulation, it only reads the `Game` autoload
-## and listens to `EventBus`.
+## A small, deliberately technical card at the top-centre, styled like a plate
+## riveted onto the interface rather than like a game panel: an overline title,
+## monospaced figures, and a single line of state. It never overlaps `WorldHud`
+## or `EconomyPanel` on the left, nor `NpcPanel` on the right.
+##
+## Read-only by design: it reads the `Game` autoload and listens to `EventBus`;
+## it never mutates the simulation.
 
-const TITLE_FORMAT := "%s  ·  %s"
+const CARD_WIDTH := 380.0
 
 var _status_text := "Avvio in corso…"
 
@@ -22,12 +25,22 @@ var _status_text := "Avvio in corso…"
 
 func _ready() -> void:
 	_panel.theme = UiTheme.shared_theme()
-	UiTheme.style_title_label(_title_label, 15)
+	_panel.add_theme_stylebox_override(
+		"panel",
+		UiTheme.make_panel_style(UiTheme.BG_HUD, UiTheme.BORDER_SUBTLE, UiTheme.PANEL_RADIUS, 16.0, 14.0)
+	)
+	UiTheme.style_section_label(_title_label, 10)
+	for row in [_day_label, _time_label, _sim_label, _phase_label, _perf_label]:
+		row.add_theme_font_override("font", UiTheme.mono_font())
+		row.add_theme_font_size_override("font_size", 11)
+		row.add_theme_color_override("font_color", UiTheme.TEXT_SECONDARY)
+	UiTheme.style_body_label(_status_label, 11, UiTheme.TEXT_MUTED)
 	EventBus.day_advanced.connect(_on_day_advanced)
 	EventBus.time_scale_changed.connect(_on_time_scale_changed)
 	EventBus.simulation_paused_changed.connect(_on_paused_changed)
 	EventBus.world_ready.connect(_on_world_ready)
 	_refresh()
+	_fit.call_deferred()
 
 
 func _process(_delta: float) -> void:
@@ -39,11 +52,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		visible = not visible
 
 
+## Sizes the plate from its own content.
+func _fit() -> void:
+	if not is_inside_tree():
+		return
+	_panel.offset_left = -CARD_WIDTH * 0.5
+	_panel.offset_right = CARD_WIDTH * 0.5
+	_panel.offset_top = UiTheme.SCREEN_MARGIN
+	_panel.offset_bottom = _panel.offset_top + _panel.get_combined_minimum_size().y
+
+
 func _refresh() -> void:
-	_title_label.text = TITLE_FORMAT % [Game.config.project_title, Game.config.build_label]
+	_title_label.text = "%s · DIAGNOSTICA" % Game.config.build_label
 	_day_label.text = "Giorno simulato: %d" % Game.get_day()
 	_time_label.text = "Ora del mondo: %s" % Game.get_time_text()
-	_sim_label.text = "Tick: %d  ·  Velocità: %s" % [Game.get_tick(), _speed_text()]
+	_sim_label.text = "Tick: %d · Velocità: %s" % [Game.get_tick(), _speed_text()]
 	_phase_label.text = "Fase: %s" % Game.get_day_phase_name()
 	_perf_label.text = "FPS: %d" % int(Engine.get_frames_per_second())
 	_status_label.text = _status_text

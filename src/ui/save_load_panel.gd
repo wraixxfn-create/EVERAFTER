@@ -13,8 +13,8 @@ extends CanvasLayer
 ## never drives the simulation; it only calls `Game.request_save()` and reads
 ## state from `Game` / `ChronicleBook`.
 
-const PANEL_WIDTH := 560
-const PANEL_HEIGHT := 640
+const PANEL_WIDTH := 620
+const PANEL_HEIGHT := 680
 const ENTRIES_PER_PAGE := 200
 
 const CATEGORY_COLORS := {
@@ -110,7 +110,7 @@ func _build_ui() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.02, 0.02, 0.02, 0.62)
+	bg.color = Color(0.018, 0.017, 0.015, 0.66)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	bg.gui_input.connect(_on_background_input)
 	_root.add_child(bg)
@@ -129,13 +129,13 @@ func _build_ui() -> void:
 	_panel.add_theme_stylebox_override(
 		"panel",
 		UiTheme.make_panel_style(
-			UiTheme.BG_MODAL, UiTheme.BORDER_GOLD_BRIGHT, 8, 18.0, 16.0
+			UiTheme.BG_MODAL, UiTheme.BORDER_BRASS, 8, 24.0, 20.0
 		)
 	)
 	_root.add_child(_panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 14)
 	_panel.add_child(vbox)
 
 	_build_header_section(vbox)
@@ -153,14 +153,18 @@ func _build_ui() -> void:
 
 
 func _build_header_section(vbox: VBoxContainer) -> void:
+	var overline := Label.new()
+	overline.text = "ARCHIVIO DEL VILLAGGIO"
+	UiTheme.style_section_label(overline, 10)
+	vbox.add_child(overline)
+
 	var title := Label.new()
-	title.text = "CRONACHE DEL VILLAGGIO E SALVATAGGIO"
-	UiTheme.style_title_label(title, 17)
+	title.text = "Cronache e salvataggio"
+	UiTheme.style_title_label(title, 22, UiTheme.TEXT_PARCHMENT)
 	vbox.add_child(title)
 
 	_save_status_label = Label.new()
-	_save_status_label.add_theme_font_size_override("font_size", 12)
-	_save_status_label.add_theme_color_override("font_color", UiTheme.TEXT_SECONDARY)
+	UiTheme.style_body_label(_save_status_label, 11, UiTheme.TEXT_MUTED)
 	_save_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(_save_status_label)
 	vbox.add_child(HSeparator.new())
@@ -171,9 +175,8 @@ func _build_filter_row(vbox: VBoxContainer) -> void:
 	filter_row.add_theme_constant_override("separation", 10)
 	vbox.add_child(filter_row)
 	var cat_label := Label.new()
-	cat_label.text = "Categoria:"
-	cat_label.add_theme_font_size_override("font_size", 12)
-	cat_label.add_theme_color_override("font_color", UiTheme.TEXT_GOLD)
+	cat_label.text = "CATEGORIA"
+	UiTheme.style_overline_label(cat_label)
 	filter_row.add_child(cat_label)
 
 	_category_button = OptionButton.new()
@@ -198,9 +201,8 @@ func _build_filter_row(vbox: VBoxContainer) -> void:
 	filter_row.add_child(_category_button)
 
 	var day_label := Label.new()
-	day_label.text = "Periodo:"
-	day_label.add_theme_font_size_override("font_size", 12)
-	day_label.add_theme_color_override("font_color", UiTheme.TEXT_GOLD)
+	day_label.text = "PERIODO"
+	UiTheme.style_overline_label(day_label)
 	filter_row.add_child(day_label)
 
 	_day_button = OptionButton.new()
@@ -217,7 +219,7 @@ func _build_chronicle_area(vbox: VBoxContainer) -> void:
 	var ledger_box := PanelContainer.new()
 	ledger_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	ledger_box.add_theme_stylebox_override(
-		"panel", UiTheme.make_inset_style(UiTheme.BG_INSET, UiTheme.BORDER_SUBTLE, 6, 10.0, 8.0)
+		"panel", UiTheme.make_inset_style(UiTheme.BG_INSET, UiTheme.BORDER_SUBTLE, 5, 8.0, 8.0)
 	)
 	vbox.add_child(ledger_box)
 
@@ -228,22 +230,23 @@ func _build_chronicle_area(vbox: VBoxContainer) -> void:
 
 	_entries_container = VBoxContainer.new()
 	_entries_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_entries_container.add_theme_constant_override("separation", 5)
+	_entries_container.add_theme_constant_override("separation", 4)
 	scroll.add_child(_entries_container)
 
 	_message_label = Label.new()
-	_message_label.add_theme_font_size_override("font_size", 13)
-	_message_label.add_theme_color_override("font_color", UiTheme.TEXT_GOLD)
+	UiTheme.style_body_label(_message_label, 12, UiTheme.TEXT_GOLD)
 	_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(_message_label)
 
 
 func _build_footer_buttons(vbox: VBoxContainer) -> void:
+	vbox.add_child(HSeparator.new())
 	var btn_row := HBoxContainer.new()
 	btn_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(btn_row)
 	_save_button = Button.new()
 	_save_button.text = "Salva adesso"
+	UiTheme.style_primary_button(_save_button)
 	_save_button.tooltip_text = "Salva subito lo stato del villaggio, degli abitanti e della cronaca."
 	_save_button.pressed.connect(_on_save_pressed)
 	btn_row.add_child(_save_button)
@@ -261,7 +264,7 @@ func _build_footer_buttons(vbox: VBoxContainer) -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_row.add_child(spacer)
 	var close_button := Button.new()
-	close_button.text = "Chiudi (Esc)"
+	close_button.text = "Chiudi  Esc"
 	close_button.tooltip_text = "Chiude il pannello e torna al villaggio."
 	close_button.pressed.connect(_hide_panel)
 	btn_row.add_child(close_button)
@@ -308,32 +311,28 @@ func _refresh_entries() -> void:
 	if entries.is_empty():
 		var empty := Label.new()
 		empty.text = "Nessun evento registrato per i filtri selezionati."
-		empty.add_theme_font_size_override("font_size", 13)
-		empty.add_theme_color_override("font_color", UiTheme.TEXT_MUTED)
+		UiTheme.style_body_label(empty, 12, UiTheme.TEXT_MUTED)
 		_entries_container.add_child(empty)
 		return
 	for e in entries:
-		var line := Label.new()
-		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		line.add_theme_font_size_override("font_size", 12)
 		var color := _color_for_category(e.category)
-		line.add_theme_color_override("font_color", color)
-		var row_style := StyleBoxFlat.new()
-		row_style.bg_color = Color(0.15, 0.12, 0.095, 0.55)
-		row_style.border_width_left = 3
-		row_style.border_color = color
-		row_style.corner_radius_top_right = 4
-		row_style.corner_radius_bottom_right = 4
-		row_style.content_margin_left = 8.0
-		row_style.content_margin_right = 6.0
-		row_style.content_margin_top = 4.0
-		row_style.content_margin_bottom = 4.0
-		line.add_theme_stylebox_override("normal", row_style)
+		var row := PanelContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_theme_stylebox_override("panel", UiTheme.make_accent_row_style(color))
+		_entries_container.add_child(row)
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 2)
+		row.add_child(box)
+		var summary := Label.new()
+		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		summary.text = e.summary
+		UiTheme.style_body_label(summary, 12, UiTheme.TEXT_PARCHMENT)
+		box.add_child(summary)
+		var meta := Label.new()
 		var time_str := SimulationClock.format_minutes(e.minute_of_day)
-		line.text = "Giorno %d, %s · [%s] %s" % [
-			e.day, time_str, e.category_label(), e.summary
-		]
-		_entries_container.add_child(line)
+		meta.text = "Giorno %d · %s · %s" % [e.day, time_str, e.category_label()]
+		UiTheme.style_body_label(meta, 10, UiTheme.TEXT_MUTED)
+		box.add_child(meta)
 
 
 func _color_for_category(cat: int) -> Color:

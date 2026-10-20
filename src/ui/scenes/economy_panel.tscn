@@ -1,25 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://src/ui/economy_panel.gd" id="1_ecopanel"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ecopanel"]
-content_margin_left = 14.0
-content_margin_top = 12.0
-content_margin_right = 14.0
-content_margin_bottom = 12.0
-bg_color = Color(0.08, 0.065, 0.055, 0.88)
-border_width_left = 1
-border_width_top = 2
-border_width_right = 1
-border_width_bottom = 2
-border_color = Color(0.66, 0.53, 0.3, 0.85)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-shadow_color = Color(0, 0, 0, 0.36)
-shadow_size = 6
-shadow_offset = Vector2(0, 2)
 
 [node name="EconomyPanel" type="CanvasLayer"]
 layer = 6
@@ -36,195 +17,156 @@ mouse_filter = 2
 
 [node name="Panel" type="PanelContainer" parent="Root"]
 layout_mode = 0
-offset_left = 20.0
-offset_top = 138.0
-offset_right = 376.0
-offset_bottom = 498.0
+offset_left = 24.0
+offset_top = 184.0
+offset_right = 336.0
+offset_bottom = 520.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_ecopanel")
 
 [node name="Margin" type="MarginContainer" parent="Root/Panel"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/margin_left = 2
-theme_override_constants/margin_top = 0
-theme_override_constants/margin_right = 2
-theme_override_constants/margin_bottom = 0
 
 [node name="Lines" type="VBoxContainer" parent="Root/Panel/Margin"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 10
 
 [node name="HeaderLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
-theme_override_font_sizes/font_size = 15
-text = "ECONOMIA DEL VILLAGGIO"
+text = "ECONOMIA"
 
 [node name="SubtitleLabel" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.78, 0.75, 0.66, 1)
-theme_override_font_sizes/font_size = 12
-text = "Scorte comuni · Bilancio del periodo (+prod / -cons)"
+text = "Scorte comuni e bilancio del periodo"
+autowrap_mode = 2
+
+[node name="RuleA" type="HSeparator" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
 
 [node name="ResourceGrid" type="GridContainer" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/h_separation = 10
-theme_override_constants/v_separation = 4
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
 columns = 3
 
 [node name="FoodName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(96, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 1
 tooltip_text = "Cibo: prezzo base 2 Monete · Soglia di carenza < 8 unità"
-theme_override_colors/font_color = Color(0.92, 0.86, 0.68, 1)
-theme_override_font_sizes/font_size = 13
-text = "◆ Cibo"
+text = "Cibo"
 
 [node name="FoodAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(48, 0)
+custom_minimum_size = Vector2(52, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.94, 0.86, 1)
-theme_override_font_sizes/font_size = 14
 text = "0"
 horizontal_alignment = 2
 
 [node name="FoodFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(146, 0)
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.74, 0.82, 0.72, 1)
-theme_override_font_sizes/font_size = 12
 text = "+0 / -0"
 horizontal_alignment = 2
 
 [node name="WoodName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(96, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 1
 tooltip_text = "Legno: prezzo base 3 Monete · Soglia di carenza < 4 unità"
-theme_override_colors/font_color = Color(0.86, 0.74, 0.58, 1)
-theme_override_font_sizes/font_size = 13
-text = "◆ Legno"
+text = "Legno"
 
 [node name="WoodAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(48, 0)
+custom_minimum_size = Vector2(52, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.94, 0.86, 1)
-theme_override_font_sizes/font_size = 14
 text = "0"
 horizontal_alignment = 2
 
 [node name="WoodFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(146, 0)
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.74, 0.82, 0.72, 1)
-theme_override_font_sizes/font_size = 12
 text = "+0 / -0"
 horizontal_alignment = 2
 
 [node name="StoneName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(96, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 1
-tooltip_text = "Pietra: prezzo base 4 Monete · Soglia di carenza < 4 unità"
-theme_override_colors/font_color = Color(0.82, 0.82, 0.8, 1)
-theme_override_font_sizes/font_size = 13
-text = "◆ Pietra"
+tooltip_text = "Pietra: prezzo base 3 Monete · Soglia di carenza < 4 unità"
+text = "Pietra"
 
 [node name="StoneAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(48, 0)
+custom_minimum_size = Vector2(52, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.94, 0.86, 1)
-theme_override_font_sizes/font_size = 14
 text = "0"
 horizontal_alignment = 2
 
 [node name="StoneFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(146, 0)
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.74, 0.82, 0.72, 1)
-theme_override_font_sizes/font_size = 12
 text = "+0 / -0"
 horizontal_alignment = 2
 
 [node name="CoinName" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(96, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 1
-tooltip_text = "Moneta: cassa comune del villaggio per compensi, scambi e progetti"
-theme_override_colors/font_color = Color(0.96, 0.86, 0.56, 1)
-theme_override_font_sizes/font_size = 13
-text = "◈ Moneta"
+tooltip_text = "Moneta: fondo del mercato e riserva del villaggio"
+text = "Moneta"
 
 [node name="CoinAmount" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(48, 0)
+custom_minimum_size = Vector2(52, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.88, 0.62, 1)
-theme_override_font_sizes/font_size = 14
 text = "0"
 horizontal_alignment = 2
 
 [node name="CoinFlow" type="Label" parent="Root/Panel/Margin/Lines/ResourceGrid"]
-custom_minimum_size = Vector2(146, 0)
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.84, 0.8, 0.68, 1)
-theme_override_font_sizes/font_size = 12
-text = "Mercato: 0"
+text = "—"
 horizontal_alignment = 2
 
-[node name="Separator1" type="HSeparator" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 4)
+[node name="RuleB" type="HSeparator" parent="Root/Panel/Margin/Lines"]
+layout_mode = 2
+
+[node name="StatusBlock" type="VBoxContainer" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
-[node name="ProjectsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
+[node name="ShortagesLabel" type="Label" parent="Root/Panel/Margin/Lines/StatusBlock"]
 layout_mode = 2
-mouse_filter = 1
-tooltip_text = "I progetti comunitari vengono finanziati alle 18:00 quando il magazzino supera la riserva di sicurezza."
+mouse_filter = 2
+text = "Carenze: —"
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.86, 0.84, 0.76, 1)
-theme_override_font_sizes/font_size = 12
+
+[node name="ProjectsLabel" type="Label" parent="Root/Panel/Margin/Lines/StatusBlock"]
+layout_mode = 2
+mouse_filter = 2
 text = "Progetti: —"
-
-[node name="ShortagesLabel" type="Label" parent="Root/Panel/Margin/Lines"]
-layout_mode = 2
-mouse_filter = 1
-tooltip_text = "Stato delle scorte rispetto alle soglie minime del villaggio."
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.84, 0.52, 1)
-theme_override_font_sizes/font_size = 12
-text = "Carenze: Nessuna carenza attiva"
 
-[node name="Separator2" type="HSeparator" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 4)
+[node name="RuleC" type="HSeparator" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
-mouse_filter = 2
 
 [node name="TransactionsTitle" type="Label" parent="Root/Panel/Margin/Lines"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.88, 0.64, 1)
-theme_override_font_sizes/font_size = 12
-text = "REGISTRO TRANSAZIONI"
+text = "ULTIMI SCAMBI"
 
 [node name="TransactionsLabel" type="Label" parent="Root/Panel/Margin/Lines"]
-custom_minimum_size = Vector2(0, 68)
 layout_mode = 2
 mouse_filter = 2
+text = "In attesa del sistema economico…"
 autowrap_mode = 2
-theme_override_colors/font_color = Color(0.84, 0.82, 0.76, 1)
-theme_override_font_sizes/font_size = 12
-text = "Nessuna transazione registrata."

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVERAFTER · anteprima interfaccia</title>
+<style>
+  :root {
+    --ink: rgba(14, 13, 12, 0.94);
+    --ink-soft: rgba(22, 20, 18, 0.96);
+    --inset: rgba(26, 24, 21, 0.96);
+    --badge: rgba(32, 29, 25, 0.96);
+    --line: rgba(217, 186, 128, 0.17);
+    --line-soft: rgba(199, 184, 153, 0.10);
+    --line-strong: rgba(224, 191, 125, 0.62);
+    --gold: #e5c99a;
+    --gold-dim: #af9870;
+    --text: #eee9dd;
+    --text-2: #c2bdb1;
+    --muted: #908b82;
+    --good: #9aca92;
+    --warn: #e4b873;
+    --bad: #e08b7b;
+    --calm: #9ebfd9;
+    --lilac: #c9b4d9;
+    --serif: Constantia, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --sans: "Segoe UI", Candara, Inter, "Helvetica Neue", Noto Sans, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0b0a; font-family: var(--sans); }
+  body { overflow: hidden; }
+
+  #viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage {
+    width: 1600px; height: 900px; position: relative; overflow: hidden;
+    transform-origin: center center; background: #7b8b93;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  }
+  #stage svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 55%, rgba(10,9,8,0.34) 100%);
+  }
+
+  /* --- shared panel language ------------------------------------------- */
+  .panel {
+    position: absolute; background: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    padding: 16px 18px; color: var(--text);
+    backdrop-filter: blur(3px);
+  }
+  .overline {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--gold-dim); font-weight: 600;
+  }
+  .display { font-family: var(--serif); }
+  .muted { color: var(--muted); }
+  .secondary { color: var(--text-2); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; padding: 3px 8px; border-radius: 3px;
+    background: var(--badge); border: 1px solid var(--line-soft); color: var(--text-2);
+  }
+  .chip.gold { color: var(--gold); }
+  .chip.good { color: var(--good); }
+  .chip.warn { color: var(--warn); }
+  .chip.calm { color: var(--calm); }
+  .rule { height: 1px; background: var(--line-soft); margin: 10px 0; }
+  .bar { height: 6px; border-radius: 3px; background: rgba(25, 23, 21, 1);
+         border: 1px solid var(--line-soft); overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 3px; }
+
+  /* --- HUD ------------------------------------------------------------- */
+  #hud { left: 24px; top: 24px; width: 312px; }
+  #hud .title { font-family: var(--serif); font-size: 19px; color: var(--gold);
+                letter-spacing: 0.4px; margin-bottom: 6px; }
+  #hud .clock { font-family: var(--serif); font-size: 22px; color: var(--text);
+                margin-bottom: 7px; }
+  #hud .row { display: flex; gap: 6px; margin-bottom: 8px; }
+  #hud .area { font-size: 12px; color: var(--muted); }
+
+  /* --- economy --------------------------------------------------------- */
+  #economy { left: 24px; top: 184px; width: 312px; }
+  #economy .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .res { display: grid; grid-template-columns: 1fr 52px 84px; align-items: baseline;
+         padding: 3px 0; }
+  .res .name { font-size: 12px; }
+  .res .amount { font-family: var(--serif); font-size: 17px; text-align: right; }
+  .res .flow { font-size: 11px; text-align: right; color: var(--muted); }
+  .status-line { font-size: 12px; padding: 2px 0; }
+  #economy .tx { font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 4px; }
+
+  /* --- inhabitants ----------------------------------------------------- */
+  #npc { right: 24px; top: 24px; width: 344px; padding-bottom: 14px; }
+  #npc select {
+    width: 100%; margin-top: 9px; margin-bottom: 2px; height: 32px;
+    background: rgba(26, 24, 21, 0.96); color: var(--text-2);
+    border: 1px solid var(--line-soft); border-radius: 4px;
+    font-size: 12px; padding: 0 10px; font-family: var(--sans);
+  }
+  #npc .empty-name { font-family: var(--serif); font-size: 19px; margin-top: 12px; }
+  #npc .empty-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  #npc .detail { display: none; }
+  #npc.selected .detail { display: block; }
+  #npc.selected .empty-block { display: none; }
+  #npc .name { font-family: var(--serif); font-size: 19px; margin-top: 12px; }
+  #npc .profession { font-size: 11px; color: #cf9d8a; margin-top: 3px; }
+  #npc .activity { margin-top: 8px; }
+  #npc .needs { margin-top: 4px; display: grid; gap: 9px; }
+  #npc .need { display: grid; grid-template-columns: 68px 1fr 30px; gap: 10px;
+               align-items: center; font-size: 11px; }
+  #npc .need .label { color: var(--muted); }
+  #npc .need .value { text-align: right; color: var(--text-2); font-size: 11px; }
+  #npc .body { max-height: 268px; overflow-y: auto; padding-right: 6px; margin-top: 10px; }
+  #npc .body::-webkit-scrollbar { width: 6px; }
+  #npc .body::-webkit-scrollbar-thumb { background: rgba(220, 205, 170, 0.22); border-radius: 3px; }
+  #npc .section-title { margin: 12px 0 5px; }
+  #npc .copy { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+  #npc .traits { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  #npc .footnote { font-size: 10px; color: var(--muted); margin-top: 10px; }
+
+  /* --- hint bar & crosshair ------------------------------------------- */
+  #hint {
+    left: 50%; bottom: 24px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 7px; padding: 9px 14px;
+    font-size: 12px; color: var(--muted); white-space: nowrap;
+  }
+  .key { font-size: 11px; color: var(--text); background: var(--badge);
+         border: 1px solid var(--line-soft); border-radius: 3px; padding: 2px 6px; }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 18px; height: 18px;
+    transform: translate(-50%, -50%); pointer-events: none;
+  }
+  #crosshair .ring { position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid rgba(238, 233, 221, 0.22); }
+  #crosshair .dot { position: absolute; left: 7px; top: 7px; width: 4px; height: 4px;
+    border-radius: 50%; background: rgba(238, 233, 221, 0.55); }
+
+  /* --- diagnostics ----------------------------------------------------- */
+  #diag { left: 50%; top: 24px; transform: translateX(-50%); width: 380px;
+          padding: 14px 16px; display: none; }
+  #diag .mono { font-family: Consolas, "Cascadia Mono", "SF Mono", "DejaVu Sans Mono", monospace;
+                font-size: 11px; color: var(--text-2); line-height: 1.75; }
+  #diag .state { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* --- modal shells ---------------------------------------------------- */
+  .overlay {
+    position: absolute; inset: 0; background: rgba(5, 5, 4, 0.66);
+    display: none; align-items: center; justify-content: center;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    width: 620px; height: 680px; background: rgba(11, 10, 9, 0.985);
+    border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .modal h2 { font-family: var(--serif); font-size: 22px; font-weight: normal;
+              margin: 0; color: var(--text); }
+  .modal .meta { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .filters { display: flex; align-items: center; gap: 10px; }
+  .filters select {
+    background: rgba(26, 24, 21, 0.96); color: var(--text-2);
+    border: 1px solid var(--line-soft); border-radius: 4px; height: 30px;
+    font-size: 12px; padding: 0 8px; font-family: var(--sans);
+  }
+  .ledger {
+    flex: 1; overflow-y: auto; padding: 8px; border-radius: 5px;
+    background: rgba(22, 20, 18, 0.96); border: 1px solid var(--line-soft);
+  }
+  .ledger::-webkit-scrollbar { width: 6px; }
+  .ledger::-webkit-scrollbar-thumb { background: rgba(220, 205, 170, 0.22); border-radius: 3px; }
+  .entry {
+    background: rgba(255, 255, 255, 0.014); border: 1px solid var(--line-soft);
+    border-left-width: 2px; border-radius: 4px; padding: 7px 10px; margin-bottom: 4px;
+  }
+  .entry .summary { font-size: 12px; color: var(--text); }
+  .entry .entry-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .footer { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    font-family: var(--sans); font-size: 12px; color: var(--text-2);
+    background: rgba(26, 24, 21, 0.96); border: 1px solid var(--line);
+    border-radius: 4px; padding: 8px 14px; cursor: pointer;
+  }
+  .btn:hover { background: rgba(39, 36, 30, 0.98); border-color: var(--line-strong);
+               color: var(--text); }
+  .btn.primary { background: rgba(50, 42, 27, 0.98); border-color: var(--line-strong);
+                 color: var(--gold); }
+  .btn.primary:hover { background: rgba(62, 52, 33, 1); color: var(--text); }
+  .spacer { flex: 1; }
+
+  /* --- map ------------------------------------------------------------- */
+  #mapModal .modal { width: 1280px; height: 760px; }
+  .map-grid {
+    flex: 1; border-radius: 6px; border: 1px solid var(--line-soft);
+    background:
+      linear-gradient(rgba(230, 220, 190, 0.045) 1px, transparent 1px) 0 0 / 12.5% 12.5%,
+      linear-gradient(90deg, rgba(230, 220, 190, 0.045) 1px, transparent 1px) 0 0 / 12.5% 12.5%,
+      radial-gradient(ellipse at 50% 55%, #2a3327 0%, #1d241c 70%, #171d17 100%);
+    position: relative; overflow: hidden;
+  }
+  .map-grid .road { position: absolute; background: rgba(196, 178, 138, 0.16); }
+  .map-grid .plaza { position: absolute; border-radius: 50%; background: rgba(196, 178, 138, 0.18);
+                     border: 1px dashed rgba(196, 178, 138, 0.35); }
+  .marker { position: absolute; width: 8px; height: 8px; border-radius: 50%;
+            transform: translate(-50%, -50%); box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.35); }
+  .marker.npc { background: #dba966; }
+  .marker.you { background: #6bc7f5; box-shadow: 0 0 0 7px rgba(107, 199, 245, 0.16); }
+  .legend { display: flex; gap: 22px; align-items: center; font-size: 12px; color: var(--text-2); }
+  .legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+                 margin-right: 7px; }
+
+  /* --- mockup chrome (not part of the game UI) ------------------------- */
+  #chrome {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 6px; padding: 8px; border-radius: 999px;
+    background: rgba(12, 12, 11, 0.9); border: 1px solid rgba(255, 255, 255, 0.12);
+    z-index: 100; font-family: var(--sans); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  #chrome button {
+    border: 0; background: transparent; color: rgba(255, 255, 255, 0.66);
+    font-size: 12px; padding: 7px 13px; border-radius: 999px; cursor: pointer;
+    font-family: inherit;
+  }
+  #chrome button:hover { background: rgba(255, 255, 255, 0.10); color: #fff; }
+  #chrome button.active { background: rgba(255, 255, 255, 0.92); color: #14130f; }
+  #chrome .label { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
+                   color: rgba(255,255,255,0.38); align-self: center; padding: 0 8px; }
+  #note {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: 0.4px; color: rgba(255, 255, 255, 0.42);
+    z-index: 100; font-family: var(--sans); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="stage">
+    <!-- stylised stand-in for the procedural village: only a backdrop -->
+    <svg class="scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#8fb3c9" />
+          <stop offset="0.55" stop-color="#cfd3c4" />
+          <stop offset="1" stop-color="#e8d8b8" />
+        </linearGradient>
+        <linearGradient id="meadow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7f9459" />
+          <stop offset="1" stop-color="#4f6638" />
+        </linearGradient>
+        <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#b8a98c" />
+          <stop offset="1" stop-color="#9b8d72" />
+        </linearGradient>
+        <radialGradient id="sun" cx="0.72" cy="0.18" r="0.5">
+          <stop offset="0" stop-color="#fff4d4" stop-opacity="0.85" />
+          <stop offset="1" stop-color="#fff4d4" stop-opacity="0" />
+        </radialGradient>
+        <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e9dcc0" stop-opacity="0.55" />
+          <stop offset="1" stop-color="#e9dcc0" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <rect width="1600" height="900" fill="url(#sky)" />
+      <rect width="1600" height="900" fill="url(#sun)" />
+      <polygon points="0,470 220,392 430,452 690,372 910,450 1170,388 1400,452 1600,404 1600,560 0,560" fill="#94a586" opacity="0.75" />
+      <polygon points="0,520 260,462 520,512 760,452 1040,514 1320,466 1600,520 1600,640 0,640" fill="#7f926f" opacity="0.9" />
+      <rect y="560" width="1600" height="340" fill="url(#meadow)" />
+      <polygon points="600,900 720,640 830,640 1010,900" fill="url(#road)" opacity="0.85" />
+      <polygon points="0,760 380,660 640,700 520,900 0,900" fill="#5a7040" opacity="0.55" />
+
+      <!-- houses -->
+      <g opacity="0.98">
+        <polygon points="120,600 120,500 200,462 280,500 280,600" fill="#d9cbb0" />
+        <polygon points="106,506 200,458 294,506 290,520 200,478 110,520" fill="#8d5a44" />
+        <rect x="176" y="548" width="34" height="52" fill="#6c5138" />
+        <rect x="232" y="520" width="26" height="26" fill="#5c6a66" />
+
+        <polygon points="330,600 330,520 392,490 454,520 454,600" fill="#cfc0a4" />
+        <polygon points="318,524 392,486 466,524 462,538 392,502 322,538" fill="#7f5a48" />
+        <rect x="376" y="556" width="28" height="44" fill="#5f4732" />
+
+        <polygon points="980,600 980,505 1060,470 1140,505 1140,600" fill="#e0d2b8" />
+        <polygon points="966,510 1060,466 1154,510 1150,526 1060,484 970,526" fill="#6f4f3f" />
+        <rect x="1020" y="540" width="30" height="60" fill="#634a34" />
+
+        <polygon points="1220,600 1220,512 1290,480 1360,512 1360,600" fill="#d6c6a9" />
+        <polygon points="1208,516 1290,476 1372,516 1368,532 1290,494 1212,532" fill="#8a5f49" />
+        <rect x="1264" y="548" width="28" height="52" fill="#5e4732" />
+      </g>
+
+      <!-- hall + bell tower, the skyline landmark -->
+      <g>
+        <polygon points="700,600 700,520 760,490 820,520 820,600" fill="#dbcdb2" />
+        <polygon points="690,524 760,486 830,524 826,540 760,504 694,540" fill="#7a5643" />
+        <rect x="770" y="330" width="58" height="200" fill="#cfc1a6" />
+        <polygon points="760,332 799,286 838,332" fill="#6e4e3d" />
+        <rect x="786" y="356" width="26" height="34" fill="#4e5a54" />
+        <rect x="786" y="412" width="26" height="34" fill="#4e5a54" />
+      </g>
+
+      <!-- trees -->
+      <g>
+        <g fill="#43603a">
+          <rect x="486" y="560" width="12" height="70" fill="#5c4632" />
+          <polygon points="492,430 548,570 436,570" />
+          <polygon points="492,470 540,586 444,586" opacity="0.85" />
+        </g>
+        <g fill="#3f5c39">
+          <rect x="905" y="566" width="12" height="66" fill="#5c4632" />
+          <polygon points="911,442 962,572 860,572" />
+          <polygon points="911,482 954,588 868,588" opacity="0.8" />
+        </g>
+        <g fill="#4b6a3f">
+          <rect x="1410" y="556" width="11" height="74" fill="#5c4632" />
+          <polygon points="1416,448 1464,566 1368,566" />
+        </g>
+        <g fill="#4f6d41">
+          <rect x="60" y="580" width="10" height="60" fill="#5c4632" />
+          <polygon points="65,492 106,590 24,590" />
+        </g>
+      </g>
+
+      <!-- well and crates near the plaza -->
+      <g>
+        <ellipse cx="700" cy="742" rx="60" ry="20" fill="#8f8168" />
+        <rect x="654" y="690" width="92" height="52" rx="6" fill="#9c8e73" />
+        <ellipse cx="700" cy="690" rx="46" ry="15" fill="#6e6350" />
+        <ellipse cx="700" cy="691" rx="34" ry="10" fill="#262a26" />
+        <rect x="640" y="820" width="54" height="42" fill="#8a6b45" />
+        <rect x="700" y="834" width="44" height="30" fill="#7a5e3d" />
+      </g>
+
+      <rect y="0" width="1600" height="640" fill="url(#haze)" />
+    </svg>
+    <div class="vignette"></div>
+
+    <!-- HUD -->
+    <section class="panel" id="hud">
+      <div class="title">EVERAFTER</div>
+      <div class="clock">Giorno 1 · 09:24</div>
+      <div class="row">
+        <span class="chip gold">Mattino</span>
+        <span class="chip calm">×1</span>
+      </div>
+      <div class="area">Campi di Everafter</div>
+    </section>
+
+    <!-- Economy -->
+    <section class="panel" id="economy">
+      <div class="overline">Economia</div>
+      <div class="sub">Scorte comuni e bilancio del periodo</div>
+      <div class="rule"></div>
+      <div class="res"><span class="name" style="color:#d6c99e">Cibo</span><span class="amount" style="color:#eee9dd">42</span><span class="flow" style="color:var(--good)">+5 / −3</span></div>
+      <div class="res"><span class="name" style="color:#ccb085">Legno</span><span class="amount" style="color:#eee9dd">18</span><span class="flow" style="color:var(--warn)">+1 / −2</span></div>
+      <div class="res"><span class="name" style="color:#b3bac0">Pietra</span><span class="amount" style="color:#eee9dd">9</span><span class="flow" style="color:var(--muted)">+0 / −1</span></div>
+      <div class="res"><span class="name" style="color:#e5c99a">Moneta</span><span class="amount" style="color:#e5c99a">64</span><span class="flow" style="color:var(--muted)">Mercato: 21</span></div>
+      <div class="rule"></div>
+      <div class="status-line" style="color:var(--good)">Carenze: Nessuna carenza attiva</div>
+      <div class="status-line secondary">Progetti: 1/4 · Prossimo: Nuovo pozzo (8 Pietra, 4 Legno)</div>
+      <div class="rule"></div>
+      <div class="overline" style="font-size:9.5px">Ultimi scambi</div>
+      <div class="tx">
+        [G1 09:12] Elio Sartori ha consegnato 3 Cibo al mercato<br>
+        [G1 08:58] Mira Bellandi ha acquistato 2 Legno<br>
+        [G1 08:31] Il Consiglio ha stanziato 6 Monete
+      </div>
+    </section>
+
+    <!-- Inhabitants -->
+    <section class="panel" id="npc">
+      <div class="overline" id="npcHeader">Abitanti · 10</div>
+      <select aria-label="Scegli un abitante">
+        <option>Scegli un abitante…</option>
+        <option>Mira Bellandi — Locandiera</option>
+        <option>Tullio Fabbri — Mercante</option>
+        <option>Neria Corvi — Cancelliera</option>
+      </select>
+
+      <div class="empty-block">
+        <div class="rule"></div>
+        <div class="empty-name">Nessun abitante selezionato</div>
+        <div class="empty-hint">Scegli un nome dall'elenco o clicca un abitante nel villaggio.</div>
+        <div class="footnote">Clic sinistro su un abitante o scegli dall'elenco.</div>
+      </div>
+
+      <div class="detail">
+        <div class="rule"></div>
+        <div class="name">Mira Bellandi</div>
+        <div class="profession">Locandiera · 45 anni · Umore sereno · Turno 09:00–23:00</div>
+        <div class="activity"><span class="chip gold">Attività: Al lavoro come locandiera</span></div>
+
+        <div class="overline section-title" style="margin-top:14px">Bisogni vitali</div>
+        <div class="needs">
+          <div class="need"><span class="label">Energia</span><span class="bar"><i style="width:84%;background:#85bd80"></i></span><span class="value">84</span></div>
+          <div class="need"><span class="label">Fame</span><span class="bar"><i style="width:35%;background:#93b370"></i></span><span class="value">35</span></div>
+          <div class="need"><span class="label">Benessere</span><span class="bar"><i style="width:81%;background:#7aaed1"></i></span><span class="value">81</span></div>
+        </div>
+
+        <div class="body">
+          <div class="traits">Indole: Diligenza 76 · Socievolezza 91 · Curiosità 63 · Calma 68</div>
+          <div class="copy" style="margin-top:6px">Obiettivo: tenere la locanda piena fino a sera.</div>
+          <div class="overline section-title">Stato attuale</div>
+          <div class="copy">Mira è dietro il banco della locanda, in piedi, e conta le stanze libere mentre il sole sale sulle tegole. Ha ancora energia per l'intera giornata.</div>
+          <div class="overline section-title">Legami sociali</div>
+          <div class="copy">Elio Sartori — amicizia salda, si parlano ogni mattina.<br>
+            Tullio Fabbri — rispetto commerciale, contrattano il vino.<br>
+            Iside Malaspina — conoscenza cordiale, si incontrano al mercato.</div>
+          <div class="overline section-title">Memoria personale</div>
+          <div class="copy">Ricorda la prima notte in cui la locanda rimase piena fino all'alba.</div>
+        </div>
+        <div class="footnote">Clic sinistro su un abitante o scegli dall'elenco.</div>
+      </div>
+    </section>
+
+    <!-- hint bar -->
+    <section class="panel" id="hint">
+      <span class="key">F</span><span>riprendi il controllo</span>
+      <span class="muted">·</span><span class="key">C</span><span>cronache</span>
+      <span class="muted">·</span><span class="key">P</span><span>pausa</span>
+      <span class="muted">·</span><span class="key">+ −</span><span>velocità</span>
+      <span class="muted">·</span><span class="key">M</span><span>mappa</span>
+    </section>
+
+    <div id="crosshair"><div class="ring"></div><div class="dot"></div></div>
+
+    <!-- diagnostics -->
+    <section class="panel" id="diag">
+      <div class="overline">0.6.0-persistence · Diagnostica</div>
+      <div class="rule"></div>
+      <div class="mono">
+        Giorno simulato: 1<br>
+        Ora del mondo: 09:24<br>
+        Tick: 564 · Velocità: x1<br>
+        Fase: Mattino<br>
+        FPS: 60
+      </div>
+      <div class="state">Mondo pronto: Campi di Everafter</div>
+    </section>
+
+    <!-- chronicle / save modal -->
+    <div class="overlay" id="saveOverlay">
+      <div class="modal" id="saveModal">
+        <div>
+          <div class="overline">Archivio del villaggio</div>
+          <h2 style="margin-top:6px">Cronache e salvataggio</h2>
+          <div class="meta" style="margin-top:6px">Ultimo salvataggio: 20/10/2026 09:12 · mondo al giorno 1, 09:12 · 10 abitanti · 128 voci di cronaca.</div>
+        </div>
+        <div class="rule"></div>
+        <div class="filters">
+          <span class="overline">Categoria</span>
+          <select><option>Tutte le voci</option><option>Produzione</option><option>Carenza</option><option>Relazione</option></select>
+          <span class="overline" style="margin-left:6px">Periodo</span>
+          <select><option>Tutti i giorni</option><option>Giorno corrente</option></select>
+        </div>
+        <div class="ledger">
+          <div class="entry" style="border-left-color:rgba(159,201,122,0.55)"><div class="summary">Il forno ha sfornato 12 pani e il mercato ha ricevuto 4 Cibo.</div><div class="entry-meta">Giorno 1 · 09:12 · Produzione</div></div>
+          <div class="entry" style="border-left-color:rgba(216,140,110,0.55)"><div class="summary">Scorte basse di Pietra: la cava ha consegnato meno del previsto.</div><div class="entry-meta">Giorno 1 · 08:47 · Carenza</div></div>
+          <div class="entry" style="border-left-color:rgba(152,186,224,0.55)"><div class="summary">Mira Bellandi ha aiutato Elio Sartori a riparare il carro.</div><div class="entry-meta">Giorno 1 · 08:30 · Aiuto</div></div>
+          <div class="entry" style="border-left-color:rgba(200,176,214,0.55)"><div class="summary">L'amicizia fra Mira Bellandi e Tullio Fabbri si è rafforzata.</div><div class="entry-meta">Giorno 1 · 08:11 · Relazione</div></div>
+          <div class="entry" style="border-left-color:rgba(230,198,120,0.55)"><div class="summary">Il Consiglio ha approvato la riparazione del pozzo.</div><div class="entry-meta">Giorno 1 · 07:52 · Progetto</div></div>
+          <div class="entry" style="border-left-color:rgba(216,204,172,0.5)"><div class="summary">È iniziato il giorno 1. Il villaggio si è svegliato senza carenze.</div><div class="entry-meta">Giorno 1 · 06:00 · Tappa</div></div>
+        </div>
+        <div class="footer">
+          <button class="btn primary">Salva adesso</button>
+          <button class="btn">Carica salvataggio</button>
+          <button class="btn">Nuovo mondo</button>
+          <span class="spacer"></span>
+          <button class="btn">Chiudi&nbsp;&nbsp;Esc</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- map modal -->
+    <div class="overlay" id="mapOverlay">
+      <div class="modal" id="mapModal">
+        <div>
+          <div class="overline">Mappa del villaggio</div>
+          <h2 style="margin-top:6px">Everafter <span style="font-family:var(--sans);font-size:12px;color:var(--muted);margin-left:10px">le aree del villaggio e i suoi abitanti</span></h2>
+        </div>
+        <div class="rule" style="margin-top:2px"></div>
+        <div class="map-grid">
+          <div class="plaza" style="left:44%;top:42%;width:150px;height:150px"></div>
+          <div class="road" style="left:48%;top:0;width:10px;height:42%"></div>
+          <div class="road" style="left:48%;top:58%;width:10px;height:42%"></div>
+          <div class="road" style="left:0;top:50%;width:44%;height:9px"></div>
+          <div class="road" style="left:55%;top:52%;width:45%;height:9px"></div>
+          <div class="marker npc" style="left:38%;top:36%"></div>
+          <div class="marker npc" style="left:47%;top:31%"></div>
+          <div class="marker npc" style="left:53%;top:47%"></div>
+          <div class="marker npc" style="left:62%;top:39%"></div>
+          <div class="marker npc" style="left:41%;top:57%"></div>
+          <div class="marker npc" style="left:66%;top:58%"></div>
+          <div class="marker npc" style="left:31%;top:48%"></div>
+          <div class="marker you" style="left:50%;top:72%"></div>
+        </div>
+        <div class="footer">
+          <div class="legend">
+            <span><i class="dot" style="background:#6bc7f5"></i>Tu</span>
+            <span><i class="dot" style="background:#dba966"></i>Abitanti</span>
+            <span class="muted" style="font-size:11px">Nord in alto · scala 1:1 sul villaggio</span>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn">M&nbsp;&nbsp;o&nbsp;&nbsp;Esc</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="note">Anteprima statica dell'interfaccia ridisegnata · la scena 3D è un fondale stilizzato</div>
+
+<div id="chrome">
+  <span class="label">Anteprima</span>
+  <button data-state="empty" class="active">Nessun abitante</button>
+  <button data-state="selected">Abitante selezionato</button>
+  <button data-state="chronicle">Cronache · C</button>
+  <button data-state="map">Mappa · M</button>
+  <button data-state="diag">Diagnostica · F1</button>
+  <button data-state="cursor">Mouse libero · comandi</button>
+</div>
+
+<script>
+  const stage = document.getElementById('stage');
+  function resize() {
+    const scale = Math.min(window.innerWidth / 1600, (window.innerHeight - 70) / 900);
+    stage.style.transform = `scale(${scale})`;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const npc = document.getElementById('npc');
+  const npcSelect = npc.querySelector('select');
+  const saveOverlay = document.getElementById('saveOverlay');
+  const mapOverlay = document.getElementById('mapOverlay');
+  const diag = document.getElementById('diag');
+  const hint = document.getElementById('hint');
+  const crosshair = document.getElementById('crosshair');
+  const buttons = document.querySelectorAll('#chrome button');
+  let baseState = 'empty';
+  let overlay = null;
+  let cursorFree = false;
+
+  function render(activeButton) {
+    npc.classList.toggle('selected', baseState === 'selected');
+    npcSelect.selectedIndex = baseState === 'selected' ? 1 : 0;
+    saveOverlay.classList.toggle('open', overlay === 'chronicle');
+    mapOverlay.classList.toggle('open', overlay === 'map');
+    diag.style.display = overlay === 'diag' ? 'block' : 'none';
+    hint.style.display = cursorFree ? 'flex' : 'none';
+    crosshair.style.display = cursorFree ? 'none' : 'block';
+    buttons.forEach((b) => b.classList.toggle('active', b.dataset.state === activeButton));
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const state = button.dataset.state;
+      if (state === 'empty' || state === 'selected') {
+        baseState = state;
+        overlay = null;
+        render(state);
+        return;
+      }
+      if (state === 'cursor') {
+        cursorFree = !cursorFree;
+        render(cursorFree ? 'cursor' : baseState);
+        return;
+      }
+      overlay = overlay === state ? null : state;
+      render(overlay === state ? state : baseState);
+    });
+  });
+
+  render('empty');
+</script>
+</body>
+</html>
