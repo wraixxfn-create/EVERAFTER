@@ -378,40 +378,64 @@ func _build_stall(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 
 
 func _build_lamp(baker: MeshBaker) -> void:
-	baker.add_cylinder("stone_dark", 0.22, 0.3, 0.35, 8, _transform(Vector3(0, 0.18, 0)))
-	baker.add_cylinder("iron", 0.09, 0.12, 3.1, 6, _transform(Vector3(0, 1.9, 0)))
+	# Base leggermente interrata (-3 cm) per non galleggiare su pendenze erbose.
+	baker.add_cylinder("stone_dark", 0.22, 0.3, 0.38, 8, _transform(Vector3(0, 0.16, 0)))
+	baker.add_cylinder("iron", 0.09, 0.12, 3.1, 6, _transform(Vector3(0, 1.87, 0)))
 	baker.add_box("iron", Vector3(0.7, 0.1, 0.1), _transform(Vector3(0.3, 3.4, 0.0)))
 	baker.add_box("lantern", Vector3(0.34, 0.44, 0.34), _transform(Vector3(0.62, 3.15, 0.0)))
 	baker.add_cylinder("iron", 0.02, 0.26, 0.16, 4, _transform(Vector3(0.62, 3.44, 0.0)))
 
 
 func _build_fence(baker: MeshBaker) -> void:
+	# Visual Polish 20 — irregolarità misurata: ogni modulo 3 m ha piccoli
+	# scarti di altezza, spessore e cappello, e un controvento diagonale ogni
+	# due campate. Un recinto perfettamente regolare da 27 m legge come un
+	# oggetto singolo; uno con 8 cm di variazione e un diagonale ogni tanto
+	# legge come costruito a mano, senza aggiungere collider o materiali.
+	var post_jitter := rng.randf_range(-0.06, 0.06)
+	var top_jitter_a := rng.randf_range(-0.04, 0.05)
+	var top_jitter_b := rng.randf_range(-0.04, 0.05)
 	for side in [-1.0, 1.0]:
+		var h := 1.15 + (top_jitter_a if side < 0.0 else top_jitter_b)
+		var t := 0.16 + rng.randf_range(-0.015, 0.015)
 		baker.add_box(
 			"timber_warm",
-			Vector3(0.16, 1.15, 0.16),
-			_transform(Vector3(side * 1.4, 0.58, 0.0)),
-			Color.WHITE,
+			Vector3(t, h, t),
+			_transform(Vector3(side * 1.4, h * 0.5 + 0.02, 0.0)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.06)),
 			0.06
 		)
 		# A restrained cut point on each post gives the fence a hand-hewn top.
 		baker.add_cylinder(
 			"timber_warm",
 			0.0,
-			0.13,
-			0.2,
+			0.11 + rng.randf_range(0.0, 0.04),
+			0.18 + rng.randf_range(-0.02, 0.03),
 			4,
-			_transform(Vector3(side * 1.4, 1.2, 0.0)),
-			Color.WHITE,
+			_transform(Vector3(side * 1.4, h + 0.06 + post_jitter * 0.5, 0.0)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.04)),
 			0.04
 		)
-	for height in [0.55, 0.95]:
+	for idx in 2:
+		var height := [0.55, 0.95][idx]
+		var rail_w := 3.0 + rng.randf_range(-0.04, 0.04)
 		baker.add_box(
 			"timber_warm",
-			Vector3(3.0, 0.12, 0.09),
-			_transform(Vector3(0.0, height, 0.0)),
-			Color.WHITE,
+			Vector3(rail_w, 0.11 + rng.randf_range(-0.015, 0.015), 0.08 + rng.randf_range(-0.01, 0.015)),
+			_transform(Vector3(0.0, height + post_jitter * 0.4, 0.0)),
+			Color.WHITE.darkened(rng.randf_range(0.0, 0.05)),
 			0.06
+		)
+	# Diagonale di controvento su metà dei moduli: rompe la maglia rettangolare
+	# senza chiudere il varco carraio e senza nuovi collider.
+	if rng.randf() < 0.52:
+		var diag_h := 0.55 + post_jitter * 0.4
+		baker.add_box(
+			"timber_warm",
+			Vector3(0.09, 1.05, 0.04),
+			_transform(Vector3(0.0, diag_h + 0.18, 0.0), 0.0, 0.0, 34.0),
+			Color.WHITE.darkened(rng.randf_range(0.02, 0.07)),
+			0.05
 		)
 
 
@@ -514,10 +538,12 @@ func _build_cart(baker: MeshBaker) -> void:
 
 func _build_crate(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var size := 1.05 * placement.scale
+	# Leggero interramento (-3 cm) per nascondere il filo sotto il prato su pendenze.
+	var embed := 0.04 * placement.scale
 	baker.add_box(
 		"plank",
 		Vector3(size, size, size),
-		_transform(Vector3(0.0, size * 0.5, 0.0)),
+		_transform(Vector3(0.0, size * 0.5 - embed, 0.0)),
 		Color.WHITE,
 		0.06
 	)
@@ -558,8 +584,12 @@ func _build_crate(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 
 func _build_barrel(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
 	var turn := rng.randf_range(0.0, 360.0)
-	var barrel_transform := _transform(offset + Vector3(0.0, 0.52, 0.0), turn)
-	baker.add_cylinder("plank", 0.42, 0.46, 1.05, 10, barrel_transform, Color.WHITE, 0.07)
+	var embed := 0.05
+	baker.add_cylinder(
+		"plank", 0.42, 0.46, 1.05, 10,
+		_transform(offset + Vector3(0.0, 0.52 - embed, 0.0), turn),
+		Color.WHITE, 0.07
+	)
 	for height in [0.25, 0.8]:
 		baker.add_cylinder(
 			"iron",
@@ -567,25 +597,32 @@ func _build_barrel(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
 			0.47,
 			0.08,
 			10,
-			_transform(offset + Vector3(0.0, height, 0.0), turn),
+			_transform(offset + Vector3(0.0, height - embed, 0.0), turn),
 			Color.WHITE,
 			0.035
 		)
 
 
 func _build_logpile(baker: MeshBaker) -> void:
+	# Visual Polish 20 — i tronchi non sono tagliati al millimetro: lunghezze
+	# e diametri variano di pochi centimetri e l'asse ha un piccolo scarto,
+	# così la catasta non legge come un pacco di tubi identici.
 	for row in 3:
 		var count := 4 - row
 		for index in count:
-			var x := (float(index) - float(count - 1) * 0.5) * 0.62
+			var x := (float(index) - float(count - 1) * 0.5) * 0.62 + rng.randf_range(-0.04, 0.04)
+			var log_len := 2.4 + rng.randf_range(-0.18, 0.12)
+			var dia := 0.28 + rng.randf_range(-0.03, 0.025)
+			var yaw_jitter := rng.randf_range(-3.5, 3.5)
+			var y_base := 0.28 + float(row) * 0.52 + rng.randf_range(-0.02, 0.02)
 			baker.add_cylinder(
 				"trunk",
-				0.28,
-				0.28,
-				2.4,
+				dia * 0.95,
+				dia,
+				log_len,
 				7,
-				_transform(Vector3(x, 0.3 + float(row) * 0.55, 0.0), 0.0, 90.0),
-				Color.WHITE.darkened(float(row) * 0.05),
+				_transform(Vector3(x, y_base, rng.randf_range(-0.04, 0.04)), yaw_jitter, 90.0),
+				Color.WHITE.darkened(float(row) * 0.04 + rng.randf_range(0.0, 0.03)),
 				0.055
 			)
 
@@ -607,19 +644,21 @@ func _build_signpost(baker: MeshBaker) -> void:
 func _build_flower_box(baker: MeshBaker, placement: VillageLayout.Placement) -> void:
 	var scale := placement.scale
 	var turn := rng.randf_range(0.0, 360.0)
+	var embed := 0.04 * scale
 	baker.add_cylinder(
 		"plank",
 		0.52,
 		0.42,
 		0.52,
 		10,
-		_transform(Vector3(0.0, 0.26, 0.0) * scale, turn),
+		_transform(Vector3(0.0, 0.26 * scale - embed, 0.0), turn),
 		Color.WHITE.darkened(rng.randf_range(0.0, 0.07)),
 		0.05
 	)
 	for hoop in [0.12, 0.44]:
 		baker.add_cylinder(
-			"iron", 0.53, 0.53, 0.05, 10, _transform(Vector3(0.0, hoop, 0.0) * scale, turn)
+			"iron", 0.53, 0.53, 0.05, 10,
+			_transform(Vector3(0.0, hoop * scale - embed, 0.0), turn)
 		)
 	baker.add_cylinder(
 		"stone_dark",
@@ -627,7 +666,7 @@ func _build_flower_box(baker: MeshBaker, placement: VillageLayout.Placement) -> 
 		0.46,
 		0.06,
 		10,
-		_transform(Vector3(0.0, 0.5, 0.0) * scale, turn),
+		_transform(Vector3(0.0, 0.5 * scale - embed, 0.0), turn),
 		Color.WHITE,
 		0.05
 	)
@@ -649,25 +688,29 @@ func _build_flower_box(baker: MeshBaker, placement: VillageLayout.Placement) -> 
 ## Faces +Z, so the placement yaw aims it at whatever is worth sitting for.
 ## Decorative: no collider, so it never blocks the player or an NPC walk.
 func _build_bench(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
+	# Visual Polish 20 — base leggermente interrata (-3 cm) per chiudere il
+	# filo su pendenze erbose; una panchina che galleggia di 2 cm si vede
+	# subito a 1.7 m di altezza occhio.
+	var embed := 0.03
 	for side in [-1.0, 1.0]:
 		baker.add_box(
 			"stone_dark",
 			Vector3(0.34, 0.16, 0.5),
-			_transform(offset + Vector3(side * 0.72, 0.08, 0.0)),
+			_transform(offset + Vector3(side * 0.72, 0.08 - embed, 0.0)),
 			Color.WHITE,
 			0.06
 		)
 		baker.add_box(
 			"timber_warm",
 			Vector3(0.14, 0.42, 0.42),
-			_transform(offset + Vector3(side * 0.72, 0.32, 0.0)),
+			_transform(offset + Vector3(side * 0.72, 0.32 - embed, 0.0)),
 			Color.WHITE,
 			0.04
 		)
 		baker.add_box(
 			"timber_warm",
 			Vector3(0.12, 0.62, 0.12),
-			_transform(offset + Vector3(side * 0.72, 0.72, -0.22), 0.0, -8.0),
+			_transform(offset + Vector3(side * 0.72, 0.72 - embed, -0.22), 0.0, -8.0),
 			Color.WHITE,
 			0.04
 		)
@@ -675,14 +718,14 @@ func _build_bench(baker: MeshBaker, offset: Vector3 = Vector3.ZERO) -> void:
 		baker.add_box(
 			"plank",
 			Vector3(1.75, 0.05, 0.15),
-			_transform(offset + Vector3(0.0, 0.56, -0.16 + float(plank) * 0.16)),
+			_transform(offset + Vector3(0.0, 0.56 - embed, -0.16 + float(plank) * 0.16)),
 			Color.WHITE.darkened(rng.randf_range(0.0, 0.05)),
 			0.04
 		)
 	baker.add_box(
 		"plank",
 		Vector3(1.75, 0.18, 0.05),
-		_transform(offset + Vector3(0.0, 0.96, -0.28), 0.0, -8.0),
+		_transform(offset + Vector3(0.0, 0.96 - embed, -0.28), 0.0, -8.0),
 		Color.WHITE.darkened(0.03),
 		0.04
 	)
