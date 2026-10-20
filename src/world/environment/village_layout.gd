@@ -493,17 +493,17 @@ func _build_road_plots() -> void:
 	for road_index in roads.size():
 		var road := roads[road_index]
 		var length := polyline_length(road)
-		var side := PLOT_START_SIDE[road_index]
+		var side: float = PLOT_START_SIDE[road_index]
 		var last_was_logpile := false
 		var distance := ROAD_PLOT_START
 		while distance < length - 4.0:
 			var sample := sample_polyline(road, distance + _rng.randf_range(-1.4, 1.4))
 			var along: Vector2 = sample.tangent
-			var outward := Vector2(-along.y, along.x) * side
+			var outward: Vector2 = Vector2(-along.y, along.x) * side
 			side = -side
 			var at: Vector2 = sample.point
 			var depth := _rng.randf_range(3.4, 5.0)
-			var position := at + outward * (ROAD_WIDTH * 0.5 + depth * 0.5 + 1.6)
+			var position: Vector2 = at + outward * (ROAD_WIDTH * 0.5 + depth * 0.5 + 1.6)
 			if position.length() <= half_extent - 10.0:
 				var faces_road := rad_to_deg(
 					atan2(at.x - position.x, at.y - position.y)
@@ -734,7 +734,7 @@ func _build_vista_knots() -> void:
 			var placed_any := false
 			for member in knot[2]:
 				var spread := deg_to_rad(float(knot[0]) + float(member[0]))
-				var position := candidate \
+				var position: Vector2 = candidate \
 					+ Vector2(sin(spread), cos(spread)) * float(member[1])
 				var kind := String(member[2])
 				if TREE_KINDS.has(kind) and (
